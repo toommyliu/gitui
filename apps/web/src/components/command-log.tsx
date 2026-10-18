@@ -11,6 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "cn"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
+import { copyText } from "@/lib/clipboard"
 import { basename } from "@/lib/format"
 import { commandLogAtom, isFailure, latest, type LogFilter, logViewAtom } from "@/lib/git"
 import { Nothing } from "./loading"
@@ -26,19 +27,6 @@ const quote = (arg: string) => (/^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.rep
 const shortCommand = (entry: CommandEntry) => ["git", ...entry.args.slice(entry.prefixLength)].map(quote).join(" ")
 
 const fullCommand = (entry: CommandEntry) => ["git", "-C", entry.cwd, ...entry.args].map(quote).join(" ")
-
-const copyText = (text: string) => {
-  if (window.isSecureContext && navigator.clipboard !== undefined) return navigator.clipboard.writeText(text)
-  const area = document.createElement("textarea")
-  area.value = text
-  area.style.position = "fixed"
-  area.style.opacity = "0"
-  document.body.appendChild(area)
-  area.select()
-  const ok = document.execCommand("copy")
-  area.remove()
-  return ok ? Promise.resolve() : Promise.reject(new Error("Copy was blocked"))
-}
 
 const filters: ReadonlyArray<readonly [LogFilter, string]> = [
   ["all", "All"],

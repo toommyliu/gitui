@@ -5,6 +5,7 @@ import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
 import { GitRpcs } from "@gitui/contracts"
 import { CommandLog, Repo } from "@gitui/git"
 import * as Layer from "effect/Layer"
+import * as HttpMiddleware from "effect/http/HttpMiddleware"
 import * as HttpRouter from "effect/http/HttpRouter"
 import * as HttpStaticServer from "effect/http/HttpStaticServer"
 import * as RpcSerialization from "effect/rpc/RpcSerialization"
@@ -25,10 +26,10 @@ const Rpc = RpcServer.layerHttp({ group: GitRpcs, path: "/rpc", protocol: "webso
 
 const Static = existsSync(webDist) ? HttpStaticServer.layer({ root: webDist, spa: true }) : Layer.empty
 
-HttpRouter.serve(Layer.mergeAll(Rpc, Static)).pipe(
-  Layer.provide(
-    NodeHttpServer.layer(createServer, { port, host, websocket: { perMessageDeflate: { threshold: 1024 } } }),
-  ),
+const Compression = HttpRouter.middleware(HttpMiddleware.compression(), { global: true })
+
+HttpRouter.serve(Layer.mergeAll(Rpc, Static, Compression)).pipe(
+  Layer.provide(NodeHttpServer.layer(createServer, { port, host, websocket: { perMessageDeflate: true } })),
   Layer.launch,
   NodeRuntime.runMain,
 )

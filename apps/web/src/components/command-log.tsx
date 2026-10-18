@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "cn"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { copyText } from "@/lib/clipboard"
 import { basename } from "@/lib/format"
 import { commandLogAtom, isFailure, latest, type LogFilter, logViewAtom } from "@/lib/git"
@@ -101,10 +101,10 @@ export function CommandLogSheet({ repo }: { repo: RepoId }) {
     if (view.open && lastId > view.seenId) setView((current) => ({ ...current, seenId: lastId }))
   }, [view.open, view.seenId, lastId, setView])
 
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null)
   const virtualizer = useVirtualizer({
     count: rows.length,
-    getScrollElement: () => scrollRef.current,
+    getScrollElement: () => scrollElement,
     estimateSize: () => ROW,
     getItemKey: (index) => rows[index]!.id,
     overscan: 20,
@@ -158,7 +158,7 @@ export function CommandLogSheet({ repo }: { repo: RepoId }) {
         {rows.length === 0 ? (
           <Nothing title="Nothing logged" description="Commands appear here as soon as the server runs them." />
         ) : (
-          <ScrollArea className="min-h-0 flex-1" viewportRef={scrollRef}>
+          <ScrollArea className="min-h-0 flex-1" viewportRef={setScrollElement}>
             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
               {virtualizer.getVirtualItems().map((item) => {
                 const entry = rows[item.index]!

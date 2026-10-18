@@ -160,11 +160,11 @@ function LargeCommit({
   })
   return (
     <ResizablePanelGroup orientation="vertical">
-      <ResizablePanel defaultSize="45%" minSize="15%">
-        <div className="flex h-full flex-col overflow-auto">
-          {summary}
+      <ResizablePanel defaultSize="60%" minSize="15%">
+        <div className="flex h-full flex-col">
+          <div className="max-h-[40%] shrink-0 overflow-auto border-b [&>*]:border-b-0">{summary}</div>
           <ScrollArea
-            className="h-64 shrink-0 border-t"
+            className="min-h-0 flex-1"
             viewportRef={scrollRef}
             viewportProps={{ className: "[contain:strict]" }}
           >

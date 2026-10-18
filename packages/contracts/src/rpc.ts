@@ -95,6 +95,29 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("Pull", { payload: repo, error: GitError }),
   Rpc.make("Push", { payload: repo, error: GitError }),
   Rpc.make("ForcePush", { payload: { repo: RepoId, expected: Oid }, error: GitError }),
+  Rpc.make("RenameBranch", { payload: { repo: RepoId, from: Schema.String, to: Schema.String }, error: GitError }),
+  Rpc.make("Merge", { payload: { repo: RepoId, ref: Schema.String }, error: GitError }),
+  Rpc.make("Rebase", { payload: { repo: RepoId, onto: Schema.String }, error: GitError }),
+  Rpc.make("CherryPick", { payload: { repo: RepoId, oid: Oid }, error: GitError }),
+  Rpc.make("Revert", { payload: { repo: RepoId, oid: Oid }, error: GitError }),
+  Rpc.make("Reset", {
+    payload: { repo: RepoId, oid: Oid, mode: Schema.Literals(["soft", "mixed", "hard"]) },
+    error: GitError,
+  }),
+  Rpc.make("CheckoutDetached", { payload: { repo: RepoId, oid: Oid }, error: GitError }),
+  Rpc.make("CreateTag", {
+    payload: { repo: RepoId, name: Schema.String, oid: Oid, message: Schema.String },
+    error: GitError,
+  }),
+  Rpc.make("DeleteTag", { payload: { repo: RepoId, name: Schema.String }, error: GitError }),
+  Rpc.make("StashPush", {
+    payload: { repo: RepoId, message: Schema.String, includeUntracked: Schema.Boolean },
+    error: GitError,
+  }),
+  Rpc.make("AddWorktree", {
+    payload: { repo: RepoId, path: Schema.String, branch: Schema.String, startPoint: Schema.NullOr(Oid) },
+    error: GitError,
+  }),
   Rpc.make("StashApply", { payload: { repo: RepoId, oid: Oid, drop: Schema.Boolean }, error: GitError }),
   Rpc.make("StashDrop", { payload: { repo: RepoId, oid: Oid }, error: GitError }),
 ) {}

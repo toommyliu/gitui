@@ -32,31 +32,28 @@ const gitEnv = (): Record<string, string | undefined> => {
   }
 }
 
-const globalArgs = [
-  "--no-pager",
-  "--literal-pathspecs",
-  "-c",
-  "core.quotePath=false",
-  "-c",
-  "color.ui=never",
-  "-c",
-  "log.showSignature=false",
-]
+const baseArgs = ["--no-pager", "-c", "core.quotePath=false", "-c", "color.ui=never", "-c", "log.showSignature=false"]
 
 export interface RunOptions {
   readonly stdin?: Uint8Array
   readonly okExitCodes?: ReadonlyArray<number>
   readonly write?: boolean
+  readonly patternPathspecs?: boolean
 }
+
+// `git stash push --include-untracked` cleans up through pathspec magic; with
+// --literal-pathspecs it stashes untracked files but leaves them on disk.
+const globalArgs = (options: RunOptions | undefined) =>
+  options?.patternPathspecs === true ? baseArgs : [...baseArgs, "--literal-pathspecs"]
 
 const MAX_LOGGED_STDERR = 8 * 1024
 
-const command = (cwd: string, args: ReadonlyArray<string>, stdin: Uint8Array | undefined) =>
-  ChildProcess.make("git", [...globalArgs, ...args], {
+const command = (cwd: string, args: ReadonlyArray<string>, options: RunOptions | undefined) =>
+  ChildProcess.make("git", [...globalArgs(options), ...args], {
     cwd,
     env: gitEnv(),
     extendEnv: false,
-    stdin: stdin === undefined ? "ignore" : Stream.make(stdin),
+    stdin: options?.stdin === undefined ? "ignore" : Stream.make(options.stdin),
   })
 
 const decoder = new TextDecoder()
@@ -80,15 +77,20 @@ export class Git extends Context.Service<
       const spawnError = (args: ReadonlyArray<string>) => (cause: unknown) =>
         new GitError({ args: [...args], exitCode: -1, stderr: String(cause) })
 
-      const recorder = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>, write: boolean) {
+      const recorder = Effect.fnUntraced(function* (
+        cwd: string,
+        args: ReadonlyArray<string>,
+        options: RunOptions | undefined,
+      ) {
+        const prefix = globalArgs(options)
         const startedAt = yield* Clock.currentTimeMillis
         return (outcome: CommandOutcome, stderr: string) =>
           Effect.flatMap(Clock.currentTimeMillis, (now) =>
             log.record({
               cwd,
-              args: [...globalArgs, ...args],
-              prefixLength: globalArgs.length,
-              kind: write ? "write" : "read",
+              args: [...prefix, ...args],
+              prefixLength: prefix.length,
+              kind: options?.write === true ? "write" : "read",
               startedAt,
               durationMs: now - startedAt,
               outcome,
@@ -98,10 +100,10 @@ export class Git extends Context.Service<
       })
 
       const run = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>, options?: RunOptions) {
-        const finish = yield* recorder(cwd, args, options?.write ?? false)
+        const finish = yield* recorder(cwd, args, options)
         const { stdout, stderr, exitCode } = yield* Effect.scoped(
           Effect.gen(function* () {
-            const handle = yield* spawner.spawn(command(cwd, args, options?.stdin))
+            const handle = yield* spawner.spawn(command(cwd, args, options))
             const [stdout, stderr, exitCode] = yield* Effect.all(
               [Stream.mkUint8Array(handle.stdout), Stream.mkUint8Array(handle.stderr), handle.exitCode],
               { concurrency: "unbounded" },
@@ -129,7 +131,7 @@ export class Git extends Context.Service<
         text: (cwd, args, options) => Effect.map(run(cwd, args, options), (bytes) => decoder.decode(bytes)),
         stream: (cwd, args) =>
           Stream.unwrap(
-            Effect.map(recorder(cwd, args, false), (finish) =>
+            Effect.map(recorder(cwd, args, undefined), (finish) =>
               spawner.spawn(command(cwd, args, undefined)).pipe(
                 Effect.map((handle) => handle.stdout),
                 Stream.unwrap,

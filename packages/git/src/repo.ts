@@ -109,6 +109,17 @@ export class Repo extends Context.Service<
     pull(repo: RepoId): Effect.Effect<void, GitError>
     push(repo: RepoId): Effect.Effect<void, GitError>
     forcePush(repo: RepoId, expected: Oid): Effect.Effect<void, GitError>
+    renameBranch(repo: RepoId, from: string, to: string): Effect.Effect<void, GitError>
+    merge(repo: RepoId, ref: string): Effect.Effect<void, GitError>
+    rebase(repo: RepoId, onto: string): Effect.Effect<void, GitError>
+    cherryPick(repo: RepoId, oid: Oid): Effect.Effect<void, GitError>
+    revert(repo: RepoId, oid: Oid): Effect.Effect<void, GitError>
+    reset(repo: RepoId, oid: Oid, mode: "soft" | "mixed" | "hard"): Effect.Effect<void, GitError>
+    checkoutDetached(repo: RepoId, oid: Oid): Effect.Effect<void, GitError>
+    createTag(repo: RepoId, name: string, oid: Oid, message: string): Effect.Effect<void, GitError>
+    deleteTag(repo: RepoId, name: string): Effect.Effect<void, GitError>
+    stashPush(repo: RepoId, message: string, includeUntracked: boolean): Effect.Effect<void, GitError>
+    addWorktree(repo: RepoId, path: string, branch: string, startPoint: Oid | null): Effect.Effect<void, GitError>
     stashApply(repo: RepoId, oid: Oid, drop: boolean): Effect.Effect<void, GitError>
     stashDrop(repo: RepoId, oid: Oid): Effect.Effect<void, GitError>
   }
@@ -453,6 +464,40 @@ export class Repo extends Context.Service<
             remote,
             `refs/heads/${head.name}:refs/heads/${remoteBranch}`,
           ])
+        }),
+        renameBranch: (repo, from, to) => run(repo, ["branch", "-m", from, to]),
+        merge: (repo, ref) => run(repo, ["merge", "--no-edit", ref]),
+        rebase: (repo, onto) => run(repo, ["rebase", onto]),
+        cherryPick: (repo, oid) => run(repo, ["cherry-pick", oid]),
+        revert: (repo, oid) => run(repo, ["revert", "--no-edit", oid]),
+        reset: (repo, oid, mode) => run(repo, ["reset", `--${mode}`, oid]),
+        checkoutDetached: (repo, oid) => run(repo, ["switch", "--detach", oid]),
+        createTag: (repo, name, oid, message) =>
+          message.trim() === ""
+            ? run(repo, ["tag", name, oid])
+            : run(repo, ["tag", "-a", name, "-F", "-", oid], new TextEncoder().encode(message)),
+        deleteTag: (repo, name) => run(repo, ["tag", "-d", name]),
+        stashPush: (repo, message, includeUntracked) =>
+          Effect.asVoid(
+            git.run(
+              repo,
+              [
+                "stash",
+                "push",
+                ...(includeUntracked ? ["--include-untracked"] : []),
+                ...(message === "" ? [] : ["-m", message]),
+              ],
+              { write: true, patternPathspecs: true },
+            ),
+          ),
+        addWorktree: Effect.fn("Repo.addWorktree")(function* (repo, path, branch, startPoint) {
+          const exists = (yield* git.text(repo, ["branch", "--list", branch])).trim() !== ""
+          yield* run(
+            repo,
+            exists
+              ? ["worktree", "add", path, branch]
+              : ["worktree", "add", "-b", branch, path, ...(startPoint === null ? [] : [startPoint])],
+          )
         }),
         stashApply: Effect.fn("Repo.stashApply")(function* (repo, oid, drop) {
           const ref = yield* stashIndex(repo, oid)

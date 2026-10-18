@@ -1,19 +1,30 @@
 import { useAtom, useAtomValue } from "@effect/atom-react"
 import type { CommandEntry, RepoId } from "@gitui/contracts"
-import { useVirtualizer } from "@tanstack/react-virtual"
+import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "cn"
 import { ChevronUpIcon } from "lucide-react"
-import { type ReactNode, useEffect, useMemo, useState } from "react"
+import {
+  type Dispatch,
+  type ReactNode,
+  type RefObject,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { copyText } from "@/lib/clipboard"
 import { commandLogAtom, isFailure, latest, logOpenAtom, logSeenAtom } from "@/lib/git"
 import { Nothing } from "./loading"
 import { NetworkStatus } from "./network"
 
 const ROW = 26
+
+type ScrollPosition = { offset: number; measurements: Array<VirtualItem> }
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })
 
@@ -84,6 +95,8 @@ export function CommandLogDrawer({ repo, children }: { repo: RepoId; children: R
   const log = latest(useAtomValue(commandLogAtom(repo)))
   const entries = log ?? []
   const rows = useMemo(() => (log ?? []).toReversed(), [log])
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set())
+  const position = useRef<ScrollPosition>({ offset: 0, measurements: [] })
 
   const lastId = entries.at(-1)?.id ?? 0
   useEffect(() => {
@@ -129,7 +142,7 @@ export function CommandLogDrawer({ repo, children }: { repo: RepoId; children: R
             <ResizablePanel id="log" defaultSize="35%" minSize={120}>
               <div className="flex h-full flex-col">
                 {bar}
-                <LogRows rows={rows} />
+                <LogRows rows={rows} expanded={expanded} setExpanded={setExpanded} position={position} />
               </div>
             </ResizablePanel>
           </>
@@ -140,8 +153,17 @@ export function CommandLogDrawer({ repo, children }: { repo: RepoId; children: R
   )
 }
 
-function LogRows({ rows }: { rows: ReadonlyArray<CommandEntry> }) {
-  const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set())
+function LogRows({
+  rows,
+  expanded,
+  setExpanded,
+  position,
+}: {
+  rows: ReadonlyArray<CommandEntry>
+  expanded: ReadonlySet<number>
+  setExpanded: Dispatch<SetStateAction<ReadonlySet<number>>>
+  position: RefObject<ScrollPosition>
+}) {
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null)
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -149,7 +171,16 @@ function LogRows({ rows }: { rows: ReadonlyArray<CommandEntry> }) {
     estimateSize: () => ROW,
     getItemKey: (index) => rows[index]!.id,
     overscan: 20,
+    initialOffset: position.current.offset,
+    initialMeasurementsCache: position.current.measurements,
   })
+
+  useEffect(
+    () => () => {
+      position.current = { offset: virtualizer.scrollOffset ?? 0, measurements: virtualizer.measurementsCache }
+    },
+    [virtualizer, position],
+  )
 
   const toggle = (id: number) =>
     setExpanded((current) => {

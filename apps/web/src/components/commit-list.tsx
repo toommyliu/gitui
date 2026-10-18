@@ -65,6 +65,7 @@ export function RefBadge({ label, className }: { label: RefLabel; className?: st
       variant={label.kind === "head" ? "default" : "secondary"}
       className={cn(
         "h-4 rounded-sm px-1 text-[11px] [&>svg]:size-3!",
+        label.kind !== "head" && "bg-foreground/8",
         label.kind === "remote" && "text-muted-foreground",
         label.kind === "tag" && "italic",
         className,
@@ -84,7 +85,7 @@ function RefLabels({ labels }: { labels: ReadonlyArray<RefLabel> }) {
       <TooltipTrigger render={<span className="flex max-w-[40%] min-w-0 shrink-0 items-center gap-1" />}>
         <RefBadge label={first} className="min-w-0 shrink" />
         {rest.length > 0 && (
-          <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[11px] tabular-nums">
+          <Badge variant="secondary" className="h-4 rounded-sm bg-foreground/8 px-1 text-[11px] tabular-nums">
             +{rest.length}
           </Badge>
         )}

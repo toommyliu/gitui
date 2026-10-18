@@ -7,7 +7,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@workspace/ui/components/alert-dialog"
+} from "@/components/ui/alert-dialog"
 import { createContext, type ReactNode, useCallback, useContext, useState } from "react"
 
 export interface ConfirmRequest {

@@ -1,5 +1,5 @@
 import { useAtom } from "@effect/atom-react"
-import { Button } from "@workspace/ui/components/button"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@workspace/ui/components/dialog"
+} from "@/components/ui/dialog"
 import {
   Field,
   FieldContent,
@@ -17,10 +17,10 @@ import {
   FieldSeparator,
   FieldSet,
   FieldLegend,
-} from "@workspace/ui/components/field"
-import { Kbd, KbdGroup } from "@workspace/ui/components/kbd"
-import { Switch } from "@workspace/ui/components/switch"
-import { ToggleGroup, ToggleGroupItem } from "@workspace/ui/components/toggle-group"
+} from "@/components/ui/field"
+import { Kbd, KbdGroup } from "@/components/ui/kbd"
+import { Switch } from "@/components/ui/switch"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { ReactNode } from "react"
 import { type Settings, settingsAtom } from "@/lib/settings"
 import { type Theme, useTheme } from "./theme-provider"

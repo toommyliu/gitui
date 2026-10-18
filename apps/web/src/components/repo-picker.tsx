@@ -1,13 +1,6 @@
 import { useAtomValue } from "@effect/atom-react"
-import { Badge } from "@workspace/ui/components/badge"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@workspace/ui/components/command"
+import { Badge } from "@/components/ui/badge"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { useState } from "react"
 import { latest, reposAtom } from "@/lib/git"
 

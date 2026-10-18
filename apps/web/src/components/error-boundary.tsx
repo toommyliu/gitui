@@ -1,4 +1,4 @@
-import { Button } from "@workspace/ui/components/button"
+import { Button } from "@/components/ui/button"
 import { Component, type ErrorInfo, type ReactNode } from "react"
 
 export class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {

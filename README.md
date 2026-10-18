@@ -21,13 +21,13 @@ Anyone who can reach the port can run git in any directory the server's user can
 
 ## Layout
 
-| Path                 | What it holds                                                                      |
-| -------------------- | ---------------------------------------------------------------------------------- |
-| `packages/contracts` | Effect Schema domain types and the RPC group shared by server and client           |
-| `packages/git`       | git runner, NUL-delimited output parsers, commit graph layout, repo service        |
-| `apps/server`        | RPC handlers, file watcher, static file serving                                    |
-| `apps/web`           | React client: tabs, locations sidebar, commit graph, commit and working-copy views |
-| `packages/ui`        | shadcn components (base-ui, mira preset)                                           |
+| Path                         | What it holds                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------- |
+| `packages/contracts`         | Effect Schema domain types and the RPC group shared by server and client           |
+| `packages/git`               | git runner, NUL-delimited output parsers, commit graph layout, repo service        |
+| `apps/server`                | RPC handlers, file watcher, static file serving                                    |
+| `apps/web`                   | React client: tabs, locations sidebar, commit graph, commit and working-copy views |
+| `apps/web/src/components/ui` | shadcn components (base-ui, mira preset)                                           |
 
 ## Performance
 

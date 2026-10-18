@@ -1,5 +1,5 @@
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@workspace/ui/components/empty"
-import { Spinner } from "@workspace/ui/components/spinner"
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { Spinner } from "@/components/ui/spinner"
 
 export function Loading({ label }: { label: string }) {
   return (

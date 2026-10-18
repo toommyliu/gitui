@@ -6,7 +6,7 @@
   "trailingComma": "all",
   "sortPackageJson": false,
   "sortTailwindcss": {
-    "stylesheet": "packages/ui/src/styles/globals.css",
+    "stylesheet": "apps/web/src/globals.css",
     "functions": ["cn", "cva"]
   },
   "ignorePatterns": ["pnpm-lock.yaml", "**/dist/**", "prompt.txt"]

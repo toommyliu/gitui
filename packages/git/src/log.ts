@@ -7,7 +7,7 @@ export const logRevArgs = (hasHead: boolean) => [...(hasHead ? ["HEAD"] : []), "
 export const logArgs = (hasHead: boolean) => [
   "log",
   "-z",
-  "--date-order",
+  "--topo-order",
   "--format=%H%x00%P%x00%an%x00%at%x00%s",
   ...logRevArgs(hasHead),
   "--",

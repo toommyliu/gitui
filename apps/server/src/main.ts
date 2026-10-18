@@ -5,7 +5,7 @@ import { homedir } from "node:os"
 import { join, resolve } from "node:path"
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
 import { GitRpcs } from "@gitui/contracts"
-import { Repo } from "@gitui/git"
+import { CommandLog, Repo } from "@gitui/git"
 import * as Layer from "effect/Layer"
 import * as HttpRouter from "effect/http/HttpRouter"
 import * as HttpStaticServer from "effect/http/HttpStaticServer"
@@ -29,6 +29,7 @@ const webDist = resolve(import.meta.dirname, "../../web/dist")
 const Rpc = RpcServer.layerHttp({ group: GitRpcs, path: "/rpc", protocol: "websocket" }).pipe(
   Layer.provide(handlers(repoRoots)),
   Layer.provide(Repo.layer),
+  Layer.provide(CommandLog.layer),
   Layer.provide(RpcSerialization.layerJson),
 )
 

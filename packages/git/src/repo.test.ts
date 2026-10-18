@@ -6,13 +6,15 @@ import { expect, layer } from "@effect/vitest"
 import type { Oid, RepoId, RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Stream from "effect/Stream"
+import { CommandLog } from "./command-log.ts"
 import { Repo } from "./repo.ts"
 import { fixtureEnv, makeRepo } from "./testRepo.ts"
 
 const id = (root: string) => root as RepoId
 const p = (path: string) => path as RepoPath
 
-layer(Repo.layer.pipe(Layer.provide(NodeServices.layer)))("Repo", (it) => {
+layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeServices.layer)))("Repo", (it) => {
   it.effect("pages the log in order across many commits", () =>
     Effect.gen(function* () {
       const repo = makeRepo()
@@ -108,6 +110,36 @@ layer(Repo.layer.pipe(Layer.provide(NodeServices.layer)))("Repo", (it) => {
       expect(result.stderr).toBe("wip has 1 commit that HEAD doesn't contain. Nothing was deleted.")
       expect(readFileSync(join(linked, "dirty.txt"), "utf8")).toBe("keep me\n")
       expect(repo.git("branch", "--list", "wip")).toBe("+ wip")
+    }),
+  )
+
+  it.effect("logs each command with its kind, outcome and stderr", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.commit("base")
+      repo.write("a.txt", "a\n")
+      const r = yield* Repo
+      yield* r.stage(id(repo.root), [p("a.txt")])
+      yield* Effect.flip(r.checkout(id(repo.root), "missing"))
+
+      const [entries = []] = yield* (yield* CommandLog).entries.pipe(Stream.take(1), Stream.runCollect)
+      const mine = entries
+        .filter((entry) => entry.cwd === repo.root)
+        .map((entry) => ({
+          command: entry.args.slice(entry.prefixLength).join(" "),
+          kind: entry.kind,
+          outcome: entry.outcome,
+          failed: entry.stderr.includes("invalid reference: missing"),
+        }))
+      expect(mine).toEqual([
+        {
+          command: "add -A --pathspec-from-file=- --pathspec-file-nul",
+          kind: "write",
+          outcome: { _tag: "Exited", code: 0 },
+          failed: false,
+        },
+        { command: "switch missing", kind: "write", outcome: { _tag: "Exited", code: 128 }, failed: true },
+      ])
     }),
   )
 

@@ -1,10 +1,12 @@
-import { GitError } from "@gitui/contracts"
+import { type CommandOutcome, GitError } from "@gitui/contracts"
+import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Stream from "effect/Stream"
 import * as ChildProcess from "effect/process/ChildProcess"
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
+import { CommandLog } from "./command-log.ts"
 
 const repositoryRoutingVars = [
   "GIT_DIR",
@@ -37,7 +39,10 @@ const globalArgs = [
 export interface RunOptions {
   readonly stdin?: Uint8Array
   readonly okExitCodes?: ReadonlyArray<number>
+  readonly write?: boolean
 }
+
+const MAX_LOGGED_STDERR = 8 * 1024
 
 const command = (cwd: string, args: ReadonlyArray<string>, stdin: Uint8Array | undefined) =>
   ChildProcess.make("git", [...globalArgs, ...args], {
@@ -64,32 +69,66 @@ export class Git extends Context.Service<
     Git,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const log = yield* CommandLog
       const spawnError = (args: ReadonlyArray<string>) => (cause: unknown) =>
         new GitError({ args: [...args], exitCode: -1, stderr: String(cause) })
 
-      const run = (cwd: string, args: ReadonlyArray<string>, options?: RunOptions) =>
-        Effect.scoped(
+      const recorder = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>, write: boolean) {
+        const startedAt = yield* Clock.currentTimeMillis
+        return (outcome: CommandOutcome, stderr: string) =>
+          Effect.flatMap(Clock.currentTimeMillis, (now) =>
+            log.record({
+              cwd,
+              args: [...globalArgs, ...args],
+              prefixLength: globalArgs.length,
+              kind: write ? "write" : "read",
+              startedAt,
+              durationMs: now - startedAt,
+              outcome,
+              stderr: stderr.slice(0, MAX_LOGGED_STDERR),
+            }),
+          )
+      })
+
+      const run = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>, options?: RunOptions) {
+        const finish = yield* recorder(cwd, args, options?.write ?? false)
+        const { stdout, stderr, exitCode } = yield* Effect.scoped(
           Effect.gen(function* () {
             const handle = yield* spawner.spawn(command(cwd, args, options?.stdin))
             const [stdout, stderr, exitCode] = yield* Effect.all(
               [Stream.mkUint8Array(handle.stdout), Stream.mkUint8Array(handle.stderr), handle.exitCode],
               { concurrency: "unbounded" },
             )
-            if (exitCode !== 0 && !(options?.okExitCodes ?? []).includes(exitCode)) {
-              return yield* new GitError({ args: [...args], exitCode, stderr: decoder.decode(stderr).trim() })
-            }
-            return stdout
+            return { stdout, stderr: decoder.decode(stderr).trim(), exitCode }
           }),
-        ).pipe(Effect.catchTag("PlatformError", (cause) => Effect.fail(spawnError(args)(cause))))
+        ).pipe(
+          Effect.catchTag("PlatformError", (cause) =>
+            Effect.andThen(
+              finish({ _tag: "SpawnFailed", message: String(cause) }, ""),
+              Effect.fail(spawnError(args)(cause)),
+            ),
+          ),
+        )
+        yield* finish({ _tag: "Exited", code: exitCode }, stderr)
+        if (exitCode !== 0 && !(options?.okExitCodes ?? []).includes(exitCode)) {
+          return yield* new GitError({ args: [...args], exitCode, stderr })
+        }
+        return stdout
+      })
 
       return Git.of({
         run,
         text: (cwd, args, options) => Effect.map(run(cwd, args, options), (bytes) => decoder.decode(bytes)),
         stream: (cwd, args) =>
-          spawner.spawn(command(cwd, args, undefined)).pipe(
-            Effect.map((handle) => handle.stdout),
-            Stream.unwrap,
-            Stream.mapError(spawnError(args)),
+          Stream.unwrap(
+            Effect.map(recorder(cwd, args, false), (finish) =>
+              spawner.spawn(command(cwd, args, undefined)).pipe(
+                Effect.map((handle) => handle.stdout),
+                Stream.unwrap,
+                Stream.mapError(spawnError(args)),
+                Stream.ensuring(finish({ _tag: "Streamed" }, "")),
+              ),
+            ),
           ),
       })
     }),

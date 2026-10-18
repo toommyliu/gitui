@@ -255,7 +255,10 @@ export class Repo extends Context.Service<
         paths.length === 0
           ? Effect.void
           : Effect.asVoid(
-              git.run(repo, [...args, "--pathspec-from-file=-", "--pathspec-file-nul"], { stdin: nulList(paths) }),
+              git.run(repo, [...args, "--pathspec-from-file=-", "--pathspec-file-nul"], {
+                stdin: nulList(paths),
+                write: true,
+              }),
             )
 
       const stage = (repo: RepoId, paths: ReadonlyArray<RepoPath>) => withPaths(repo, ["add", "-A"], paths)
@@ -265,11 +268,11 @@ export class Repo extends Context.Service<
         return yield* withPaths(repo, ["rm", "--cached", "-r", "-q"], paths)
       })
 
-      const chunked = (repo: RepoId, args: ReadonlyArray<string>, paths: ReadonlyArray<string>) =>
-        Effect.forEach(chunks(paths, 500), (chunk) => git.run(repo, [...args, "--", ...chunk]))
+      const chunked = (repo: RepoId, args: ReadonlyArray<string>, paths: ReadonlyArray<string>, write: boolean) =>
+        Effect.forEach(chunks(paths, 500), (chunk) => git.run(repo, [...args, "--", ...chunk], { write }))
 
       const discard = Effect.fn("Repo.discard")(function* (repo: RepoId, paths: ReadonlyArray<RepoPath>) {
-        const listed = yield* chunked(repo, ["ls-files", "-z"], paths)
+        const listed = yield* chunked(repo, ["ls-files", "-z"], paths, false)
         const tracked = new Set(listed.flatMap((bytes) => decoder.decode(bytes).split("\0")))
         yield* withPaths(
           repo,
@@ -280,11 +283,12 @@ export class Repo extends Context.Service<
           repo,
           ["clean", "-f", "-q"],
           paths.filter((path) => !tracked.has(path)),
+          true,
         )
       })
 
       const run = (repo: RepoId, args: ReadonlyArray<string>, stdin?: Uint8Array) =>
-        Effect.asVoid(git.run(repo, args, stdin === undefined ? {} : { stdin }))
+        Effect.asVoid(git.run(repo, args, stdin === undefined ? { write: true } : { stdin, write: true }))
 
       const stashIndex = Effect.fn("Repo.stashIndex")(function* (repo: RepoId, oid: Oid) {
         const index = parseStashes(yield* git.run(repo, stashArgs)).findIndex((stash) => stash.oid === oid)

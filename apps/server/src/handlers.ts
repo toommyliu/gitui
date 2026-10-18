@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { GitError, GitRpcs, type RepoSummary } from "@gitui/contracts"
-import { Repo } from "@gitui/git"
+import { CommandLog, Repo } from "@gitui/git"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
 import { watchRepo } from "./watch.ts"
@@ -20,8 +20,10 @@ export const handlers = (repoRoots: ReadonlyArray<string>) =>
   GitRpcs.toLayer(
     Effect.gen(function* () {
       const repo = yield* Repo
+      const commandLog = yield* CommandLog
       return GitRpcs.of({
         ListRepos: () => Effect.sync(() => discover(repoRoots)),
+        CommandLog: () => commandLog.entries,
         OpenRepo: ({ path }) => repo.open(path),
         WatchRepo: ({ repo: id }) =>
           repo.open(id).pipe(

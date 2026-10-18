@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema"
 import * as Rpc from "effect/rpc/Rpc"
 import * as RpcGroup from "effect/rpc/RpcGroup"
 import {
+  CommandEntry,
   CommitDetail,
   CommitRow,
   DiffTarget,
@@ -34,6 +35,7 @@ const paths = { repo: RepoId, paths: Schema.Array(RepoPath) }
 
 export class GitRpcs extends RpcGroup.make(
   Rpc.make("ListRepos", { success: Schema.Array(RepoSummary) }),
+  Rpc.make("CommandLog", { success: Schema.Array(CommandEntry), stream: true }),
   Rpc.make("OpenRepo", { payload: { path: Schema.String }, success: RepoInfo, error: RepoNotFound }),
   Rpc.make("WatchRepo", { payload: repo, success: RepoEvent, error: GitError, stream: true }),
   Rpc.make("GetStatus", { payload: repo, success: Status, error: GitError }),

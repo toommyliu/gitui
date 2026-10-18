@@ -203,3 +203,23 @@ export const RepoEvent = Schema.Struct({
   scopes: Schema.Array(ChangeScope),
 })
 export type RepoEvent = typeof RepoEvent.Type
+
+export const CommandOutcome = Schema.Union([
+  Schema.TaggedStruct("Exited", { code: Schema.Int }),
+  Schema.TaggedStruct("SpawnFailed", { message: Schema.String }),
+  Schema.TaggedStruct("Streamed", {}),
+])
+export type CommandOutcome = typeof CommandOutcome.Type
+
+export const CommandEntry = Schema.Struct({
+  id: Schema.Int,
+  cwd: Schema.String,
+  args: Schema.Array(Schema.String),
+  prefixLength: Schema.Int,
+  kind: Schema.Literals(["read", "write"]),
+  startedAt: Schema.Finite,
+  durationMs: Schema.Finite,
+  outcome: CommandOutcome,
+  stderr: Schema.String,
+})
+export type CommandEntry = typeof CommandEntry.Type

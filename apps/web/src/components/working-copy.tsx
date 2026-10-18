@@ -418,7 +418,10 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
       <div className="flex items-center gap-2">
         <Field orientation="horizontal" className="w-auto">
           <Checkbox id={`amend-${repo}`} checked={amend} onCheckedChange={setAmend} />
-          <FieldLabel htmlFor={`amend-${repo}`} className="font-normal text-muted-foreground">
+          <FieldLabel
+            htmlFor={`amend-${repo}`}
+            className="block py-1 font-normal text-muted-foreground [text-box:trim-both_cap_alphabetic]"
+          >
             Amend previous commit
           </FieldLabel>
         </Field>

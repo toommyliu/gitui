@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import * as HttpServer from "effect/http/HttpServer"
 import * as NetAddress from "effect/net/NetAddress"
-import { serverLayer } from "server/server"
+import { serverLayer } from "@gitui/server/server"
 import { APP_ORIGIN, BackendConfig } from "./protocol.ts"
 
 // git and its hooks inherit this environment; left set, any Electron app a hook launches would start as plain Node.

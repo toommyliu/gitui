@@ -1,5 +1,5 @@
 {
-  "name": "gitui-monorepo",
+  "name": "@gitui/monorepo",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -12,8 +12,8 @@
     "prepare": "effect-tsgo patch --typescript --oxlint && git config core.hooksPath .githooks",
     "test": "turbo test",
     "check": "oxfmt --check && oxlint --deny-warnings && turbo typecheck test",
-    "serve": "pnpm -F web build && pnpm -F server start",
-    "desktop": "turbo run build --filter=desktop && pnpm -F desktop start"
+    "serve": "pnpm -F @gitui/web build && pnpm -F @gitui/server start",
+    "desktop": "turbo run build --filter=@gitui/desktop && pnpm -F @gitui/desktop start"
   },
   "devDependencies": {
     "@effect/tsgo": "0.51.1",

@@ -32,15 +32,15 @@ importers:
       '@effect/platform-node':
         specifier: 4.0.4
         version: 4.0.4(effect@4.0.4)(redis@6.3.0)
+      '@gitui/server':
+        specifier: workspace:*
+        version: link:../server
+      '@gitui/web':
+        specifier: workspace:*
+        version: link:../web
       effect:
         specifier: 4.0.4
         version: 4.0.4
-      server:
-        specifier: workspace:*
-        version: link:../server
-      web:
-        specifier: workspace:*
-        version: link:../web
     devDependencies:
       '@types/node':
         specifier: ^24

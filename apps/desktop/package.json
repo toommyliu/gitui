@@ -1,5 +1,5 @@
 {
-  "name": "desktop",
+  "name": "@gitui/desktop",
   "version": "0.0.0",
   "type": "module",
   "private": true,
@@ -12,8 +12,8 @@
   "dependencies": {
     "@effect/platform-node": "4.0.4",
     "effect": "4.0.4",
-    "server": "workspace:*",
-    "web": "workspace:*"
+    "@gitui/server": "workspace:*",
+    "@gitui/web": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24",

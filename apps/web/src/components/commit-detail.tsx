@@ -94,10 +94,12 @@ export function CommitDetail({
   repo,
   oid,
   onSelect,
+  onHistory,
 }: {
   repo: RepoId
   oid: Oid
   onSelect: (selection: Selection) => void
+  onHistory: (path: string) => void
 }) {
   const detail = latest(useAtomValue(commitAtom(`${repo}\n${oid}`)))
   const diff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Commit", oid }))))
@@ -110,16 +112,39 @@ export function CommitDetail({
     return (
       <div className="flex h-full flex-col overflow-auto">
         <Summary detail={detail} onSelect={onSelect} />
-        <LargeCommitFiles repo={repo} detail={detail} />
+        <LargeCommitFiles repo={repo} detail={detail} onHistory={onHistory} />
       </div>
     )
   }
-  return <DiffStack key={oid} items={items} header={() => <Summary detail={detail} onSelect={onSelect} />} />
+  return (
+    <DiffStack
+      key={oid}
+      items={items}
+      header={() => <Summary detail={detail} onSelect={onSelect} />}
+      actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />}
+    />
+  )
 }
 
 const FILE_ROW = 24
 
-function LargeCommitFiles({ repo, detail }: { repo: RepoId; detail: Detail }) {
+export function HistoryButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button size="xs" variant="ghost" onClick={onClick}>
+      History
+    </Button>
+  )
+}
+
+function LargeCommitFiles({
+  repo,
+  detail,
+  onHistory,
+}: {
+  repo: RepoId
+  detail: Detail
+  onHistory: (path: string) => void
+}) {
   const [open, setOpen] = useState<FileChange | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
@@ -160,12 +185,22 @@ function LargeCommitFiles({ repo, detail }: { repo: RepoId; detail: Detail }) {
           })}
         </div>
       </ScrollArea>
-      {open !== null && <SingleFileDiff repo={repo} oid={detail.oid} file={open} />}
+      {open !== null && <SingleFileDiff repo={repo} oid={detail.oid} file={open} onHistory={onHistory} />}
     </div>
   )
 }
 
-function SingleFileDiff({ repo, oid, file }: { repo: RepoId; oid: Oid; file: FileChange }) {
+function SingleFileDiff({
+  repo,
+  oid,
+  file,
+  onHistory,
+}: {
+  repo: RepoId
+  oid: Oid
+  file: FileChange
+  onHistory: (path: string) => void
+}) {
   const paths = file.from === null ? [file.path] : [file.from, file.path]
   const diff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Commit", oid }, paths))))
   const items = useMemo(() => (diff?._tag === "Patch" ? patchItems("file", diff.patch) : []), [diff])
@@ -175,7 +210,7 @@ function SingleFileDiff({ repo, oid, file }: { repo: RepoId; oid: Oid; file: Fil
   if (diff._tag === "Binary") return <Nothing title="Binary file" />
   return (
     <div className="min-h-0 flex-1">
-      <DiffStack items={items} />
+      <DiffStack items={items} actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />} />
     </div>
   )
 }

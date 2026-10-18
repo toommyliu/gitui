@@ -87,9 +87,14 @@ export const refsAtom = Atom.family((repo: RepoId) =>
   GitClient.query("GetRefs", { repo }, { reactivityKeys: [keys.refs(repo)], timeToLive: CACHE_TTL }),
 )
 
-export const logAtom = Atom.family((repo: RepoId) =>
-  GitClient.query("OpenLog", { repo }, { reactivityKeys: [keys.refs(repo)], timeToLive: CACHE_TTL }),
-)
+export const logKey = (repo: RepoId, query: string) => JSON.stringify([repo, query])
+
+export const logAtom = Atom.family((key: string) => {
+  const [repo, query] = JSON.parse(key) as [RepoId, string]
+  return GitClient.query("OpenLog", { repo, query }, { reactivityKeys: [keys.refs(repo)], timeToLive: CACHE_TTL })
+})
+
+export const pathQuery = (path: string) => `path:${/[\s"]/.test(path) ? `"${path}"` : path}`
 
 export const LOG_PAGE_SIZE = 200
 

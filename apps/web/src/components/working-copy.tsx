@@ -27,7 +27,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { basename, dirname } from "@/lib/format"
 import { diffAtom, diffKey, latest, statusAtom, useGitAction } from "@/lib/git"
 import { hunkChanges, selectedChanges } from "@/lib/lines"
-import { ChangeLetter } from "./commit-detail"
+import { ChangeLetter, HistoryButton } from "./commit-detail"
 import { useConfirm } from "./confirm"
 import { Loading, Nothing } from "./loading"
 import { useStashPrompt } from "./stash-prompt"
@@ -166,7 +166,7 @@ function EmptyDiff({ conflicts, files }: { conflicts: boolean; files: number }) 
 
 const draftKey = (repo: RepoId) => `gitui.draft:${repo}`
 
-export function WorkingCopy({ repo }: { repo: RepoId }) {
+export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (path: string) => void }) {
   const status = latest(useAtomValue(statusAtom(repo)))
   const { unstaged, staged } = useMemo(() => classify(status?.entries ?? []), [status])
   const untrackedPaths = useMemo(
@@ -270,12 +270,17 @@ export function WorkingCopy({ repo }: { repo: RepoId }) {
   const actions = (meta: DiffItemMeta) => {
     const row = rowsByItem.get(`${meta.section}\n${meta.path}`)
     if (row === undefined) return null
+    const history = row.area !== "untracked" && <HistoryButton onClick={() => onHistory(row.path)} />
     return row.area === "staged" ? (
-      <Button size="xs" variant="outline" onClick={() => unstage(row.paths)}>
-        Unstage
-      </Button>
+      <span className="flex gap-1">
+        {history}
+        <Button size="xs" variant="outline" onClick={() => unstage(row.paths)}>
+          Unstage
+        </Button>
+      </span>
     ) : (
       <span className="flex gap-1">
+        {history}
         <Button size="xs" variant="ghost" onClick={() => discard([row])}>
           Discard
         </Button>

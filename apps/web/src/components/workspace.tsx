@@ -3,7 +3,7 @@ import type { RepoId } from "@gitui/contracts"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useState, useSyncExternalStore } from "react"
-import { watchAtom } from "@/lib/git"
+import { pathQuery, watchAtom } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import { CommandLogSheet } from "./command-log"
 import { CommitDetail } from "./commit-detail"
@@ -30,6 +30,11 @@ export function Workspace({ repo }: { repo: RepoId }) {
   const narrow = useNarrow()
   const [selection, setSelection] = useState<Selection>({ _tag: "WorkingCopy" })
   const [pane, setPane] = useState<Pane>("history")
+  const [query, setQuery] = useState("")
+  const showHistory = (path: string) => {
+    setQuery(pathQuery(path))
+    if (narrow) setPane("history")
+  }
 
   const select = (next: Selection) => {
     setSelection(next)
@@ -38,12 +43,14 @@ export function Workspace({ repo }: { repo: RepoId }) {
 
   const detail =
     selection._tag === "Commit" ? (
-      <CommitDetail repo={repo} oid={selection.oid} onSelect={select} />
+      <CommitDetail repo={repo} oid={selection.oid} onSelect={select} onHistory={showHistory} />
     ) : (
-      <WorkingCopy repo={repo} />
+      <WorkingCopy repo={repo} onHistory={showHistory} />
     )
   const sidebar = <Sidebar repo={repo} onSelect={select} />
-  const history = <CommitList repo={repo} selection={selection} onSelect={select} />
+  const history = (
+    <CommitList repo={repo} selection={selection} onSelect={select} query={query} onQueryChange={setQuery} />
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

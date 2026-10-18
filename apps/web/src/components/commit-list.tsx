@@ -3,15 +3,23 @@ import type { CommitRow, Head, Oid, Refs, RepoId, Status } from "@gitui/contract
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Badge } from "@/components/ui/badge"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "cn"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { shortDate, shortOid } from "@/lib/format"
-import { LOG_PAGE_SIZE, latest, logAtom, logPageAtom, logPageKey, refsAtom, statusAtom } from "@/lib/git"
+import { LOG_PAGE_SIZE, latest, logAtom, logKey, logPageAtom, logPageKey, refsAtom, statusAtom } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import { CommitMenuItems } from "./commit-menu"
+import { Nothing } from "./loading"
 import { GraphCell, LANE_WIDTH, ROW_HEIGHT, VISIBLE_LANES, lanesUsed } from "./graph"
 
 export type RefLabel = { readonly kind: "head" | "branch" | "remote" | "tag"; readonly name: string }
@@ -63,21 +71,42 @@ const changeSummary = (status: Status) => {
   return [unstaged > 0 && `${unstaged} unstaged`, staged > 0 && `${staged} staged`].filter(Boolean).join(", ")
 }
 
+const useDebounced = <T,>(value: T, ms: number) => {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), ms)
+    return () => clearTimeout(timer)
+  }, [value, ms])
+  return debounced
+}
+
 export function CommitList({
   repo,
   selection,
   onSelect,
+  query,
+  onQueryChange,
 }: {
   repo: RepoId
   selection: Selection
   onSelect: (selection: Selection) => void
+  query: string
+  onQueryChange: (query: string) => void
 }) {
-  const log = latest(useAtomValue(logAtom(repo)))
+  const search = useDebounced(query.trim(), 250)
+  const result = useAtomValue(logAtom(logKey(repo, search)))
+  const current = latest(result)
+  const [shown, setShown] = useState(current)
+  useEffect(() => {
+    if (current !== undefined) setShown(current)
+  }, [current])
+  const log = current ?? shown
+  const filtering = search !== ""
   const status = latest(useAtomValue(statusAtom(repo)))
   const refs = latest(useAtomValue(refsAtom(repo)))
   const labels = useMemo(() => refLabels(refs, status?.head), [refs, status?.head])
   const headOid = status?.head._tag === "Unborn" ? undefined : status?.head.oid
-  const hasChanges = (status?.entries.length ?? 0) > 0
+  const hasChanges = !filtering && (status?.entries.length ?? 0) > 0
   const offset = hasChanges ? 1 : 0
   const count = (log?.total ?? 0) + offset
 
@@ -88,6 +117,8 @@ export function CommitList({
     estimateSize: () => ROW_HEIGHT,
     overscan: 30,
   })
+
+  useEffect(() => virtualizer.scrollToOffset(0), [search, virtualizer])
 
   const [lanes, setLanes] = useState(1)
   useEffect(() => setLanes(1), [log?.logId])
@@ -127,59 +158,100 @@ export function CommitList({
     selectIndex(selectedIndex + delta)
   }
 
+  const pending = current === undefined || search !== query.trim()
+  const summary =
+    query.trim() === ""
+      ? null
+      : result._tag === "Failure" && current === undefined
+        ? "Search failed"
+        : pending
+          ? "Searching…"
+          : `${log?.total ?? 0} ${log?.total === 1 ? "commit" : "commits"}`
+
   return (
-    <ScrollArea
-      className="@container h-full"
-      viewportRef={scrollRef}
-      viewportProps={{
-        tabIndex: 0,
-        onKeyDown,
-        role: "listbox",
-        "aria-label": "Commits",
-        className: "[contain:strict]",
-      }}
-    >
-      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-        {virtualizer.getVirtualItems().map((item) => (
-          <div
-            key={item.key}
-            className="absolute top-0 left-0 w-full"
-            style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
-          >
-            {item.index < offset && status !== undefined ? (
-              <button
-                type="button"
-                role="option"
-                aria-selected={selection._tag === "WorkingCopy"}
-                onClick={() => onSelect({ _tag: "WorkingCopy" })}
-                className={cn(
-                  "flex h-full w-full items-center gap-2 px-2 text-left whitespace-nowrap",
-                  selection._tag === "WorkingCopy" ? "bg-accent" : "hover:bg-muted/60",
-                )}
-              >
-                <span style={{ width: graphWidth }} className="flex shrink-0 justify-start">
-                  <span className="ml-[3px] size-2 rounded-full border-2 border-dashed border-muted-foreground" />
-                </span>
-                <span className="font-medium">Uncommitted changes</span>
-                <span className="truncate text-muted-foreground">{changeSummary(status)}</span>
-              </button>
-            ) : log !== undefined ? (
-              <CommitRowView
-                repo={repo}
-                logId={log.logId}
-                index={item.index - offset}
-                graphWidth={graphWidth}
-                labels={labels}
-                headOid={headOid}
-                selectedOid={selection._tag === "Commit" ? selection.oid : undefined}
-                onSelect={onSelect}
-                report={report}
-              />
-            ) : null}
-          </div>
-        ))}
+    <div className="flex h-full flex-col">
+      <div className="flex h-9 shrink-0 items-center border-b px-2">
+        <InputGroup>
+          <InputGroupInput
+            aria-label="Search history"
+            placeholder="Search messages, author:name, path:file or a SHA"
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") onQueryChange("")
+            }}
+          />
+          {summary !== null && (
+            <InputGroupAddon align="inline-end">
+              <InputGroupText className="tabular-nums">{summary}</InputGroupText>
+              <InputGroupButton size="xs" onClick={() => onQueryChange("")}>
+                Clear
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
       </div>
-    </ScrollArea>
+      {filtering && log?.total === 0 && !pending ? (
+        <Nothing title="No matching commits" description="Search looks at branches, remotes and HEAD." />
+      ) : (
+        <ScrollArea
+          className="@container min-h-0 flex-1"
+          viewportRef={scrollRef}
+          viewportProps={{
+            tabIndex: 0,
+            onKeyDown,
+            role: "listbox",
+            "aria-label": "Commits",
+            className: "[contain:strict]",
+          }}
+        >
+          <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+            {virtualizer.getVirtualItems().map((item) => (
+              <div
+                key={item.key}
+                className="absolute top-0 left-0 w-full"
+                style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
+              >
+                {item.index < offset && status !== undefined ? (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selection._tag === "WorkingCopy"}
+                    onClick={() => onSelect({ _tag: "WorkingCopy" })}
+                    className={cn(
+                      "flex h-full w-full items-center gap-2 px-2 text-left whitespace-nowrap",
+                      selection._tag === "WorkingCopy" ? "bg-accent" : "hover:bg-muted/60",
+                    )}
+                  >
+                    <span style={{ width: graphWidth }} className="flex shrink-0 justify-start">
+                      <span className="ml-[3px] size-2 rounded-full border-2 border-dashed border-muted-foreground" />
+                    </span>
+                    <span className="font-medium">Uncommitted changes</span>
+                    <span className="truncate text-muted-foreground">{changeSummary(status)}</span>
+                  </button>
+                ) : log !== undefined ? (
+                  <CommitRowView
+                    repo={repo}
+                    logId={log.logId}
+                    index={item.index - offset}
+                    graphWidth={graphWidth}
+                    labels={labels}
+                    headOid={headOid}
+                    selectedOid={selection._tag === "Commit" ? selection.oid : undefined}
+                    onSelect={onSelect}
+                    report={report}
+                  />
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
   )
 }
 

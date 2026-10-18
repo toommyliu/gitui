@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react"
-import type { FileChange, RepoPath } from "@gitui/contracts"
+import type { FileChange, RepoId, RepoPath } from "@gitui/contracts"
 import {
   type ChangeTypes,
   type CodeViewDiffItem,
@@ -9,10 +9,18 @@ import {
   parsePatchFiles,
 } from "@pierre/diffs"
 import { CodeView, type CodeViewHandle } from "@pierre/diffs/react"
-import { CheckIcon, CopyIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
 import { type ReactNode, type Ref, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import { cn } from "cn"
 import { copyText } from "@/lib/clipboard"
 import { settingsAtom } from "@/lib/settings"
 import { ChangeLetter } from "./change-letter"
@@ -29,21 +37,71 @@ export interface DiffItemMeta {
   readonly path: RepoPath
 }
 
-export const patchItems = (section: string, patch: string): Array<CodeViewDiffItem> => {
+export type DiffItem = CodeViewDiffItem & { readonly binary: boolean }
+
+const binaryPaths = (patch: string) => {
+  const paths = new Set<string>()
+  for (const [, from, to] of patch.matchAll(
+    /^Binary files (?:a\/(.+?)|\/dev\/null) and (?:b\/(.+)|\/dev\/null) differ$/gm,
+  )) {
+    const path = to ?? from
+    if (path !== undefined) paths.add(path)
+  }
+  return paths
+}
+
+export const patchItems = (section: string, patch: string): Array<DiffItem> => {
   const version = hash(patch)
+  const binary = binaryPaths(patch)
   return parsePatchFiles(patch, `${section}:${version}`).flatMap((parsed) =>
     parsed.files.map((fileDiff) => ({
       id: `${section}\n${fileDiff.name}`,
       type: "diff" as const,
       fileDiff,
       version,
+      binary: binary.has(fileDiff.name),
     })),
   )
+}
+
+export const hasText = (item: DiffItem) => item.fileDiff.hunks.length > 0
+
+export const expandableIds = (items: ReadonlyArray<DiffItem>) => items.filter(hasText).map((item) => item.id)
+
+const noTextNote = (item: DiffItem) => {
+  const { type } = item.fileDiff
+  if (item.binary) {
+    return type === "new" ? "Binary file added" : type === "deleted" ? "Binary file deleted" : "Binary file changed"
+  }
+  if (type === "rename-pure") return "Renamed without changes"
+  if (type === "new") return "Empty file added"
+  if (type === "deleted") return "Empty file deleted"
+  return "File mode changed"
 }
 
 export const itemMeta = (id: string): DiffItemMeta => {
   const newline = id.indexOf("\n")
   return { section: id.slice(0, newline), path: id.slice(newline + 1) as RepoPath }
+}
+
+export interface Collapse {
+  readonly ids: ReadonlySet<string>
+  readonly set: (ids: ReadonlyArray<string>, collapsed: boolean) => void
+}
+
+export const useCollapse = (): Collapse => {
+  const [ids, setIds] = useState<ReadonlySet<string>>(() => new Set())
+  const set = useCallback((targets: ReadonlyArray<string>, collapsed: boolean) => {
+    setIds((previous) => {
+      const next = new Set(previous)
+      for (const id of targets) {
+        if (collapsed) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
+  }, [])
+  return useMemo(() => ({ ids, set }), [ids, set])
 }
 
 export interface HoveredLine {
@@ -105,9 +163,55 @@ const changeOf: Record<ChangeTypes, FileChange["change"]> = {
   "rename-changed": "renamed",
 }
 
+const HEADER_HEIGHT = 32
+const SEPARATOR_HEIGHT = 24
+
+const separator = ':is([data-separator="line-info"], [data-separator="line-info-basic"])'
+const quiet = "color-mix(in srgb, var(--diffs-fg) 50%, var(--diffs-bg))"
+
+const UNSAFE_CSS = `
+${separator} {
+  height: ${SEPARATOR_HEIGHT}px !important;
+  margin-block: 0 !important;
+  --diffs-bg-separator: color-mix(in srgb, var(--diffs-bg) 97%, var(--diffs-fg));
+}
+${separator} [data-separator-content] {
+  color: ${quiet} !important;
+  font-family: var(--font-sans) !important;
+  font-size: 11px !important;
+  text-decoration: none !important;
+}
+${separator} [data-expand-button] {
+  color: ${quiet} !important;
+}
+${separator}[data-expand-index] :is([data-separator-content], [data-expand-button]):hover {
+  color: var(--diffs-fg) !important;
+  background-color: color-mix(in srgb, var(--diffs-bg) 92%, var(--diffs-fg)) !important;
+}
+[data-diff] {
+  transition: opacity 200ms ease-out;
+}
+@starting-style {
+  [data-diff] {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-diff] {
+    transition: none;
+  }
+}
+`
+
 const scrollToEnd = (node: HTMLDivElement | null) => {
   if (node !== null) node.scrollLeft = node.scrollWidth
 }
+
+const copyWithToast = (text: string, title: string) =>
+  copyText(text).then(
+    () => toast.success(title, { description: text }),
+    () => toast.error("Couldn't copy", { description: "This browser blocked clipboard access." }),
+  )
 
 function CopyPathButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
@@ -135,7 +239,25 @@ function CopyPathButton({ path }: { path: string }) {
   )
 }
 
-function FileHeader({ fileDiff, actions }: { fileDiff: FileDiffMetadata; actions: ReactNode }) {
+function FileHeader({
+  fileDiff,
+  note,
+  fullPath,
+  first,
+  collapsed,
+  onToggle,
+  onSetAll,
+  actions,
+}: {
+  fileDiff: FileDiffMetadata
+  note: string | null
+  fullPath: string
+  first: boolean
+  collapsed: boolean
+  onToggle: () => void
+  onSetAll: ((collapsed: boolean) => void) | null
+  actions: ReactNode
+}) {
   let additions = 0
   let deletions = 0
   for (const hunk of fileDiff.hunks) {
@@ -143,37 +265,97 @@ function FileHeader({ fileDiff, actions }: { fileDiff: FileDiffMetadata; actions
     deletions += hunk.deletionLines
   }
   return (
-    <div className="flex h-11 items-center gap-2 bg-background px-3 font-sans text-xs">
-      <ChangeLetter change={changeOf[fileDiff.type]} />
-      <div ref={scrollToEnd} className="min-w-0 [scrollbar-width:none] overflow-x-auto font-medium whitespace-nowrap">
-        {fileDiff.prevName !== undefined && fileDiff.prevName !== fileDiff.name && (
-          <span className="text-muted-foreground">{fileDiff.prevName} → </span>
+    <ContextMenu>
+      <ContextMenuTrigger
+        style={{ height: HEADER_HEIGHT }}
+        onClick={(event) => {
+          if (note === null && !(event.target as HTMLElement).closest("button")) onToggle()
+        }}
+        className={cn(
+          "flex items-center gap-2 bg-background pr-3 pl-1.5 font-sans text-xs",
+          note === null && "hover:shadow-[inset_3px_0_color-mix(in_srgb,var(--foreground)_24%,transparent)]",
+          !first && "border-t",
         )}
-        {fileDiff.name}
-      </div>
-      <CopyPathButton path={fileDiff.name} />
-      <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums">
-        {deletions > 0 && <span className="text-destructive">-{deletions} </span>}
-        {additions > 0 && <span className="text-[var(--lane-1)]">+{additions}</span>}
-      </span>
-      {actions}
-    </div>
+      >
+        {note === null ? (
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="-mr-1 text-muted-foreground"
+            aria-label={collapsed ? "Expand diff" : "Collapse diff"}
+            aria-expanded={!collapsed}
+            title={collapsed ? "Expand diff" : "Collapse diff"}
+            onClick={onToggle}
+          >
+            {collapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
+          </Button>
+        ) : (
+          <span className="-mr-1 size-6 shrink-0" />
+        )}
+        <ChangeLetter change={changeOf[fileDiff.type]} />
+        <div ref={scrollToEnd} className="min-w-0 [scrollbar-width:none] overflow-x-auto font-medium whitespace-nowrap">
+          {fileDiff.prevName !== undefined && fileDiff.prevName !== fileDiff.name && (
+            <span className="text-muted-foreground">{fileDiff.prevName} → </span>
+          )}
+          {fileDiff.name}
+        </div>
+        <CopyPathButton path={fileDiff.name} />
+        {note === null ? (
+          <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums">
+            {deletions > 0 && <span className="text-destructive">-{deletions} </span>}
+            {additions > 0 && <span className="text-[var(--lane-1)]">+{additions}</span>}
+          </span>
+        ) : (
+          <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{note}</span>
+        )}
+        {actions}
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={() => void copyWithToast(fileDiff.name, "Path copied")}>Copy path</ContextMenuItem>
+        <ContextMenuItem onClick={() => void copyWithToast(fullPath, "Full path copied")}>
+          Copy full path
+        </ContextMenuItem>
+        {onSetAll !== null && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => onSetAll(true)}>Collapse all files</ContextMenuItem>
+            <ContextMenuItem onClick={() => onSetAll(false)}>Expand all files</ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }
 
 export function DiffStack({
+  repo,
   items,
   header,
   actions,
   viewRef,
   lines,
+  collapse,
 }: {
-  items: ReadonlyArray<CodeViewDiffItem>
+  repo: RepoId
+  items: ReadonlyArray<DiffItem>
   header?: () => ReactNode
   actions?: (meta: DiffItemMeta) => ReactNode
   viewRef?: Ref<CodeViewHandle<undefined, undefined>>
   lines?: LineSelectionProps
+  collapse?: Collapse
 }) {
+  const ownCollapse = useCollapse()
+  const { ids: collapsedIds, set: setCollapsed } = collapse ?? ownCollapse
+  const shown = useMemo(
+    () =>
+      items.map((item) => {
+        const collapsed = !hasText(item) || collapsedIds.has(item.id)
+        return { ...item, collapsed, version: (item.version ?? 0) * 2 + (collapsed ? 1 : 0) }
+      }),
+    [items, collapsedIds],
+  )
+  const expandable = useMemo(() => expandableIds(items), [items])
+  const notes = useMemo(() => new Map(items.map((item) => [item.id, hasText(item) ? null : noTextNote(item)])), [items])
   const { resolvedTheme } = useTheme()
   const { diffStyle, wrapLines } = useAtomValue(settingsAtom)
   const selectable = lines !== undefined
@@ -183,6 +365,15 @@ export function DiffStack({
       themeType: resolvedTheme,
       overflow: wrapLines ? ("wrap" as const) : ("scroll" as const),
       stickyHeaders: true,
+      unsafeCSS: UNSAFE_CSS,
+      itemMetrics: {
+        diffHeaderHeight: HEADER_HEIGHT,
+        hunkSeparatorHeight: SEPARATOR_HEIGHT,
+        spacing: 0,
+        paddingTop: 0,
+        paddingBottom: 8,
+      },
+      layout: { paddingTop: 0, paddingBottom: 8, gap: 0 },
       hunkSeparators: "line-info" as const,
       lineDiffType: "word" as const,
       enableLineSelection: selectable,
@@ -193,12 +384,23 @@ export function DiffStack({
   return (
     <CodeView
       {...(viewRef === undefined ? {} : { ref: viewRef })}
-      items={items}
+      items={shown}
       options={options}
-      className="h-full overflow-auto overscroll-contain"
+      className="h-full overflow-auto overscroll-contain select-text"
       {...(header === undefined ? {} : { renderCodeViewHeader: header })}
       renderCustomHeader={(item) =>
-        item.type === "diff" ? <FileHeader fileDiff={item.fileDiff} actions={actions?.(itemMeta(item.id))} /> : null
+        item.type === "diff" ? (
+          <FileHeader
+            fileDiff={item.fileDiff}
+            note={notes.get(item.id) ?? null}
+            fullPath={`${repo}/${item.fileDiff.name}`}
+            first={item.id === shown[0]?.id}
+            collapsed={item.collapsed === true}
+            onToggle={() => setCollapsed([item.id], item.collapsed !== true)}
+            onSetAll={expandable.length > 1 ? (collapsed) => setCollapsed(expandable, collapsed) : null}
+            actions={actions?.(itemMeta(item.id))}
+          />
+        ) : null
       }
       {...(lines === undefined
         ? {}

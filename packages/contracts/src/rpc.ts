@@ -99,7 +99,7 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("SkipOperation", { payload: repo, error: GitError }),
   Rpc.make("AbortOperation", { payload: repo, error: GitError }),
   Rpc.make("ResolveConflict", {
-    payload: { repo: RepoId, path: RepoPath, side: Schema.Literals(["ours", "theirs"]) },
+    payload: { ...paths, side: Schema.Literals(["ours", "theirs"]) },
     error: GitError,
   }),
   Rpc.make("Checkout", { payload: { repo: RepoId, branch: Schema.String }, error: GitError }),

@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react"
 import type { CommitDetail as Detail, FileChange, Oid, RepoId } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import { ChevronsDownUpIcon, ChevronsUpDownIcon, HistoryIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
@@ -12,7 +13,7 @@ import { longDate, shortOid } from "@/lib/format"
 import { commitAtom, diffAtom, diffKey, latest } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
-import { DiffStack, patchItems } from "./diff-view"
+import { DiffStack, expandableIds, patchItems, useCollapse } from "./diff-view"
 import { ChangeLetter } from "./change-letter"
 import { Loading, Nothing } from "./loading"
 
@@ -25,13 +26,27 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+function ChangeTotals({ files }: { files: Detail["files"] }) {
+  const additions = files.reduce((sum, file) => sum + (file.additions ?? 0), 0)
+  const deletions = files.reduce((sum, file) => sum + (file.deletions ?? 0), 0)
+  return (
+    <>
+      <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
+        {files.length.toLocaleString()}
+      </Badge>
+      <span className="font-mono text-[11px] tabular-nums">
+        <span className="text-[var(--lane-1)]">+{additions}</span>{" "}
+        <span className="text-destructive">−{deletions}</span>
+      </span>
+    </>
+  )
+}
+
 function Summary({ detail, onSelect }: { detail: Detail; onSelect: (selection: Selection) => void }) {
   const sameCommitter = detail.committer.name === detail.author.name && detail.committer.email === detail.author.email
-  const additions = detail.files.reduce((sum, file) => sum + (file.additions ?? 0), 0)
-  const deletions = detail.files.reduce((sum, file) => sum + (file.deletions ?? 0), 0)
   return (
     <div className="border-b px-3 py-3">
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 select-text">
         <Field label="Commit">
           <span className="font-mono select-all">{detail.oid}</span>
         </Field>
@@ -61,13 +76,8 @@ function Summary({ detail, onSelect }: { detail: Detail; onSelect: (selection: S
             {detail.committer.name} <span className="text-muted-foreground">&lt;{detail.committer.email}&gt;</span>
           </Field>
         )}
-        <Field label="Changes">
-          {detail.files.length} {detail.files.length === 1 ? "file" : "files"}
-          <span className="ml-2 text-[var(--lane-1)]">+{additions}</span>
-          <span className="ml-1 text-destructive">−{deletions}</span>
-        </Field>
       </dl>
-      <pre className="mt-3 font-mono text-[12px] leading-5 whitespace-pre-wrap">{detail.message}</pre>
+      <pre className="mt-3 font-mono text-[12px] leading-5 whitespace-pre-wrap select-text">{detail.message}</pre>
     </div>
   )
 }
@@ -85,7 +95,10 @@ export function CommitDetail({
 }) {
   const detail = latest(useAtomValue(commitAtom(`${repo}\n${oid}`)))
   const diff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Commit", oid }))))
-  const items = useMemo(() => (diff?._tag === "Patch" ? patchItems("commit", diff.patch) : []), [diff])
+  const items = useMemo(() => (diff?._tag === "Patch" ? patchItems(oid, diff.patch) : []), [diff, oid])
+  const collapse = useCollapse()
+  const expandable = useMemo(() => expandableIds(items), [items])
+  const allCollapsed = expandable.every((id) => collapse.ids.has(id))
 
   if (detail === undefined || detail.oid !== oid) {
     return <Loading label="Loading commit" />
@@ -102,12 +115,31 @@ export function CommitDetail({
     )
   }
   return (
-    <DiffStack
-      key={oid}
-      items={items}
-      header={() => <Summary detail={detail} onSelect={onSelect} />}
-      actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />}
-    />
+    <div className="flex h-full flex-col">
+      <SectionBar
+        label="Files"
+        actions={
+          expandable.length > 1 && (
+            <BarButton onClick={() => collapse.set(expandable, !allCollapsed)}>
+              {allCollapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+              {allCollapsed ? "Expand all" : "Collapse all"}
+            </BarButton>
+          )
+        }
+      >
+        <ChangeTotals files={detail.files} />
+      </SectionBar>
+      <div className="min-h-0 flex-1">
+        <DiffStack
+          key={oid}
+          repo={repo}
+          items={items}
+          collapse={collapse}
+          header={() => <Summary detail={detail} onSelect={onSelect} />}
+          actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />}
+        />
+      </div>
+    </div>
   )
 }
 
@@ -115,8 +147,15 @@ const FILE_ROW = 24
 
 export function HistoryButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button size="sm" variant="ghost" onClick={onClick}>
-      History
+    <Button
+      size="icon-sm"
+      variant="ghost"
+      className="text-muted-foreground"
+      aria-label="File history"
+      title="File history"
+      onClick={onClick}
+    >
+      <HistoryIcon />
     </Button>
   )
 }
@@ -133,7 +172,7 @@ function SectionBar({ label, actions, children }: { label: string; actions: Reac
 
 function BarButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
-    <Button size="xs" variant="ghost" onClick={onClick}>
+    <Button size="sm" variant="ghost" onClick={onClick}>
       {children}
     </Button>
   )
@@ -202,9 +241,7 @@ function LargeCommit({
           )
         }
       >
-        <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
-          {detail.files.length.toLocaleString()}
-        </Badge>
+        <ChangeTotals files={detail.files} />
       </SectionBar>
       <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
         <ResizablePanel
@@ -280,6 +317,7 @@ function SingleFileDiff({
   if (diff === undefined) return <Loading label="Loading diff" />
   if (diff._tag === "TooLarge")
     return <Nothing title="Too large to display" description="This file's diff is over 4 MB." />
-  if (diff._tag === "Binary") return <Nothing title="Binary file" />
-  return <DiffStack items={items} actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />} />
+  return (
+    <DiffStack repo={repo} items={items} actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />} />
+  )
 }

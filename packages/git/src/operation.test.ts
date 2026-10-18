@@ -35,7 +35,7 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
       const r = yield* Repo
       expect((yield* r.status(id(repo.root))).operation).toBe("merge")
 
-      yield* r.resolveConflict(id(repo.root), file, "theirs")
+      yield* r.resolveConflict(id(repo.root), [file], "theirs")
       yield* r.continueOperation(id(repo.root))
 
       expect((yield* r.status(id(repo.root))).operation).toBe(null)
@@ -66,12 +66,38 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
       expect(() => repo.git("rebase", "-q", "main")).toThrow()
       const r = yield* Repo
 
-      yield* r.resolveConflict(id(repo.root), file, "ours")
+      yield* r.resolveConflict(id(repo.root), [file], "ours")
       yield* r.continueOperation(id(repo.root))
 
       expect((yield* r.status(id(repo.root))).operation).toBe(null)
       expect(readFileSync(join(repo.root, "a.txt"), "utf8")).toBe("main\n")
       expect(repo.git("rev-parse", "HEAD")).toBe(repo.git("rev-parse", "main"))
+    }),
+  )
+
+  it.effect("resolves several conflicted files with one side at once", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.write("a.txt", "base\n")
+      repo.write("b.txt", "base\n")
+      repo.git("add", ".")
+      repo.commit("base")
+      repo.git("switch", "-q", "-c", "topic")
+      repo.write("a.txt", "topic a\n")
+      repo.write("b.txt", "topic b\n")
+      repo.git("commit", "-q", "-am", "topic change")
+      repo.git("switch", "-q", "main")
+      repo.write("a.txt", "main a\n")
+      repo.write("b.txt", "main b\n")
+      repo.git("commit", "-q", "-am", "main change")
+      expect(() => repo.git("merge", "-q", "topic")).toThrow()
+      const r = yield* Repo
+
+      yield* r.resolveConflict(id(repo.root), ["a.txt" as RepoPath, "b.txt" as RepoPath], "theirs")
+
+      expect((yield* r.status(id(repo.root))).entries.map((entry) => entry._tag)).toEqual(["Tracked", "Tracked"])
+      expect(readFileSync(join(repo.root, "a.txt"), "utf8")).toBe("topic a\n")
+      expect(readFileSync(join(repo.root, "b.txt"), "utf8")).toBe("topic b\n")
     }),
   )
 

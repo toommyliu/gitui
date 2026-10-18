@@ -11,7 +11,7 @@ import type {
 } from "@gitui/contracts"
 import type { CodeViewDiffItem, CodeViewLineSelection } from "@pierre/diffs"
 import type { CodeViewHandle } from "@pierre/diffs/react"
-import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/react-virtual"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -23,8 +23,18 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "cn"
-import { useCallback, useMemo, useRef, useState } from "react"
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { basename, dirname } from "@/lib/format"
+import {
+  type ClickMode,
+  click,
+  type FileSelection,
+  move,
+  reconcile,
+  selectAll,
+  selectedRows,
+  type Side,
+} from "@/lib/file-selection"
 import { diffAtom, diffKey, latest, statusAtom, useGitAction } from "@/lib/git"
 import { hunkChanges, selectedChanges } from "@/lib/lines"
 import { ChangeLetter } from "./change-letter"
@@ -33,7 +43,18 @@ import { useConfirm } from "./confirm"
 import { Loading, Nothing } from "./loading"
 import { useStashPrompt } from "./stash-prompt"
 import { useDraft } from "@/lib/draft"
-import { DiffStack, type DiffItemMeta, GutterButton, type HoveredLine, itemMeta, patchItems } from "./diff-view"
+import { ChevronDownIcon, ChevronRightIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from "lucide-react"
+import {
+  type Collapse,
+  DiffStack,
+  type DiffItemMeta,
+  GutterButton,
+  hasText,
+  type HoveredLine,
+  itemMeta,
+  patchItems,
+  useCollapse,
+} from "./diff-view"
 
 type Area = "unstaged" | "untracked" | "conflicted" | "staged"
 
@@ -45,12 +66,8 @@ interface FileRow {
   readonly label: string
 }
 
-type ListRow = { readonly kind: "header"; readonly side: "unstaged" | "staged"; readonly count: number } | FileRow
-
 const MAX_UNTRACKED_PREVIEWS = 50
 const ROW = 28
-
-const stickyHeader = (startIndex: number, stagedHeader: number) => (startIndex >= stagedHeader ? stagedHeader : 0)
 
 const classify = (entries: ReadonlyArray<StatusEntry>) => {
   const unstaged: Array<FileRow> = []
@@ -154,6 +171,17 @@ function OperationBanner({ repo, operation, conflicts }: { repo: RepoId; operati
   )
 }
 
+function DiffToggle({ side, ids, collapse }: { side: Side; ids: ReadonlyArray<string>; collapse: Collapse }) {
+  if (ids.length === 0) return null
+  const expanded = ids.some((id) => !collapse.ids.has(id))
+  const label = `${expanded ? "Collapse" : "Expand"} ${side} diffs`
+  return (
+    <Button size="icon-sm" variant="ghost" aria-label={label} title={label} onClick={() => collapse.set(ids, expanded)}>
+      {expanded ? <ChevronsDownUpIcon /> : <ChevronsUpDownIcon />}
+    </Button>
+  )
+}
+
 function EmptyDiff({ conflicts, files }: { conflicts: boolean; files: number }) {
   if (conflicts) {
     return (
@@ -166,6 +194,12 @@ function EmptyDiff({ conflicts, files }: { conflicts: boolean; files: number }) 
   if (files > 0)
     return <Nothing title="No text diff" description="These changes are binary or only change file modes." />
   return <Nothing title="No changes" description="The working tree matches HEAD." />
+}
+
+function useLastLoaded<A>(repo: RepoId, value: A | undefined): A | undefined {
+  const [kept, setKept] = useState<{ readonly repo: RepoId; readonly value: A } | null>(null)
+  if (value !== undefined && (kept?.value !== value || kept.repo !== repo)) setKept({ repo, value })
+  return value ?? (kept?.repo === repo ? kept.value : undefined)
 }
 
 export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (path: string) => void }) {
@@ -182,7 +216,10 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
 
   const unstagedDiff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Unstaged" }))))
   const stagedDiff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Staged" }))))
-  const untrackedDiff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Untracked" }, untrackedPaths))))
+  const untrackedDiff = useLastLoaded(
+    repo,
+    latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Untracked" }, untrackedPaths)))),
+  )
 
   const items = useMemo(
     () => [
@@ -256,10 +293,22 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     )
   }
 
+  const collapse = useCollapse()
+  const sectionIds = useMemo(() => {
+    const unstagedIds: Array<string> = []
+    const stagedIds: Array<string> = []
+    for (const item of items) {
+      if (hasText(item)) (itemMeta(item.id).section === "staged" ? stagedIds : unstagedIds).push(item.id)
+    }
+    return { unstaged: unstagedIds, staged: stagedIds }
+  }, [items])
+
   const viewRef = useRef<CodeViewHandle<undefined, undefined>>(null)
   const reveal = (row: FileRow) => {
     const section = row.area === "staged" ? "staged" : row.area === "untracked" ? "untracked" : "unstaged"
-    viewRef.current?.scrollTo({ type: "item", id: `${section}\n${row.path}`, align: "start" })
+    const id = `${section}\n${row.path}`
+    collapse.set([id], false)
+    viewRef.current?.scrollTo({ type: "item", id, align: "start" })
   }
 
   const rowsByItem = useMemo(() => {
@@ -311,12 +360,15 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
             unstaged={unstaged}
             staged={staged}
             onReveal={reveal}
+            diffToggle={(side) => <DiffToggle side={side} ids={sectionIds[side]} collapse={collapse} />}
             onStage={(rows) => stage(rows.flatMap((r) => r.paths))}
             onUnstage={(rows) => unstage(rows.flatMap((r) => r.paths))}
             onDiscard={discard}
             sides={status.operation === null ? null : sideLabels[status.operation]}
-            onResolve={(row, side) =>
-              void git("Resolve conflict", repo, (c) => c("ResolveConflict", { repo, path: row.path, side }))
+            onResolve={(rows, side) =>
+              void git("Resolve conflict", repo, (c) =>
+                c("ResolveConflict", { repo, paths: rows.map((r) => r.path), side }),
+              )
             }
           />
         </div>
@@ -338,19 +390,23 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
         ) : (
           <div className="relative h-full">
             <DiffStack
+              repo={repo}
               items={items}
               actions={actions}
               viewRef={viewRef}
+              collapse={collapse}
               lines={{ selection, onSelectionChange: setSelection, gutter }}
             />
             {selected !== null && (
-              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-lg border bg-popover px-3 py-1.5 text-popover-foreground shadow-md">
-                <span className="whitespace-nowrap">
+              <div className="absolute bottom-3 left-1/2 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 rounded-lg border bg-popover px-3 py-1.5 text-popover-foreground shadow-md">
+                <span className="min-w-0 truncate">
                   {selected.changes.length} {selected.changes.length === 1 ? "line" : "lines"} in{" "}
                   {basename(selected.meta.path)}
                 </span>
                 {selected.meta.section === "untracked" ? (
-                  <span className="text-muted-foreground">Untracked files stage as a whole.</span>
+                  <span className="shrink-0 whitespace-nowrap text-muted-foreground">
+                    Untracked files stage as a whole.
+                  </span>
                 ) : selected.meta.section === "staged" ? (
                   <Button size="xs" onClick={() => void applyLines("unstage", selected.meta.path, selected.changes)}>
                     Unstage
@@ -457,6 +513,7 @@ function FileLists({
   unstaged,
   staged,
   onReveal,
+  diffToggle,
   onStage,
   onUnstage,
   onDiscard,
@@ -466,138 +523,329 @@ function FileLists({
   unstaged: ReadonlyArray<FileRow>
   staged: ReadonlyArray<FileRow>
   onReveal: (row: FileRow) => void
+  diffToggle: (side: Side) => ReactNode
   onStage: (rows: ReadonlyArray<FileRow>) => void
   onUnstage: (rows: ReadonlyArray<FileRow>) => void
   onDiscard: (rows: ReadonlyArray<FileRow>) => void
   sides: SideLabels | null
-  onResolve: (row: FileRow, side: "ours" | "theirs") => void
+  onResolve: (rows: ReadonlyArray<FileRow>, side: "ours" | "theirs") => void
 }) {
-  const rows = useMemo<Array<ListRow>>(
-    () => [
-      { kind: "header", side: "unstaged", count: unstaged.length },
-      ...unstaged,
-      { kind: "header", side: "staged", count: staged.length },
-      ...staged,
-    ],
-    [unstaged, staged],
-  )
-  const stagedHeader = unstaged.length + 1
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW,
-    rangeExtractor: useCallback(
-      (range: Range) =>
-        [...new Set([stickyHeader(range.startIndex, stagedHeader), ...defaultRangeExtractor(range)])].sort(
-          (a, b) => a - b,
-        ),
-      [stagedHeader],
-    ),
-    overscan: 20,
-  })
+  const lists = useMemo(() => ({ unstaged, staged }), [unstaged, staged])
+  const [storedSelection, setSelection] = useState<FileSelection | null>(null)
+  const selection = reconcile(storedSelection, lists)
+  if (selection !== storedSelection) setSelection(selection)
+  const selected = selectedRows(selection, lists)
+  const unstagedViewport = useRef<HTMLDivElement>(null)
+  const stagedViewport = useRef<HTMLDivElement>(null)
+  const viewports = { unstaged: unstagedViewport, staged: stagedViewport }
+  const [closed, setClosed] = useState<ReadonlySet<Side>>(() => new Set())
+
+  const toggleSection = (side: Side) => {
+    const next = new Set(closed)
+    if (!next.delete(side)) next.add(side)
+    setClosed(next)
+    if (next.has(side) && selection?.side === side) setSelection(null)
+  }
+
+  const select = (next: FileSelection | null, reveal: boolean) => {
+    setSelection(next)
+    if (next === null) return
+    viewports[next.side].current?.focus({ preventScroll: true })
+    if (reveal) onReveal(lists[next.side][next.leadIndex]!)
+  }
+
+  const onKeyDown = (side: Side) => (event: React.KeyboardEvent) => {
+    if (event.target !== event.currentTarget && (event.target as HTMLElement).getAttribute("role") !== "option") return
+    const current = selection?.side === side ? selection : null
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
+    const mod = event.metaKey || event.ctrlKey
+    const delta = key === "ArrowDown" || key === "j" ? 1 : key === "ArrowUp" || key === "k" ? -1 : 0
+    if (delta !== 0 && !mod && !event.altKey) {
+      const next = move(current, lists, side, delta, event.shiftKey)
+      if (next !== current && (next === null || !closed.has(next.side))) select(next, true)
+    } else if (mod && key === "a") {
+      select(selectAll(lists, side), false)
+    } else if (key === "Escape" && current !== null) {
+      setSelection(null)
+    } else if (key === " " && current !== null) {
+      if (side === "staged") onUnstage(selected)
+      else onStage(selected)
+    } else if ((key === "Backspace" || key === "Delete") && current !== null && side === "unstaged") {
+      const rows = selected.filter((r) => r.area !== "conflicted")
+      if (rows.length > 0) onDiscard(rows)
+    } else return
+    event.preventDefault()
+  }
 
   return (
-    <ScrollArea
-      className="min-h-0 flex-1"
-      viewportRef={scrollRef}
-      viewportProps={{ className: "[contain:strict] data-has-overflow-y:pr-2.5" }}
+    <div className="flex min-h-0 flex-1 flex-col">
+      {(["unstaged", "staged"] as const).map((side) => (
+        <FileSection
+          key={side}
+          side={side}
+          rows={lists[side]}
+          open={!closed.has(side)}
+          onToggle={() => toggleSection(side)}
+          selection={selection?.side === side ? selection : null}
+          selected={selection?.side === side ? selected : []}
+          viewportRef={viewports[side]}
+          onKeyDown={onKeyDown(side)}
+          onClick={(row, mode) => select(click(selection, lists, side, row.path, mode), mode === "only")}
+          diffToggle={diffToggle}
+          sides={sides}
+          onStage={onStage}
+          onUnstage={onUnstage}
+          onDiscard={onDiscard}
+          onResolve={onResolve}
+        />
+      ))}
+    </div>
+  )
+}
+
+interface RowActions {
+  readonly sides: SideLabels | null
+  readonly onStage: (rows: ReadonlyArray<FileRow>) => void
+  readonly onUnstage: (rows: ReadonlyArray<FileRow>) => void
+  readonly onDiscard: (rows: ReadonlyArray<FileRow>) => void
+  readonly onResolve: (rows: ReadonlyArray<FileRow>, side: "ours" | "theirs") => void
+}
+
+function FileSection({
+  side,
+  rows,
+  open,
+  onToggle,
+  selection,
+  selected,
+  viewportRef,
+  onKeyDown,
+  onClick,
+  diffToggle,
+  ...actions
+}: RowActions & {
+  side: Side
+  rows: ReadonlyArray<FileRow>
+  open: boolean
+  onToggle: () => void
+  selection: FileSelection | null
+  selected: ReadonlyArray<FileRow>
+  viewportRef: React.RefObject<HTMLDivElement | null>
+  onKeyDown: (event: React.KeyboardEvent) => void
+  onClick: (row: FileRow, mode: ClickMode) => void
+  diffToggle: (side: Side) => ReactNode
+}) {
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => viewportRef.current,
+    estimateSize: () => ROW,
+    overscan: 20,
+  })
+  const lead = selection?.leadIndex
+  useEffect(() => {
+    if (lead !== undefined) virtualizer.scrollToIndex(lead, { align: "auto" })
+  }, [lead, virtualizer])
+
+  const label = side === "unstaged" ? "Unstaged" : "Staged"
+  const border = side === "staged" ? 1 : 0
+  return (
+    <section
+      aria-label={label}
+      className={cn("flex min-h-7 flex-1 basis-0 flex-col", border > 0 && "border-t")}
+      style={{ maxHeight: ((open ? rows.length : 0) + 1) * ROW + border }}
     >
-      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-        {virtualizer.getVirtualItems().map((item) => {
-          const row = rows[item.index]!
-          const sticky = item.index === stickyHeader(virtualizer.range?.startIndex ?? 0, stagedHeader)
-          return (
-            <div
-              key={item.key}
-              className={sticky ? "sticky top-0 z-10 w-full bg-background" : "absolute top-0 left-0 w-full"}
-              style={sticky ? { height: ROW } : { height: ROW, transform: `translateY(${item.start}px)` }}
-            >
-              {"kind" in row ? (
-                <div className="flex h-full items-center gap-2 bg-muted/40 px-2 text-xs font-medium text-muted-foreground">
-                  {row.side === "unstaged" ? "Unstaged" : "Staged"}
-                  <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
-                    {row.count}
-                  </Badge>
-                  {row.count > 0 && (
-                    <span className="ml-auto flex gap-1">
-                      {row.side === "unstaged" ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onDiscard(unstaged.filter((r) => r.area !== "conflicted"))}
-                          >
-                            Discard all
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => onStage(unstaged)}>
-                            Stage all
-                          </Button>
-                        </>
-                      ) : (
-                        <Button size="sm" variant="ghost" onClick={() => onUnstage(staged)}>
-                          Unstage all
-                        </Button>
-                      )}
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <div className="group flex h-full items-center gap-2 px-2 hover:bg-muted/60">
-                  <button
-                    type="button"
-                    onClick={() => onReveal(row)}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                  >
-                    <ChangeLetter change={row.change} />
-                    <span className="truncate">
-                      <span className="text-muted-foreground">{dirname(row.path)}</span>
-                      {basename(row.path)}
-                    </span>
-                    {row.label !== "" && (
-                      <span
-                        className={cn(
-                          "shrink-0 text-[11px] text-muted-foreground",
-                          row.area === "conflicted" && "text-destructive",
-                        )}
-                      >
-                        {row.area === "staged" ? `from ${row.label}` : row.label}
-                      </span>
-                    )}
-                  </button>
-                  <span className="flex shrink-0 gap-1 opacity-0 group-hover:opacity-100 max-md:opacity-100">
-                    {row.area === "staged" ? (
-                      <Button size="sm" variant="ghost" onClick={() => onUnstage([row])}>
-                        Unstage
-                      </Button>
-                    ) : (
-                      <>
-                        {row.area === "conflicted" && sides !== null ? (
-                          <>
-                            <Button size="sm" variant="ghost" onClick={() => onResolve(row, "ours")}>
-                              {sides.ours}
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => onResolve(row, "theirs")}>
-                              {sides.theirs}
-                            </Button>
-                          </>
-                        ) : (
-                          <Button size="sm" variant="ghost" onClick={() => onDiscard([row])}>
-                            Discard
-                          </Button>
-                        )}
-                        <Button size="sm" variant="ghost" onClick={() => onStage([row])}>
-                          {row.area === "conflicted" ? "Mark resolved" : "Stage"}
-                        </Button>
-                      </>
-                    )}
-                  </span>
-                </div>
+      <SectionHeader
+        side={side}
+        label={label}
+        rows={rows}
+        open={open}
+        onToggle={onToggle}
+        selected={selected}
+        diffToggle={diffToggle}
+        {...actions}
+      />
+      <ScrollArea
+        className={cn("min-h-0 flex-1", !open && "hidden")}
+        viewportRef={viewportRef}
+        viewportProps={{
+          tabIndex: open && rows.length > 0 ? 0 : -1,
+          onKeyDown,
+          role: "listbox",
+          "aria-label": `${label} files`,
+          "aria-multiselectable": true,
+          className: "[contain:strict] data-has-overflow-y:pr-2.5",
+        }}
+      >
+        <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map((item) => {
+            const row = rows[item.index]!
+            return (
+              <div
+                key={item.key}
+                className="absolute top-0 left-0 w-full"
+                style={{ height: ROW, transform: `translateY(${item.start}px)` }}
+              >
+                <FileRowView
+                  row={row}
+                  selected={selection?.paths.has(row.path) === true}
+                  onClick={onClick}
+                  {...actions}
+                />
+              </div>
+            )
+          })}
+        </div>
+      </ScrollArea>
+    </section>
+  )
+}
+
+function SectionHeader({
+  side,
+  label,
+  rows,
+  open,
+  onToggle,
+  selected,
+  diffToggle,
+  sides,
+  onStage,
+  onUnstage,
+  onDiscard,
+  onResolve,
+}: RowActions & {
+  side: Side
+  label: string
+  rows: ReadonlyArray<FileRow>
+  open: boolean
+  onToggle: () => void
+  selected: ReadonlyArray<FileRow>
+  diffToggle: (side: Side) => ReactNode
+}) {
+  const multi = selected.length > 1
+  const targets = multi ? selected : rows
+  const count = (rows: ReadonlyArray<FileRow>) => (multi ? rows.length : "all")
+  const discardable = targets.filter((r) => r.area !== "conflicted")
+  const conflicted = targets.filter((r) => r.area === "conflicted")
+  return (
+    <div className="flex h-7 shrink-0 items-center gap-2 bg-muted/40 px-2 text-xs font-medium text-muted-foreground">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="-ml-1 flex h-6 items-center gap-1.5 rounded-sm px-1 hover:text-foreground"
+      >
+        {open ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />}
+        {label}
+        <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
+          {rows.length}
+        </Badge>
+      </button>
+      {rows.length > 0 && (
+        <span className="ml-auto flex gap-1">
+          {diffToggle(side)}
+          {side === "staged" ? (
+            <Button size="sm" variant="ghost" onClick={() => onUnstage(targets)}>
+              Unstage {count(targets)}
+            </Button>
+          ) : (
+            <>
+              {multi && sides !== null && conflicted.length > 0 && (
+                <>
+                  <Button size="sm" variant="ghost" onClick={() => onResolve(conflicted, "ours")}>
+                    {sides.ours} {conflicted.length}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => onResolve(conflicted, "theirs")}>
+                    {sides.theirs} {conflicted.length}
+                  </Button>
+                </>
               )}
-            </div>
-          )
-        })}
-      </div>
-    </ScrollArea>
+              {discardable.length > 0 && (
+                <Button size="sm" variant="ghost" onClick={() => onDiscard(discardable)}>
+                  Discard {count(discardable)}
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => onStage(targets)}>
+                Stage {count(targets)}
+              </Button>
+            </>
+          )}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function FileRowView({
+  row,
+  selected,
+  onClick,
+  sides,
+  onStage,
+  onUnstage,
+  onDiscard,
+  onResolve,
+}: RowActions & {
+  row: FileRow
+  selected: boolean
+  onClick: (row: FileRow, mode: ClickMode) => void
+}) {
+  return (
+    <div className={cn("group flex h-full items-center gap-2 px-2", selected ? "bg-accent" : "hover:bg-muted/60")}>
+      <button
+        type="button"
+        role="option"
+        tabIndex={-1}
+        aria-selected={selected}
+        onMouseDown={(event) => event.shiftKey && event.preventDefault()}
+        onClick={(event) =>
+          onClick(row, event.shiftKey ? "extend" : event.metaKey || event.ctrlKey ? "toggle" : "only")
+        }
+        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+      >
+        <ChangeLetter change={row.change} />
+        <span className="truncate">
+          <span className="text-muted-foreground">{dirname(row.path)}</span>
+          {basename(row.path)}
+        </span>
+        {row.label !== "" && (
+          <span
+            className={cn(
+              "shrink-0 text-[11px] text-muted-foreground",
+              row.area === "conflicted" && "text-destructive",
+            )}
+          >
+            {row.area === "staged" ? `from ${row.label}` : row.label}
+          </span>
+        )}
+      </button>
+      <span className="flex shrink-0 gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
+        {row.area === "staged" ? (
+          <Button size="sm" variant="ghost" onClick={() => onUnstage([row])}>
+            Unstage
+          </Button>
+        ) : (
+          <>
+            {row.area === "conflicted" && sides !== null ? (
+              <>
+                <Button size="sm" variant="ghost" onClick={() => onResolve([row], "ours")}>
+                  {sides.ours}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => onResolve([row], "theirs")}>
+                  {sides.theirs}
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => onDiscard([row])}>
+                Discard
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={() => onStage([row])}>
+              {row.area === "conflicted" ? "Mark resolved" : "Stage"}
+            </Button>
+          </>
+        )}
+      </span>
+    </div>
   )
 }

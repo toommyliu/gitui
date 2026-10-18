@@ -122,6 +122,11 @@
     @apply border-border -outline-offset-2 outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground select-none;
+  }
+  input,
+  textarea,
+  [contenteditable="true"] {
+    @apply select-text;
   }
 }

@@ -111,7 +111,11 @@ export class Repo extends Context.Service<
     readonly continueOperation: (repo: RepoId) => Effect.Effect<void, GitError>
     readonly skipOperation: (repo: RepoId) => Effect.Effect<void, GitError>
     readonly abortOperation: (repo: RepoId) => Effect.Effect<void, GitError>
-    readonly resolveConflict: (repo: RepoId, path: RepoPath, side: "ours" | "theirs") => Effect.Effect<void, GitError>
+    readonly resolveConflict: (
+      repo: RepoId,
+      paths: ReadonlyArray<RepoPath>,
+      side: "ours" | "theirs",
+    ) => Effect.Effect<void, GitError>
     readonly checkout: (repo: RepoId, branch: string) => Effect.Effect<void, GitError>
     readonly createBranch: (
       repo: RepoId,
@@ -367,7 +371,6 @@ export class Repo extends Context.Service<
         const text = decoder.decode(bytes)
         const files = text.match(/^diff --git /gm)?.length ?? 0
         if (files === 0) return { _tag: "Empty" } satisfies FileDiff
-        if (files === 1 && /^Binary files .* differ$/m.test(text)) return { _tag: "Binary" } satisfies FileDiff
         return { _tag: "Patch", patch: text } satisfies FileDiff
       })
 
@@ -535,9 +538,9 @@ export class Repo extends Context.Service<
         continueOperation: stepOperation("continue"),
         skipOperation: stepOperation("skip"),
         abortOperation: stepOperation("abort"),
-        resolveConflict: Effect.fn("Repo.resolveConflict")(function* (repo, path, side) {
-          yield* run(repo, ["checkout", `--${side}`, "--", path])
-          yield* run(repo, ["add", "--", path])
+        resolveConflict: Effect.fn("Repo.resolveConflict")(function* (repo, paths, side) {
+          yield* withPaths(repo, ["checkout", `--${side}`], paths)
+          yield* withPaths(repo, ["add"], paths)
         }),
         checkout: (repo, branch) => run(repo, ["switch", branch]),
         createBranch: (repo, name, startPoint, checkout) =>

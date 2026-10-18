@@ -198,7 +198,6 @@ export type DiffTarget = typeof DiffTarget.Type
 
 export const FileDiff = Schema.Union([
   Schema.TaggedStruct("Patch", { patch: Schema.String }),
-  Schema.TaggedStruct("Binary", {}),
   Schema.TaggedStruct("TooLarge", { bytes: Schema.Int }),
   Schema.TaggedStruct("Empty", {}),
 ])

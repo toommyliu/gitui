@@ -62,7 +62,7 @@ export function DiffStack({
       {...(viewRef === undefined ? {} : { ref: viewRef })}
       items={items}
       options={options}
-      className="h-full"
+      className="h-full overflow-auto overscroll-contain"
       {...(header === undefined ? {} : { renderCodeViewHeader: header })}
       {...(actions === undefined ? {} : { renderHeaderMetadata: (item) => actions(itemMeta(item.id)) })}
     />

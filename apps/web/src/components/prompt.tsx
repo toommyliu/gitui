@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { createContext, type ReactNode, useCallback, useContext, useId, useState } from "react"
 
@@ -35,7 +36,7 @@ export interface PromptRequest<F extends string, O extends string = never> {
   readonly fields: ReadonlyArray<PromptField<F>>
   readonly options?: ReadonlyArray<PromptOption<O>>
   readonly submitLabel: string
-  readonly onSubmit: (values: Readonly<Record<F, string>>, options: Readonly<Record<O, boolean>>) => void
+  readonly onSubmit: (values: Readonly<Record<F, string>>, options: Readonly<Record<O, boolean>>) => Promise<boolean>
 }
 
 type AnyRequest = PromptRequest<string, string>
@@ -57,7 +58,11 @@ export function PromptProvider({ children }: { children: ReactNode }) {
       <Dialog open={request !== null} onOpenChange={(open) => open || setRequest(null)}>
         <DialogContent className="sm:max-w-md">
           {request !== null && (
-            <PromptForm key={request.id} request={request.request} onDone={() => setRequest(null)} />
+            <PromptForm
+              key={request.id}
+              request={request.request}
+              onDone={() => setRequest((current) => (current?.id === request.id ? null : current))}
+            />
           )}
         </DialogContent>
       </Dialog>
@@ -77,15 +82,16 @@ function PromptForm({ request, onDone }: { request: AnyRequest; onDone: () => vo
     request.fields.map((field) => [field.key, field.multiline ? values[field.key]! : values[field.key]!.trim()]),
   )
   const valid = request.fields.every((field) => field.optional || cleaned[field.key]!.trim() !== "")
+  const [busy, setBusy] = useState(false)
 
   return (
     <form
       className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault()
-        if (!valid) return
-        onDone()
-        request.onSubmit(cleaned, options)
+        if (!valid || busy) return
+        setBusy(true)
+        void request.onSubmit(cleaned, options).then((ok) => (ok ? onDone() : setBusy(false)))
       }}
     >
       <DialogHeader>
@@ -155,7 +161,8 @@ function PromptForm({ request, onDone }: { request: AnyRequest; onDone: () => vo
       </FieldGroup>
       <DialogFooter>
         <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-        <Button type="submit" disabled={!valid}>
+        <Button type="submit" disabled={!valid || busy}>
+          {busy && <Spinner data-icon="inline-start" />}
           {request.submitLabel}
         </Button>
       </DialogFooter>

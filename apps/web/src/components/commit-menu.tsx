@@ -53,7 +53,7 @@ export function CommitMenuItems({ repo, row }: { repo: RepoId; row: CommitRow })
             options: [{ key: "checkout", label: "Check out after creating", initial: true }],
             submitLabel: "Create branch",
             onSubmit: ({ name }, { checkout }) =>
-              void git("Create branch", repo, (c) => c("CreateBranch", { repo, name, startPoint: oid, checkout })),
+              git("Create branch", repo, (c) => c("CreateBranch", { repo, name, startPoint: oid, checkout })),
           })
         }
       >
@@ -75,7 +75,7 @@ export function CommitMenuItems({ repo, row }: { repo: RepoId; row: CommitRow })
             ],
             submitLabel: "Create tag",
             onSubmit: ({ name, message }) =>
-              void git("Create tag", repo, (c) => c("CreateTag", { repo, name, oid, message })),
+              git("Create tag", repo, (c) => c("CreateTag", { repo, name, oid, message })),
           })
         }
       >

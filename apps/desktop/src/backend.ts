@@ -25,7 +25,6 @@ process.once("message", (message) => {
       serverLayer({
         host: "127.0.0.1",
         port: 0,
-        repoRoots: config.repoRoots,
         webDist: null,
         trustedOrigins: [config.appOrigin],
       }),

@@ -78,7 +78,7 @@ export const latest = <A, E>(result: AsyncResult.AsyncResult<A, E>): A | undefin
 
 const CACHE_TTL = "10 minutes"
 
-export const reposAtom = GitClient.query("ListRepos", undefined)
+export const directoryAtom = Atom.family((path: string) => GitClient.query("ListDirectory", { path }))
 
 export const repoInfoAtom = Atom.family((path: string) =>
   GitClient.query("OpenRepo", { path }, { timeToLive: "5 minutes" }),

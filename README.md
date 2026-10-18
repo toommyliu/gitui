@@ -9,13 +9,12 @@ pnpm install
 pnpm serve
 ```
 
-`pnpm serve` builds the web app and starts the server. The repo picker also opens any absolute path you type.
+`pnpm serve` builds the web app and starts the server. On first run the repo picker asks which folder holds your repositories. After that, a new tab lists that folder, and you can type a name to filter it or a path to browse elsewhere. Change the folder in Settings.
 
-| Variable     | Default     | Meaning                                                          |
-| ------------ | ----------- | ---------------------------------------------------------------- |
-| `HOST`       | `127.0.0.1` | Address to bind                                                  |
-| `PORT`       | `4600`      | Port to bind                                                     |
-| `REPO_ROOTS` | none        | `:`-separated directories whose repositories the picker suggests |
+| Variable | Default     | Meaning         |
+| -------- | ----------- | --------------- |
+| `HOST`   | `127.0.0.1` | Address to bind |
+| `PORT`   | `4600`      | Port to bind    |
 
 Anyone who can reach the port can run git in any directory the server's user can read. Bind it to a private address.
 
@@ -26,7 +25,7 @@ pnpm install
 pnpm dev:desktop
 ```
 
-`pnpm dev:desktop` starts Vite and opens the app with the web client loaded from it, so client edits hot-reload. Edits to the main process, preload or server code rebuild the Electron bundles and restart the app. A packaged app loads the web app from a `gitui://app` scheme instead. Either way, the window talks to a server that Electron starts as a child process on a random local port. The repository picker lists repositories under `~/projects`, `~/code`, `~/src`, `~/dev`, `~/Developer`, `~/repos` and `~/git`, or under `REPO_ROOTS` when it is set, and **Choose a folder…** opens any other one.
+`pnpm dev:desktop` starts Vite and opens the app with the web client loaded from it, so client edits hot-reload. Edits to the main process, preload or server code rebuild the Electron bundles and restart the app. A packaged app loads the web app from a `gitui://app` scheme instead. Either way, the window talks to a server that Electron starts as a child process on a random local port. The repository picker also has **Choose a folder…**, which opens any folder through the system dialog.
 
 The server only accepts RPC connections from its own origin, from `gitui://app`, or from clients that send no `Origin` header, so websites open in a browser can't drive it.
 

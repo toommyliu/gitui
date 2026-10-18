@@ -9,11 +9,19 @@ export type Oid = typeof Oid.Type
 export const RepoPath = Schema.String.pipe(Schema.brand("RepoPath"))
 export type RepoPath = typeof RepoPath.Type
 
-export const RepoSummary = Schema.Struct({
-  path: Schema.String,
+export const DirectoryEntry = Schema.Struct({
   name: Schema.String,
+  path: Schema.String,
+  isRepo: Schema.Boolean,
 })
-export type RepoSummary = typeof RepoSummary.Type
+export type DirectoryEntry = typeof DirectoryEntry.Type
+
+export const DirectoryListing = Schema.Struct({
+  path: Schema.String,
+  isRepo: Schema.Boolean,
+  entries: Schema.Array(DirectoryEntry),
+})
+export type DirectoryListing = typeof DirectoryListing.Type
 
 export const RepoInfo = Schema.Struct({
   id: RepoId,

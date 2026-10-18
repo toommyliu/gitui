@@ -17,7 +17,6 @@ import { handlers } from "./handlers.ts"
 export interface ServerOptions {
   readonly host: string
   readonly port: number
-  readonly repoRoots: ReadonlyArray<string>
   readonly webDist: string | null
   readonly trustedOrigins: ReadonlyArray<string>
 }
@@ -46,7 +45,7 @@ const rejectForeignOrigins = (trusted: ReadonlyArray<string>) =>
 
 export const serverLayer = (options: ServerOptions) => {
   const rpc = RpcServer.layerHttp({ group: GitRpcs, path: "/rpc", protocol: "websocket" }).pipe(
-    Layer.provide(handlers(options.repoRoots)),
+    Layer.provide(handlers),
     Layer.provide(Repo.layer),
     Layer.provide(CommandLog.layer),
     Layer.provide(RpcSerialization.layerJson),

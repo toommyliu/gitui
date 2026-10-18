@@ -31,7 +31,7 @@ const upgradeStatus = (port: number, origin: string | undefined) =>
     req.end()
   })
 
-const options = { host: "127.0.0.1", port: 0, repoRoots: [], webDist: "/nonexistent", trustedOrigins: ["gitui://app"] }
+const options = { host: "127.0.0.1", port: 0, webDist: "/nonexistent", trustedOrigins: ["gitui://app"] }
 
 layer(serverLayer(options))("server", (it) => {
   it.effect("opens the rpc socket only for its own origin, a trusted origin or a non-browser client", () =>

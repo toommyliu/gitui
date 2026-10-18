@@ -18,6 +18,7 @@ import {
   FieldSet,
   FieldLegend,
 } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -89,6 +90,21 @@ export function SettingsDialog() {
           <DialogDescription>Saved in this browser.</DialogDescription>
         </DialogHeader>
         <FieldGroup>
+          <Field>
+            <FieldContent>
+              <FieldLabel htmlFor="repo-base">Repositories folder</FieldLabel>
+              <FieldDescription>
+                New tabs list the repositories in this folder. Empty means your home folder.
+              </FieldDescription>
+            </FieldContent>
+            <Input
+              id="repo-base"
+              placeholder="~/projects"
+              className="font-mono"
+              value={settings.repoBase ?? ""}
+              onChange={(event) => update({ repoBase: event.target.value })}
+            />
+          </Field>
           <Row label="Theme" description="System follows this device.">
             <Choice<Theme>
               label="Theme"

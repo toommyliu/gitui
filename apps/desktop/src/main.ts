@@ -1,6 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process"
 import { existsSync, statSync } from "node:fs"
-import { homedir } from "node:os"
 import { join, resolve, sep } from "node:path"
 import { pathToFileURL } from "node:url"
 import {
@@ -20,12 +19,6 @@ import { APP_ORIGIN, BackendReady, SCHEME } from "./protocol.ts"
 
 const webDist = resolve(__dirname, "../../web/dist")
 const appOrigin = process.env.GITUI_DEV_URL ?? APP_ORIGIN
-
-const repoRoots =
-  process.env.REPO_ROOTS?.split(":").filter((root) => root !== "") ??
-  ["projects", "code", "src", "dev", "Developer", "repos", "git"]
-    .map((name) => join(homedir(), name))
-    .filter((dir) => existsSync(dir) && statSync(dir).isDirectory())
 
 app.setName("gitui")
 
@@ -51,7 +44,7 @@ const startBackend = () =>
       resolveStart({ child, port: Schema.decodeUnknownSync(BackendReady)(message).port }),
     )
     child.once("exit", (code) => rejectStart(new Error(`The git server exited with code ${code} before it started.`)))
-    child.send({ repoRoots, appOrigin })
+    child.send({ appOrigin })
   })
 
 const fromApp = (event: IpcMainEvent | IpcMainInvokeEvent) =>

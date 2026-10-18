@@ -12,11 +12,11 @@ const path = process.argv[3] ?? process.cwd()
 
 const program = Effect.gen(function* () {
   const client = yield* RpcClient.make(GitRpcs)
-  const repos = yield* client.ListRepos()
+  const listing = yield* client.ListDirectory({ path: "~" })
   yield* Console.log(
-    `repos: ${repos.length} (${repos
+    `home folders: ${listing.entries.length} (${listing.entries
       .slice(0, 5)
-      .map((r) => r.name)
+      .map((entry) => entry.name)
       .join(", ")})`,
   )
   const info = yield* client.OpenRepo({ path })

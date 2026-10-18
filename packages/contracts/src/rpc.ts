@@ -6,6 +6,7 @@ import {
   CommitDetail,
   CommitRow,
   DiffTarget,
+  DirectoryListing,
   FileDiff,
   LineAction,
   LineSelection,
@@ -17,7 +18,6 @@ import {
   RepoId,
   RepoInfo,
   RepoPath,
-  RepoSummary,
   Status,
 } from "./domain.ts"
 
@@ -45,13 +45,21 @@ export class RepoNotFound extends Schema.TaggedError<RepoNotFound>()("RepoNotFou
   path: Schema.String,
 }) {}
 
+export class DirectoryNotFound extends Schema.TaggedError<DirectoryNotFound>()("DirectoryNotFound", {
+  path: Schema.String,
+}) {}
+
 export class LogExpired extends Schema.TaggedError<LogExpired>()("LogExpired", {}) {}
 
 const repo = { repo: RepoId }
 const paths = { repo: RepoId, paths: Schema.Array(RepoPath) }
 
 export class GitRpcs extends RpcGroup.make(
-  Rpc.make("ListRepos", { success: Schema.Array(RepoSummary) }),
+  Rpc.make("ListDirectory", {
+    payload: { path: Schema.String },
+    success: DirectoryListing,
+    error: DirectoryNotFound,
+  }),
   Rpc.make("CommandLog", { success: Schema.Array(CommandEntry), stream: true }),
   Rpc.make("OpenRepo", { payload: { path: Schema.String }, success: RepoInfo, error: RepoNotFound }),
   Rpc.make("WatchRepo", { payload: repo, success: RepoEvent, error: GitError, stream: true }),

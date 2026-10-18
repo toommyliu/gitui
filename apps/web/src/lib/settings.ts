@@ -5,6 +5,7 @@ import * as Atom from "effect/reactivity/Atom"
 export const Settings = Schema.Struct({
   diffStyle: Schema.Literals(["unified", "split"]),
   wrapLines: Schema.Boolean,
+  repoBase: Schema.optionalKey(Schema.String),
 })
 export type Settings = typeof Settings.Type
 

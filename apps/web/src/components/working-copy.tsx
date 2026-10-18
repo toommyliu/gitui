@@ -11,7 +11,7 @@ import type {
 } from "@gitui/contracts"
 import type { CodeViewDiffItem, CodeViewLineSelection } from "@pierre/diffs"
 import type { CodeViewHandle } from "@pierre/diffs/react"
-import { useVirtualizer } from "@tanstack/react-virtual"
+import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -23,7 +23,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "cn"
-import { useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { basename, dirname } from "@/lib/format"
 import { diffAtom, diffKey, latest, statusAtom, useGitAction } from "@/lib/git"
 import { hunkChanges, selectedChanges } from "@/lib/lines"
@@ -48,7 +48,9 @@ interface FileRow {
 type ListRow = { readonly kind: "header"; readonly side: "unstaged" | "staged"; readonly count: number } | FileRow
 
 const MAX_UNTRACKED_PREVIEWS = 50
-const ROW = 22
+const ROW = 28
+
+const stickyHeader = (startIndex: number, stagedHeader: number) => (startIndex >= stagedHeader ? stagedHeader : 0)
 
 const classify = (entries: ReadonlyArray<StatusEntry>) => {
   const unstaged: Array<FileRow> = []
@@ -479,11 +481,19 @@ function FileLists({
     ],
     [unstaged, staged],
   )
+  const stagedHeader = unstaged.length + 1
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW,
+    rangeExtractor: useCallback(
+      (range: Range) =>
+        [...new Set([stickyHeader(range.startIndex, stagedHeader), ...defaultRangeExtractor(range)])].sort(
+          (a, b) => a - b,
+        ),
+      [stagedHeader],
+    ),
     overscan: 20,
   })
 
@@ -496,35 +506,36 @@ function FileLists({
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index]!
+          const sticky = item.index === stickyHeader(virtualizer.range?.startIndex ?? 0, stagedHeader)
           return (
             <div
               key={item.key}
-              className="absolute top-0 left-0 w-full"
-              style={{ height: ROW, transform: `translateY(${item.start}px)` }}
+              className={sticky ? "sticky top-0 z-10 w-full bg-background" : "absolute top-0 left-0 w-full"}
+              style={sticky ? { height: ROW } : { height: ROW, transform: `translateY(${item.start}px)` }}
             >
               {"kind" in row ? (
-                <div className="flex h-full items-center gap-2 bg-muted/40 px-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                <div className="flex h-full items-center gap-2 bg-muted/40 px-2 text-xs font-medium text-muted-foreground">
                   {row.side === "unstaged" ? "Unstaged" : "Staged"}
                   <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
                     {row.count}
                   </Badge>
                   {row.count > 0 && (
-                    <span className="ml-auto flex gap-1 normal-case">
+                    <span className="ml-auto flex gap-1">
                       {row.side === "unstaged" ? (
                         <>
                           <Button
-                            size="xs"
+                            size="sm"
                             variant="ghost"
                             onClick={() => onDiscard(unstaged.filter((r) => r.area !== "conflicted"))}
                           >
                             Discard all
                           </Button>
-                          <Button size="xs" variant="ghost" onClick={() => onStage(unstaged)}>
+                          <Button size="sm" variant="ghost" onClick={() => onStage(unstaged)}>
                             Stage all
                           </Button>
                         </>
                       ) : (
-                        <Button size="xs" variant="ghost" onClick={() => onUnstage(staged)}>
+                        <Button size="sm" variant="ghost" onClick={() => onUnstage(staged)}>
                           Unstage all
                         </Button>
                       )}
@@ -556,26 +567,26 @@ function FileLists({
                   </button>
                   <span className="flex shrink-0 gap-1 opacity-0 group-hover:opacity-100 max-md:opacity-100">
                     {row.area === "staged" ? (
-                      <Button size="xs" variant="ghost" onClick={() => onUnstage([row])}>
+                      <Button size="sm" variant="ghost" onClick={() => onUnstage([row])}>
                         Unstage
                       </Button>
                     ) : (
                       <>
                         {row.area === "conflicted" && sides !== null ? (
                           <>
-                            <Button size="xs" variant="ghost" onClick={() => onResolve(row, "ours")}>
+                            <Button size="sm" variant="ghost" onClick={() => onResolve(row, "ours")}>
                               {sides.ours}
                             </Button>
-                            <Button size="xs" variant="ghost" onClick={() => onResolve(row, "theirs")}>
+                            <Button size="sm" variant="ghost" onClick={() => onResolve(row, "theirs")}>
                               {sides.theirs}
                             </Button>
                           </>
                         ) : (
-                          <Button size="xs" variant="ghost" onClick={() => onDiscard([row])}>
+                          <Button size="sm" variant="ghost" onClick={() => onDiscard([row])}>
                             Discard
                           </Button>
                         )}
-                        <Button size="xs" variant="ghost" onClick={() => onStage([row])}>
+                        <Button size="sm" variant="ghost" onClick={() => onStage([row])}>
                           {row.area === "conflicted" ? "Mark resolved" : "Stage"}
                         </Button>
                       </>

@@ -18,8 +18,10 @@ import { basename } from "@/lib/format"
 import { repoInfoAtom } from "@/lib/git"
 
 const PICKER = "\0picker"
-const tabClassName = "h-full flex-none rounded-none px-3 after:hidden"
-const tabFrameClassName = "flex h-full shrink-0 items-center border-r has-data-active:bg-background"
+const tabClassName =
+  "h-full flex-none rounded-none px-3 after:hidden focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-none"
+const tabFrameClassName =
+  "flex h-full shrink-0 items-center border-r ring-ring ring-inset has-data-active:bg-background has-[[role=tab]:focus-visible]:ring-2"
 
 const tabSensors = [
   PointerSensor.configure({ activationConstraints: [new PointerActivationConstraints.Distance({ value: 5 })] }),

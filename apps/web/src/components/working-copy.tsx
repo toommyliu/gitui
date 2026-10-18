@@ -485,7 +485,11 @@ function FileLists({
   })
 
   return (
-    <ScrollArea className="min-h-0 flex-1" viewportRef={scrollRef} viewportProps={{ className: "[contain:strict]" }}>
+    <ScrollArea
+      className="min-h-0 flex-1"
+      viewportRef={scrollRef}
+      viewportProps={{ className: "[contain:strict] data-has-overflow-y:pr-2.5" }}
+    >
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index]!

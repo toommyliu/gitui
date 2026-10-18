@@ -214,7 +214,11 @@ function LargeCommit({
           panelRef={files}
           onResize={(size) => setFilesShown(size.asPercentage > 0)}
         >
-          <ScrollArea className="h-full" viewportRef={scrollRef} viewportProps={{ className: "[contain:strict]" }}>
+          <ScrollArea
+            className="h-full"
+            viewportRef={scrollRef}
+            viewportProps={{ className: "[contain:strict] data-has-overflow-y:pr-2.5" }}
+          >
             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
               {virtualizer.getVirtualItems().map((item) => {
                 const file = detail.files[item.index]!

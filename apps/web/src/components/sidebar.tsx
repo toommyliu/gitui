@@ -166,7 +166,7 @@ export function Sidebar({ repo, onSelect }: { repo: RepoId; onSelect: (selection
       <ScrollArea
         className="min-h-0 flex-1"
         viewportRef={scrollRef}
-        viewportProps={{ className: "py-1 [contain:strict]" }}
+        viewportProps={{ className: "py-1 [contain:strict] data-has-overflow-y:pr-2.5" }}
       >
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => (

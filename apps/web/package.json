@@ -4,10 +4,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "vp dev",
+    "build": "tsc -b && vp build",
     "typecheck": "tsc -b",
-    "preview": "vite preview"
+    "preview": "vp preview"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -39,6 +39,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6",
     "tailwindcss": "^4",
-    "vite": "^8"
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

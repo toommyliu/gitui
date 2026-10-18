@@ -1,10 +1,17 @@
-<!-- BEGIN:turborepo-agent-rules -->
+# gitui
 
-# This is NOT the Turborepo you know
+A git GUI in the spirit of Sublime Merge. A Node server runs git and serves a React client over a WebSocket. An Electron app wraps the same client and starts the server as a child process.
 
-Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+- `apps/web`: React client, built with Vite.
+- `apps/server`: Node server that exposes git over RPC.
+- `apps/desktop`: Electron shell.
+- `packages/git`: runs git and parses its output.
+- `packages/contracts`: RPC schemas shared by client and server.
 
-Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+Run `pnpm check` before you finish. It runs format, lint, typecheck and tests.
 
-This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
-<!-- END:turborepo-agent-rules -->
+# Dev servers
+
+- Other agents run dev servers on this machine at the same time. Work in your own git worktree, not the main checkout.
+- `pnpm dev` and `pnpm dev:desktop` derive ports from the worktree path. Read your URL from the `[dev]` line they print. Don't assume 5173 or 4600.
+- Only stop a process you started, by the PID you got when you spawned it. Never `pkill`, `killall`, or kill whatever holds a port.

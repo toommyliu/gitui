@@ -5,7 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { context, type Plugin } from "esbuild"
 import { bundles } from "./bundles.ts"
 
-const devUrl = new URL("http://127.0.0.1:5173")
+const devUrl = new URL(`http://127.0.0.1:${process.env.WEB_PORT ?? 5173}`)
 const electron = createRequire(import.meta.url)("electron") as string
 const env: NodeJS.ProcessEnv = { ...process.env, GITUI_DEV_URL: devUrl.origin }
 delete env["ELECTRON_RUN_AS_NODE"]

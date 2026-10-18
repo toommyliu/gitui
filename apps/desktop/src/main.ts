@@ -21,6 +21,7 @@ const webDist = resolve(__dirname, "../../web/dist")
 const appOrigin = process.env.GITUI_DEV_URL ?? APP_ORIGIN
 
 app.setName("gitui")
+if (process.env.GITUI_USER_DATA_DIR !== undefined) app.setPath("userData", process.env.GITUI_USER_DATA_DIR)
 
 protocol.registerSchemesAsPrivileged([
   { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },

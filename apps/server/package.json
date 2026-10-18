@@ -10,7 +10,7 @@
     "dev": "node --watch src/main.ts",
     "start": "node src/main.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vp test run"
   },
   "dependencies": {
     "@gitui/contracts": "workspace:*",
@@ -21,6 +21,8 @@
   "devDependencies": {
     "@types/node": "^24",
     "@effect/vitest": "4.0.4",
-    "vitest": "^5.0.4"
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

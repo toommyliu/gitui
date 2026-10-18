@@ -3,25 +3,23 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev --filter=@gitui/web --filter=@gitui/server",
-    "dev:desktop": "turbo dev --filter=@gitui/web --filter=@gitui/desktop",
-    "typecheck": "turbo typecheck",
-    "lint": "oxlint",
-    "format": "oxfmt",
-    "format:check": "oxfmt --check",
+    "build": "vp run -r build",
+    "dev": "node scripts/dev.ts --filter=@gitui/web --filter=@gitui/server",
+    "dev:desktop": "node scripts/dev.ts --filter=@gitui/web --filter=@gitui/desktop",
+    "typecheck": "vp run -r typecheck",
+    "lint": "vp lint",
+    "format": "vp fmt",
+    "format:check": "vp fmt --check",
     "prepare": "effect-tsgo patch --typescript --oxlint && git config core.hooksPath .githooks",
-    "test": "turbo test",
-    "check": "oxfmt --check && oxlint --deny-warnings && turbo typecheck test",
+    "test": "vp run -r test",
+    "check": "vp fmt --check && vp lint --deny-warnings && vp run -r typecheck && vp run -r test",
     "serve": "pnpm -F @gitui/web build && pnpm -F @gitui/server start"
   },
   "devDependencies": {
     "@effect/tsgo": "0.51.1",
-    "oxfmt": "0.72.0",
-    "oxlint": "1.87.0",
-    "oxlint-tsgolint": "7.0.2003",
-    "turbo": "^2.11.7",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   },
   "packageManager": "pnpm@11.27.1",
   "engines": {

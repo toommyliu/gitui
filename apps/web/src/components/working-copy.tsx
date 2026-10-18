@@ -733,10 +733,10 @@ function SectionHeader({
         type="button"
         aria-expanded={open}
         onClick={onToggle}
-        className="-ml-1 flex h-6 items-center gap-1.5 rounded-sm px-1 text-[11px] font-semibold tracking-wide uppercase hover:text-foreground"
+        className="-ml-1 flex h-6 items-center gap-2 rounded-sm px-1 text-[11px] font-semibold tracking-wide uppercase hover:text-foreground"
       >
-        {open ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />}
-        {label}
+        {open ? <ChevronDownIcon className="mx-0.5 size-3" /> : <ChevronRightIcon className="mx-0.5 size-3" />}
+        <span className="[text-box:trim-both_cap_alphabetic]">{label}</span>
         <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
           {rows.length}
         </Badge>
@@ -801,7 +801,7 @@ function FileRowView({
         onClick={(event) =>
           onClick(row, event.shiftKey ? "extend" : event.metaKey || event.ctrlKey ? "toggle" : "only")
         }
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
       >
         <ChangeLetter change={row.change} />
         <span className="truncate">

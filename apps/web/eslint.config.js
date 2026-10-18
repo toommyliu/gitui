@@ -4,6 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
+import { effectImports } from '../../eslint.effect-imports.js'
 
 export default defineConfig([
   globalIgnores(['dist']),
@@ -20,6 +21,7 @@ export default defineConfig([
     },
     rules: {
       'react-refresh/only-export-components': 'off',
+      ...effectImports,
     },
   },
 ])

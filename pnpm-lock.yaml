@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      eslint:
+        specifier: ^10.12.0
+        version: 10.12.0(jiti@2.7.0)
       prettier:
         specifier: ^3.9.10
         version: 3.9.10
@@ -20,6 +23,9 @@ importers:
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
+      typescript-eslint:
+        specifier: ^8.71.1
+        version: 8.71.1(eslint@10.12.0(jiti@2.7.0))(typescript@6.0.3)
 
   apps/web:
     dependencies:

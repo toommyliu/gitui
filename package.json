@@ -7,16 +7,20 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "format": "turbo format",
-    "typecheck": "turbo typecheck"
+    "typecheck": "turbo typecheck",
+    "lint:effect": "eslint ."
   },
   "devDependencies": {
+    "eslint": "^10.12.0",
     "prettier": "^3.9.10",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "turbo": "^2.11.7",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.71.1"
   },
   "packageManager": "pnpm@11.27.1",
   "engines": {
     "node": ">=20.19.0"
-  }
+  },
+  "type": "module"
 }

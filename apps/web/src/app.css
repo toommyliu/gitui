@@ -1,0 +1,35 @@
+:root {
+  --lane-0: oklch(0.62 0.15 250);
+  --lane-1: oklch(0.65 0.17 150);
+  --lane-2: oklch(0.68 0.16 60);
+  --lane-3: oklch(0.6 0.2 330);
+  --lane-4: oklch(0.62 0.13 200);
+  --lane-5: oklch(0.63 0.19 25);
+  --lane-6: oklch(0.6 0.16 290);
+  --lane-7: oklch(0.66 0.14 110);
+}
+
+.dark {
+  --lane-0: oklch(0.72 0.14 250);
+  --lane-1: oklch(0.75 0.16 150);
+  --lane-2: oklch(0.78 0.15 70);
+  --lane-3: oklch(0.72 0.18 330);
+  --lane-4: oklch(0.74 0.12 200);
+  --lane-5: oklch(0.72 0.17 25);
+  --lane-6: oklch(0.72 0.14 290);
+  --lane-7: oklch(0.77 0.13 110);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  font-size: 12px;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}

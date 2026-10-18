@@ -24,7 +24,21 @@ export class GitError extends Schema.TaggedError<GitError>()("GitError", {
   args: Schema.Array(Schema.String),
   exitCode: Schema.Int,
   stderr: Schema.String,
-}) {}
+}) {
+  get summary(): string {
+    const lines = this.stderr
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "" && !line.startsWith("hint:"))
+    const problems = lines.flatMap((line) => {
+      const match = /^(?:fatal|error): (.*)$/.exec(line)
+      return match === null ? [] : [match[1]!]
+    })
+    const shown = (problems.length > 0 ? problems : lines).slice(0, 2).join("\n")
+    if (shown === "") return `git ${this.args[0] ?? ""} exited with ${this.exitCode}`
+    return shown.charAt(0).toUpperCase() + shown.slice(1)
+  }
+}
 
 export class RepoNotFound extends Schema.TaggedError<RepoNotFound>()("RepoNotFound", {
   path: Schema.String,

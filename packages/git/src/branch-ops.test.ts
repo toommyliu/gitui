@@ -113,6 +113,24 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
       }),
     )
 
+    it.effect("summarizes a failure with git's own message and no hints", () =>
+      Effect.gen(function* () {
+        const repo = makeRepo()
+        repo.commit("base")
+        repo.git("branch", "topic")
+        const r = yield* Repo
+
+        const rename = yield* Effect.flip(r.renameBranch(id(repo.root), "topic", "main"))
+        expect(rename.summary).toBe("A branch named 'main' already exists")
+
+        const worktree = yield* Effect.flip(
+          r.addWorktree(id(repo.root), join(repo.root, "..", "bad"), "topic/has space", null),
+        )
+        expect(worktree.stderr).toContain("hint:")
+        expect(worktree.summary).toBe("'topic/has space' is not a valid branch name")
+      }),
+    )
+
     it.effect("stashes untracked files when asked", () =>
       Effect.gen(function* () {
         const repo = makeRepo()

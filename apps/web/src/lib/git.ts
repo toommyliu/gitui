@@ -166,9 +166,7 @@ type Action = (client: Client) => Effect.Effect<unknown, ActionError>
 
 const describeFailure = (cause: Cause.Cause<ActionError>) => {
   const error = Cause.squash(cause)
-  return error instanceof GitError
-    ? error.stderr || `git ${error.args[0] ?? ""} exited with ${error.exitCode}`
-    : String(error)
+  return error instanceof GitError ? error.summary : String(error)
 }
 
 const actionAtom = GitClient.runtime.fn(

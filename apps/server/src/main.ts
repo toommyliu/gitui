@@ -24,7 +24,9 @@ const Rpc = RpcServer.layerHttp({ group: GitRpcs, path: "/rpc", protocol: "webso
   Layer.provide(RpcSerialization.layerJson),
 )
 
-const Static = existsSync(webDist) ? HttpStaticServer.layer({ root: webDist, spa: true }) : Layer.empty
+const Static = existsSync(webDist)
+  ? HttpStaticServer.layer({ root: webDist, spa: true, cacheControl: "no-cache" })
+  : Layer.empty
 
 const Compression = HttpRouter.middleware(HttpMiddleware.compression(), { global: true })
 

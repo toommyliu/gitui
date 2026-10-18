@@ -2,8 +2,9 @@ import { useAtomMount } from "@effect/atom-react"
 import type { RepoId } from "@gitui/contracts"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useState, useSyncExternalStore } from "react"
+import { useState } from "react"
 import { pathQuery, watchAtom } from "@/lib/git"
+import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
 import { CommandLogSheet } from "./command-log"
 import { CommitDetail } from "./commit-detail"
@@ -11,16 +12,6 @@ import { CommitList } from "./commit-list"
 import { Sidebar } from "./sidebar"
 import { Toolbar } from "./toolbar"
 import { WorkingCopy } from "./working-copy"
-
-const narrowQuery = window.matchMedia("(max-width: 767px)")
-const useNarrow = () =>
-  useSyncExternalStore(
-    (notify) => {
-      narrowQuery.addEventListener("change", notify)
-      return () => narrowQuery.removeEventListener("change", notify)
-    },
-    () => narrowQuery.matches,
-  )
 
 type Pane = "locations" | "history" | "detail"
 const paneLabels: Record<Pane, string> = { locations: "Locations", history: "History", detail: "Details" }

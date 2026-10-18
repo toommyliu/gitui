@@ -3,11 +3,13 @@ import type { CommitDetail as Detail, FileChange, Oid, RepoId } from "@gitui/con
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { usePanelRef } from "react-resizable-panels"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "cn"
 import { type ReactNode, useMemo, useRef, useState } from "react"
 import { longDate, shortOid } from "@/lib/format"
 import { commitAtom, diffAtom, diffKey, latest } from "@/lib/git"
+import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
 import { DiffStack, patchItems } from "./diff-view"
 import { Loading, Nothing } from "./loading"
@@ -151,6 +153,9 @@ function LargeCommit({
   onHistory: (path: string) => void
 }) {
   const [open, setOpen] = useState<FileChange | null>(null)
+  const [filesHidden, setFilesHidden] = useState(false)
+  const files = usePanelRef()
+  const narrow = useNarrow()
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
     count: detail.files.length,
@@ -160,7 +165,13 @@ function LargeCommit({
   })
   return (
     <ResizablePanelGroup orientation="vertical">
-      <ResizablePanel defaultSize="60%" minSize="15%">
+      <ResizablePanel
+        defaultSize="60%"
+        minSize="15%"
+        collapsible
+        panelRef={files}
+        onResize={(size) => setFilesHidden(size.asPercentage === 0)}
+      >
         <div className="flex h-full flex-col">
           <div className="max-h-[40%] shrink-0 overflow-auto border-b [&>*]:border-b-0">{summary}</div>
           <ScrollArea
@@ -175,7 +186,10 @@ function LargeCommit({
                   <button
                     key={item.key}
                     type="button"
-                    onClick={() => setOpen(file)}
+                    onClick={() => {
+                      setOpen(file)
+                      if (narrow) files.current?.collapse()
+                    }}
                     className={cn(
                       "absolute top-0 left-0 flex w-full items-center gap-2 px-3 text-left hover:bg-muted/60",
                       open?.path === file.path && "bg-accent",
@@ -193,11 +207,27 @@ function LargeCommit({
       </ResizablePanel>
       <ResizableHandle />
       <ResizablePanel minSize="20%">
-        {open === null ? (
-          <Nothing title="Too large to show at once" description="Pick a file to see its diff." />
-        ) : (
-          <SingleFileDiff key={open.path} repo={repo} oid={detail.oid} file={open} onHistory={onHistory} />
-        )}
+        <div className="flex h-full flex-col">
+          <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2">
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => (filesHidden ? files.current?.expand() : files.current?.collapse())}
+            >
+              {filesHidden ? "Show files" : "Hide files"}
+            </Button>
+            <span className="truncate text-muted-foreground tabular-nums">
+              {detail.files.length.toLocaleString()} files
+            </span>
+          </div>
+          <div className="min-h-0 flex-1">
+            {open === null ? (
+              <Nothing title="Too large to show at once" description="Pick a file to see its diff." />
+            ) : (
+              <SingleFileDiff key={open.path} repo={repo} oid={detail.oid} file={open} onHistory={onHistory} />
+            )}
+          </div>
+        </div>
       </ResizablePanel>
     </ResizablePanelGroup>
   )

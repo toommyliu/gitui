@@ -18,9 +18,7 @@ type ThemeProviderState = {
 const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)"
 const THEME_VALUES: Theme[] = ["dark", "light", "system"]
 
-const ThemeProviderContext = React.createContext<
-  ThemeProviderState | undefined
->(undefined)
+const ThemeProviderContext = React.createContext<ThemeProviderState | undefined>(undefined)
 
 function isTheme(value: string | null): value is Theme {
   if (value === null) {
@@ -41,9 +39,7 @@ function getSystemTheme(): ResolvedTheme {
 function disableTransitionsTemporarily() {
   const style = document.createElement("style")
   style.appendChild(
-    document.createTextNode(
-      "*,*::before,*::after{-webkit-transition:none!important;transition:none!important}"
-    )
+    document.createTextNode("*,*::before,*::after{-webkit-transition:none!important;transition:none!important}"),
   )
   document.head.appendChild(style)
 
@@ -66,9 +62,7 @@ function isEditableTarget(target: EventTarget | null) {
     return true
   }
 
-  const editableParent = target.closest(
-    "input, textarea, select, [contenteditable='true']"
-  )
+  const editableParent = target.closest("input, textarea, select, [contenteditable='true']")
   if (editableParent) {
     return true
   }
@@ -97,17 +91,14 @@ export function ThemeProvider({
       localStorage.setItem(storageKey, nextTheme)
       setThemeState(nextTheme)
     },
-    [storageKey]
+    [storageKey],
   )
 
   const applyTheme = React.useCallback(
     (nextTheme: Theme) => {
       const root = document.documentElement
-      const resolvedTheme =
-        nextTheme === "system" ? getSystemTheme() : nextTheme
-      const restoreTransitions = disableTransitionOnChange
-        ? disableTransitionsTemporarily()
-        : null
+      const resolvedTheme = nextTheme === "system" ? getSystemTheme() : nextTheme
+      const restoreTransitions = disableTransitionOnChange ? disableTransitionsTemporarily() : null
 
       root.classList.remove("light", "dark")
       root.classList.add(resolvedTheme)
@@ -116,7 +107,7 @@ export function ThemeProvider({
         restoreTransitions()
       }
     },
-    [disableTransitionOnChange]
+    [disableTransitionOnChange],
   )
 
   React.useEffect(() => {
@@ -208,7 +199,7 @@ export function ThemeProvider({
       theme,
       setTheme,
     }),
-    [theme, setTheme]
+    [theme, setTheme],
   )
 
   return (

@@ -17,7 +17,13 @@ const layout = (commits: ReadonlyArray<[string, ReadonlyArray<string>]>) => {
 
 describe("GraphLayout", () => {
   it("keeps linear history in one lane", () => {
-    expect(layout([["c", ["b"]], ["b", ["a"]], ["a", []]])).toEqual([
+    expect(
+      layout([
+        ["c", ["b"]],
+        ["b", ["a"]],
+        ["a", []],
+      ]),
+    ).toEqual([
       { oid: "c", lane: 0, color: 0, up: [], down: ["0->0 c0"] },
       { oid: "b", lane: 0, color: 0, up: ["0->0 c0"], down: ["0->0 c0"] },
       { oid: "a", lane: 0, color: 0, up: ["0->0 c0"], down: [] },
@@ -25,7 +31,14 @@ describe("GraphLayout", () => {
   })
 
   it("opens a lane for a merge's second parent and closes it at the fork point", () => {
-    expect(layout([["m", ["a", "b"]], ["a", ["base"]], ["b", ["base"]], ["base", []]])).toEqual([
+    expect(
+      layout([
+        ["m", ["a", "b"]],
+        ["a", ["base"]],
+        ["b", ["base"]],
+        ["base", []],
+      ]),
+    ).toEqual([
       { oid: "m", lane: 0, color: 0, up: [], down: ["0->0 c0", "0->1 c1"] },
       { oid: "a", lane: 0, color: 0, up: ["0->0 c0", "1->1 c1"], down: ["0->0 c0", "1->1 c1"] },
       { oid: "b", lane: 1, color: 1, up: ["0->0 c0", "1->1 c1"], down: ["0->0 c0", "1->1 c1"] },
@@ -34,7 +47,14 @@ describe("GraphLayout", () => {
   })
 
   it("starts unrelated branch tips in new lanes and reuses freed lanes", () => {
-    expect(layout([["x", ["base"]], ["y", ["base"]], ["base", []], ["z", []]])).toEqual([
+    expect(
+      layout([
+        ["x", ["base"]],
+        ["y", ["base"]],
+        ["base", []],
+        ["z", []],
+      ]),
+    ).toEqual([
       { oid: "x", lane: 0, color: 0, up: [], down: ["0->0 c0"] },
       { oid: "y", lane: 1, color: 1, up: ["0->0 c0"], down: ["0->0 c0", "1->1 c1"] },
       { oid: "base", lane: 0, color: 0, up: ["0->0 c0", "1->0 c1"], down: [] },

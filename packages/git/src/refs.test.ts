@@ -1,6 +1,15 @@
 import { join } from "node:path"
 import { describe, expect, it } from "@effect/vitest"
-import { forEachRefArgs, parseRefs, parseRemotes, parseStashes, parseWorktrees, remotesArgs, stashArgs, worktreeArgs } from "./refs.ts"
+import {
+  forEachRefArgs,
+  parseRefs,
+  parseRemotes,
+  parseStashes,
+  parseWorktrees,
+  remotesArgs,
+  stashArgs,
+  worktreeArgs,
+} from "./refs.ts"
 import { makeRepo } from "./testRepo.ts"
 
 describe("refs parsers", () => {
@@ -59,9 +68,27 @@ describe("refs parsers", () => {
     repo.git("worktree", "add", "-q", "--detach", detached, base)
     const worktrees = parseWorktrees(repo.raw(...worktreeArgs))
     expect(worktrees.map((w) => ({ ...w, path: w.path.split("/").pop() }))).toEqual([
-      { path: repo.root.split("/").pop(), head: { _tag: "Branch", name: "main", oid: base }, isMain: true, locked: null, prunable: null },
-      { path: detached.split("/").pop(), head: { _tag: "Detached", oid: base }, isMain: false, locked: null, prunable: null },
-      { path: linked.split("/").pop(), head: { _tag: "Branch", name: "feat", oid: base }, isMain: false, locked: "agent running", prunable: null },
+      {
+        path: repo.root.split("/").pop(),
+        head: { _tag: "Branch", name: "main", oid: base },
+        isMain: true,
+        locked: null,
+        prunable: null,
+      },
+      {
+        path: detached.split("/").pop(),
+        head: { _tag: "Detached", oid: base },
+        isMain: false,
+        locked: null,
+        prunable: null,
+      },
+      {
+        path: linked.split("/").pop(),
+        head: { _tag: "Branch", name: "feat", oid: base },
+        isMain: false,
+        locked: "agent running",
+        prunable: null,
+      },
     ])
   })
 })

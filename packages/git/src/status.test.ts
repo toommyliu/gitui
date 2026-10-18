@@ -27,7 +27,9 @@ describe("parseStatus", () => {
     expect(status(repo)).toEqual({
       head: { _tag: "Branch", name: "main", oid },
       upstream: null,
-      entries: [{ _tag: "Tracked", path: "a.txt", from: null, staged: "modified", unstaged: "modified", submodule: false }],
+      entries: [
+        { _tag: "Tracked", path: "a.txt", from: null, staged: "modified", unstaged: "modified", submodule: false },
+      ],
     })
   })
 
@@ -39,7 +41,14 @@ describe("parseStatus", () => {
     repo.git("mv", "old name.txt", "new name.txt")
     repo.write("odd\nname*.txt", "x\n")
     expect(status(repo).entries).toEqual([
-      { _tag: "Tracked", path: "new name.txt", from: "old name.txt", staged: "renamed", unstaged: null, submodule: false },
+      {
+        _tag: "Tracked",
+        path: "new name.txt",
+        from: "old name.txt",
+        staged: "renamed",
+        unstaged: null,
+        submodule: false,
+      },
       { _tag: "Untracked", path: "odd\nname*.txt" },
     ])
   })

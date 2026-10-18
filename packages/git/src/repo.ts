@@ -29,7 +29,16 @@ import * as Stream from "effect/Stream"
 import { diffTreeArgs, parseCommit, parseFileChanges, showArgs } from "./commit.ts"
 import { Git, nulList } from "./git.ts"
 import { LogParser, logArgs, logRevArgs } from "./log.ts"
-import { forEachRefArgs, parseRefs, parseRemotes, parseStashes, parseWorktrees, remotesArgs, stashArgs, worktreeArgs } from "./refs.ts"
+import {
+  forEachRefArgs,
+  parseRefs,
+  parseRemotes,
+  parseStashes,
+  parseWorktrees,
+  remotesArgs,
+  stashArgs,
+  worktreeArgs,
+} from "./refs.ts"
 import { parseStatus, statusArgs } from "./status.ts"
 
 const chunks = <T>(items: ReadonlyArray<T>, size: number) =>
@@ -65,7 +74,12 @@ export class Repo extends Context.Service<
     status(repo: RepoId): Effect.Effect<Status, GitError>
     refs(repo: RepoId): Effect.Effect<Refs, GitError>
     openLog(repo: RepoId): Effect.Effect<LogHandle, GitError>
-    logPage(repo: RepoId, logId: string, start: number, count: number): Effect.Effect<ReadonlyArray<CommitRow>, GitError | LogExpired>
+    logPage(
+      repo: RepoId,
+      logId: string,
+      start: number,
+      count: number,
+    ): Effect.Effect<ReadonlyArray<CommitRow>, GitError | LogExpired>
     commit(repo: RepoId, oid: Oid): Effect.Effect<CommitDetail, GitError>
     diff(repo: RepoId, target: DiffTarget, path: RepoPath, from: RepoPath | null): Effect.Effect<FileDiff, GitError>
     stage(repo: RepoId, paths: ReadonlyArray<RepoPath>): Effect.Effect<void, GitError>
@@ -91,7 +105,9 @@ export class Repo extends Context.Service<
       const sessions = new Map<RepoId, LogSession>()
 
       const hasHead = (repo: RepoId) =>
-        git.text(repo, ["rev-parse", "--verify", "-q", "HEAD"], { okExitCodes: [1] }).pipe(Effect.map((out) => out.trim() !== ""))
+        git
+          .text(repo, ["rev-parse", "--verify", "-q", "HEAD"], { okExitCodes: [1] })
+          .pipe(Effect.map((out) => out.trim() !== ""))
 
       const open = Effect.fn("Repo.open")(function* (path: string) {
         const out = yield* git
@@ -102,7 +118,8 @@ export class Repo extends Context.Service<
         return { id: root as RepoId, name: basename(root), gitDir, commonDir: resolve(root, commonDir) }
       })
 
-      const gitDirOf = (repo: RepoId) => git.text(repo, ["rev-parse", "--absolute-git-dir"]).pipe(Effect.map((s) => s.trim()))
+      const gitDirOf = (repo: RepoId) =>
+        git.text(repo, ["rev-parse", "--absolute-git-dir"]).pipe(Effect.map((s) => s.trim()))
 
       const status = Effect.fn("Repo.status")(function* (repo: RepoId) {
         const [bytes, gitDir] = yield* Effect.all([git.run(repo, statusArgs), gitDirOf(repo)], { concurrency: 2 })
@@ -194,7 +211,19 @@ export class Repo extends Context.Service<
         const common = ["--no-ext-diff", "--no-color", "-M"]
         switch (target._tag) {
           case "Commit":
-            return ["diff-tree", "-p", "-r", "--no-commit-id", ...common, "--root", "-m", "--first-parent", target.oid, "--", ...paths]
+            return [
+              "diff-tree",
+              "-p",
+              "-r",
+              "--no-commit-id",
+              ...common,
+              "--root",
+              "-m",
+              "--first-parent",
+              target.oid,
+              "--",
+              ...paths,
+            ]
           case "Staged":
             return ["diff", "--cached", ...common, "--", ...paths]
           case "Unstaged":
@@ -204,9 +233,16 @@ export class Repo extends Context.Service<
         }
       }
 
-      const diff = Effect.fn("Repo.diff")(function* (repo: RepoId, target: DiffTarget, path: RepoPath, from: RepoPath | null) {
+      const diff = Effect.fn("Repo.diff")(function* (
+        repo: RepoId,
+        target: DiffTarget,
+        path: RepoPath,
+        from: RepoPath | null,
+      ) {
         const paths = from === null || from === path ? [path] : [from, path]
-        const bytes = yield* git.run(repo, patchArgs(target, paths), { okExitCodes: target._tag === "Untracked" ? [1] : [] })
+        const bytes = yield* git.run(repo, patchArgs(target, paths), {
+          okExitCodes: target._tag === "Untracked" ? [1] : [],
+        })
         if (bytes.length > MAX_PATCH_BYTES) return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
         const text = decoder.decode(bytes)
         if (!text.includes("diff --git")) return { _tag: "Empty" } satisfies FileDiff
@@ -219,7 +255,9 @@ export class Repo extends Context.Service<
       const withPaths = (repo: RepoId, args: ReadonlyArray<string>, paths: ReadonlyArray<string>) =>
         paths.length === 0
           ? Effect.void
-          : Effect.asVoid(git.run(repo, [...args, "--pathspec-from-file=-", "--pathspec-file-nul"], { stdin: nulList(paths) }))
+          : Effect.asVoid(
+              git.run(repo, [...args, "--pathspec-from-file=-", "--pathspec-file-nul"], { stdin: nulList(paths) }),
+            )
 
       const stage = (repo: RepoId, paths: ReadonlyArray<RepoPath>) => withPaths(repo, ["add", "-A"], paths)
 
@@ -234,8 +272,16 @@ export class Repo extends Context.Service<
       const discard = Effect.fn("Repo.discard")(function* (repo: RepoId, paths: ReadonlyArray<RepoPath>) {
         const listed = yield* chunked(repo, ["ls-files", "-z"], paths)
         const tracked = new Set(listed.flatMap((bytes) => decoder.decode(bytes).split("\0")))
-        yield* withPaths(repo, ["restore", "--worktree"], paths.filter((path) => tracked.has(path)))
-        yield* chunked(repo, ["clean", "-f", "-q"], paths.filter((path) => !tracked.has(path)))
+        yield* withPaths(
+          repo,
+          ["restore", "--worktree"],
+          paths.filter((path) => tracked.has(path)),
+        )
+        yield* chunked(
+          repo,
+          ["clean", "-f", "-q"],
+          paths.filter((path) => !tracked.has(path)),
+        )
       })
 
       const run = (repo: RepoId, args: ReadonlyArray<string>, stdin?: Uint8Array) =>
@@ -243,7 +289,8 @@ export class Repo extends Context.Service<
 
       const stashIndex = Effect.fn("Repo.stashIndex")(function* (repo: RepoId, oid: Oid) {
         const index = parseStashes(yield* git.run(repo, stashArgs)).findIndex((stash) => stash.oid === oid)
-        if (index === -1) return yield* new GitError({ args: ["stash", "drop"], exitCode: -1, stderr: `Stash ${oid} no longer exists` })
+        if (index === -1)
+          return yield* new GitError({ args: ["stash", "drop"], exitCode: -1, stderr: `Stash ${oid} no longer exists` })
         return `stash@{${index}}`
       })
 
@@ -262,7 +309,11 @@ export class Repo extends Context.Service<
         unstage,
         discard,
         commitIndex: (repo, message, amend) =>
-          run(repo, ["commit", "--cleanup=strip", "-F", "-", ...(amend ? ["--amend"] : [])], new TextEncoder().encode(message)),
+          run(
+            repo,
+            ["commit", "--cleanup=strip", "-F", "-", ...(amend ? ["--amend"] : [])],
+            new TextEncoder().encode(message),
+          ),
         checkout: (repo, branch) => run(repo, ["switch", branch]),
         createBranch: (repo, name, startPoint, checkout) =>
           run(repo, checkout ? ["switch", "-c", name, startPoint] : ["branch", name, startPoint]),

@@ -1,7 +1,14 @@
 import type { Change, ConflictCode, Head, Oid, RepoPath, StatusEntry, Tracking } from "@gitui/contracts"
 import { splitNul } from "./nul.ts"
 
-export const statusArgs = ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all", "--ignore-submodules=dirty"]
+export const statusArgs = [
+  "status",
+  "--porcelain=v2",
+  "-z",
+  "--branch",
+  "--untracked-files=all",
+  "--ignore-submodules=dirty",
+]
 
 const changes: Record<string, Change | null> = {
   ".": null,

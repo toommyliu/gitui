@@ -49,7 +49,8 @@ const command = (cwd: string, args: ReadonlyArray<string>, stdin: Uint8Array | u
 
 const decoder = new TextDecoder()
 
-export const nulList = (items: ReadonlyArray<string>) => new TextEncoder().encode(items.map((item) => `${item}\0`).join(""))
+export const nulList = (items: ReadonlyArray<string>) =>
+  new TextEncoder().encode(items.map((item) => `${item}\0`).join(""))
 
 export class Git extends Context.Service<
   Git,

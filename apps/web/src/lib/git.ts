@@ -57,6 +57,8 @@ export const latest = <A, E>(result: AsyncResult.AsyncResult<A, E>): A | undefin
   return undefined
 }
 
+const CACHE_TTL = "10 minutes"
+
 export const reposAtom = GitClient.query("ListRepos", undefined)
 
 export const repoInfoAtom = Atom.family((path: string) =>
@@ -64,15 +66,15 @@ export const repoInfoAtom = Atom.family((path: string) =>
 )
 
 export const statusAtom = Atom.family((repo: RepoId) =>
-  GitClient.query("GetStatus", { repo }, { reactivityKeys: [keys.status(repo)] }),
+  GitClient.query("GetStatus", { repo }, { reactivityKeys: [keys.status(repo)], timeToLive: CACHE_TTL }),
 )
 
 export const refsAtom = Atom.family((repo: RepoId) =>
-  GitClient.query("GetRefs", { repo }, { reactivityKeys: [keys.refs(repo)] }),
+  GitClient.query("GetRefs", { repo }, { reactivityKeys: [keys.refs(repo)], timeToLive: CACHE_TTL }),
 )
 
 export const logAtom = Atom.family((repo: RepoId) =>
-  GitClient.query("OpenLog", { repo }, { reactivityKeys: [keys.refs(repo)] }),
+  GitClient.query("OpenLog", { repo }, { reactivityKeys: [keys.refs(repo)], timeToLive: CACHE_TTL }),
 )
 
 export const LOG_PAGE_SIZE = 200
@@ -102,6 +104,7 @@ export const watchAtom = Atom.family((repo: RepoId) =>
   GitClient.runtime.atom(
     Effect.gen(function* () {
       const client = yield* GitClient
+      yield* Reactivity.invalidate(scopeKeys(repo, "refs"))
       yield* client("WatchRepo", { repo }).pipe(
         Stream.runForEach((event) => Reactivity.invalidate(event.scopes.flatMap((scope) => scopeKeys(repo, scope)))),
       )

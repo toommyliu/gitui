@@ -170,6 +170,9 @@ const separator = ':is([data-separator="line-info"], [data-separator="line-info-
 const quiet = "color-mix(in srgb, var(--diffs-fg) 50%, var(--diffs-bg))"
 
 const UNSAFE_CSS = `
+[data-diffs-header][data-sticky] {
+  top: -1px;
+}
 ${separator} {
   height: ${SEPARATOR_HEIGHT}px !important;
   margin-block: 0 !important;

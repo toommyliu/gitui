@@ -9,7 +9,11 @@ import {
   parsePatchFiles,
 } from "@pierre/diffs"
 import { CodeView, type CodeViewHandle } from "@pierre/diffs/react"
-import { type ReactNode, type Ref, useCallback, useLayoutEffect, useMemo, useRef } from "react"
+import { CheckIcon, CopyIcon } from "lucide-react"
+import { type ReactNode, type Ref, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { copyText } from "@/lib/clipboard"
 import { settingsAtom } from "@/lib/settings"
 import { ChangeLetter } from "./change-letter"
 import { useTheme } from "./theme-provider"
@@ -105,6 +109,32 @@ const scrollToEnd = (node: HTMLDivElement | null) => {
   if (node !== null) node.scrollLeft = node.scrollWidth
 }
 
+function CopyPathButton({ path }: { path: string }) {
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => setCopied(false), 1500)
+    return () => clearTimeout(timer)
+  }, [copied])
+  return (
+    <Button
+      size="icon-sm"
+      variant="ghost"
+      className="text-muted-foreground"
+      aria-label={copied ? "Path copied" : "Copy path"}
+      title="Copy path"
+      onClick={() =>
+        copyText(path).then(
+          () => setCopied(true),
+          () => toast.error("Couldn't copy", { description: "This browser blocked clipboard access." }),
+        )
+      }
+    >
+      {copied ? <CheckIcon /> : <CopyIcon />}
+    </Button>
+  )
+}
+
 function FileHeader({ fileDiff, actions }: { fileDiff: FileDiffMetadata; actions: ReactNode }) {
   let additions = 0
   let deletions = 0
@@ -115,16 +145,14 @@ function FileHeader({ fileDiff, actions }: { fileDiff: FileDiffMetadata; actions
   return (
     <div className="flex h-11 items-center gap-2 bg-background px-3 font-sans text-xs">
       <ChangeLetter change={changeOf[fileDiff.type]} />
-      <div
-        ref={scrollToEnd}
-        className="min-w-0 flex-1 [scrollbar-width:none] overflow-x-auto font-medium whitespace-nowrap"
-      >
+      <div ref={scrollToEnd} className="min-w-0 [scrollbar-width:none] overflow-x-auto font-medium whitespace-nowrap">
         {fileDiff.prevName !== undefined && fileDiff.prevName !== fileDiff.name && (
           <span className="text-muted-foreground">{fileDiff.prevName} → </span>
         )}
         {fileDiff.name}
       </div>
-      <span className="shrink-0 font-mono text-[11px] tabular-nums">
+      <CopyPathButton path={fileDiff.name} />
+      <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums">
         {deletions > 0 && <span className="text-destructive">-{deletions} </span>}
         {additions > 0 && <span className="text-[var(--lane-1)]">+{additions}</span>}
       </span>

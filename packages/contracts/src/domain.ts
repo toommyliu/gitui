@@ -196,7 +196,7 @@ export const FileDiff = Schema.Union([
 ])
 export type FileDiff = typeof FileDiff.Type
 
-export const ChangeScope = Schema.Literals(["worktree", "index", "refs"])
+export const ChangeScope = Schema.Literals(["worktree", "index", "refs", "draft"])
 export type ChangeScope = typeof ChangeScope.Type
 
 export const RepoEvent = Schema.Struct({

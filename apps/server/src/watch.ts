@@ -1,6 +1,7 @@
 import { watch, type FSWatcher } from "node:fs"
 import { join, sep } from "node:path"
 import type { ChangeScope, RepoEvent, RepoInfo } from "@gitui/contracts"
+import { DRAFT_FILE } from "@gitui/git"
 import * as Effect from "effect/Effect"
 import * as Queue from "effect/Queue"
 import * as Stream from "effect/Stream"
@@ -9,9 +10,10 @@ const THROTTLE_MS = 120
 
 const inside = (path: string, dir: string) => path === dir || path.startsWith(dir + sep)
 
-const classify = (repo: RepoInfo, path: string): ChangeScope | null => {
+export const classify = (repo: RepoInfo, path: string): ChangeScope | null => {
   if (!inside(path, repo.commonDir) && !inside(path, repo.gitDir)) return "worktree"
   if (path === join(repo.gitDir, "index")) return "index"
+  if (path === join(repo.gitDir, DRAFT_FILE)) return "draft"
   if (path.endsWith(".lock")) return null
   const rel = path.slice(repo.commonDir.length + 1)
   if (rel.startsWith(`objects${sep}`) || rel.startsWith(`logs${sep}`)) return null

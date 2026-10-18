@@ -81,6 +81,8 @@ export class GitRpcs extends RpcGroup.make(
     },
     error: GitError,
   }),
+  Rpc.make("GetDraft", { payload: repo, success: Schema.String, error: GitError }),
+  Rpc.make("SetDraft", { payload: { repo: RepoId, message: Schema.String }, error: GitError }),
   Rpc.make("Commit", {
     payload: { repo: RepoId, message: Schema.String, amend: Schema.Boolean },
     error: GitError,

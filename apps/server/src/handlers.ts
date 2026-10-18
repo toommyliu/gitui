@@ -41,6 +41,8 @@ export const handlers = (repoRoots: ReadonlyArray<string>) =>
         Unstage: ({ repo: id, paths }) => repo.unstage(id, paths),
         Discard: ({ repo: id, paths }) => repo.discard(id, paths),
         ApplyLines: ({ repo: id, action, path, lines }) => repo.applyLines(id, action, path, lines),
+        GetDraft: ({ repo: id }) => repo.readDraft(id),
+        SetDraft: ({ repo: id, message }) => repo.writeDraft(id, message),
         Commit: ({ repo: id, message, amend }) => repo.commitIndex(id, message, amend),
         ContinueOperation: ({ repo: id }) => repo.continueOperation(id),
         SkipOperation: ({ repo: id }) => repo.skipOperation(id),

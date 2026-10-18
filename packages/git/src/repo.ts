@@ -24,7 +24,9 @@ import {
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
+import * as FileSystem from "effect/FileSystem"
 import * as Layer from "effect/Layer"
+import type { PlatformError } from "effect/PlatformError"
 import * as Pull from "effect/Pull"
 import * as Scope from "effect/Scope"
 import * as Semaphore from "effect/Semaphore"
@@ -62,6 +64,8 @@ const operationMarkers: ReadonlyArray<readonly [string, Operation]> = [
 ]
 
 const MAX_LOG_SESSIONS = 4
+
+export const DRAFT_FILE = "GITUI_MSG"
 
 interface LogSession {
   readonly total: number
@@ -101,6 +105,8 @@ export class Repo extends Context.Service<
       path: RepoPath,
       lines: ReadonlyArray<LineSelection>,
     ) => Effect.Effect<void, GitError>
+    readonly readDraft: (repo: RepoId) => Effect.Effect<string, GitError>
+    readonly writeDraft: (repo: RepoId, message: string) => Effect.Effect<void, GitError>
     readonly commitIndex: (repo: RepoId, message: string, amend: boolean) => Effect.Effect<void, GitError>
     readonly continueOperation: (repo: RepoId) => Effect.Effect<void, GitError>
     readonly skipOperation: (repo: RepoId) => Effect.Effect<void, GitError>
@@ -149,6 +155,7 @@ export class Repo extends Context.Service<
     Repo,
     Effect.gen(function* () {
       const git = yield* Git
+      const fs = yield* FileSystem.FileSystem
       const sessions = new Map<RepoId, Map<string, LogSession>>()
       const locks = new Map<RepoId, Semaphore.Semaphore>()
       const lockFor = (repo: RepoId) => {
@@ -446,6 +453,10 @@ export class Repo extends Context.Service<
         }
       })
 
+      const draftPath = (repo: RepoId) => Effect.map(gitDirOf(repo), (dir) => join(dir, DRAFT_FILE))
+      const draftError = (action: string, error: PlatformError) =>
+        new GitError({ args: [], exitCode: -1, stderr: `Couldn't ${action} the commit draft: ${error.message}` })
+
       const removeWorktree = (repo: RepoId, path: string, force: boolean) =>
         run(repo, ["worktree", "remove", ...(force ? ["--force", "--force"] : []), path])
 
@@ -497,12 +508,30 @@ export class Repo extends Context.Service<
         unstage,
         discard,
         applyLines,
-        commitIndex: (repo, message, amend) =>
-          run(
+        readDraft: Effect.fn("Repo.readDraft")(function* (repo) {
+          const path = yield* draftPath(repo)
+          return yield* fs
+            .readFileString(path)
+            .pipe(
+              Effect.catch((error) =>
+                error.reason._tag === "NotFound" ? Effect.succeed("") : Effect.fail(draftError("read", error)),
+              ),
+            )
+        }),
+        writeDraft: Effect.fn("Repo.writeDraft")(function* (repo, message) {
+          const path = yield* draftPath(repo)
+          yield* (message === "" ? fs.remove(path, { force: true }) : fs.writeFileString(path, message)).pipe(
+            Effect.mapError((error) => draftError("write", error)),
+          )
+        }),
+        commitIndex: Effect.fn("Repo.commitIndex")(function* (repo, message, amend) {
+          yield* run(
             repo,
             ["commit", "--cleanup=strip", "-F", "-", ...(amend ? ["--amend"] : [])],
             new TextEncoder().encode(message),
-          ),
+          )
+          yield* fs.remove(yield* draftPath(repo), { force: true }).pipe(Effect.ignore)
+        }),
         continueOperation: stepOperation("continue"),
         skipOperation: stepOperation("skip"),
         abortOperation: stepOperation("abort"),

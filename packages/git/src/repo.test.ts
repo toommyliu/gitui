@@ -31,6 +31,34 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
     }),
   )
 
+  it.effect("keeps a commit message draft per worktree until the next commit clears it", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.write("a.txt", "base\n")
+      repo.git("add", ".")
+      repo.commit("base")
+      const other = `${repo.root}-other`
+      repo.git("worktree", "add", "-q", "-b", "other", other)
+      const r = yield* Repo
+
+      yield* r.writeDraft(id(repo.root), "fix: half-written message\n\nwith a body")
+      expect(yield* r.readDraft(id(repo.root))).toBe("fix: half-written message\n\nwith a body")
+      expect(yield* r.readDraft(id(other))).toBe("")
+      expect((yield* r.status(id(repo.root))).entries).toEqual([])
+
+      repo.write("a.txt", "changed\n")
+      repo.git("add", "a.txt")
+      yield* r.commitIndex(id(repo.root), "fix: done", false)
+      expect(yield* r.readDraft(id(repo.root))).toBe("")
+
+      yield* r.writeDraft(id(other), "draft")
+      yield* r.writeDraft(id(other), "")
+      expect(existsSync(join(repo.git("rev-parse", "--absolute-git-dir"), "worktrees", "other", "GITUI_MSG"))).toBe(
+        false,
+      )
+    }),
+  )
+
   it.effect("commits exactly the index, leaving later working-tree edits uncommitted", () =>
     Effect.gen(function* () {
       const repo = makeRepo()

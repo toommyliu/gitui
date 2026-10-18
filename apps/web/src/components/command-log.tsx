@@ -11,6 +11,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react"
 import { copyText } from "@/lib/clipboard"
 import { commandLogAtom, isFailure, latest, logOpenAtom, logSeenAtom } from "@/lib/git"
 import { Nothing } from "./loading"
+import { NetworkStatus } from "./network"
 
 const ROW = 26
 
@@ -112,6 +113,7 @@ export function CommandLogDrawer({ repo, children }: { repo: RepoId; children: R
           </Badge>
         )}
       </button>
+      <NetworkStatus repo={repo} />
     </div>
   )
 

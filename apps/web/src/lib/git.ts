@@ -228,10 +228,21 @@ export const networkLabels: Record<NetworkRequest["action"], string> = {
   ForcePush: "Force push",
 }
 
-export interface NetworkState {
-  readonly action: NetworkRequest["action"]
-  readonly progress: Progress | null
+export const networkDoneLabels: Record<NetworkRequest["action"], string> = {
+  Fetch: "Fetched",
+  Pull: "Pulled",
+  Push: "Pushed",
+  ForcePush: "Force pushed",
 }
+
+export type NetworkState =
+  | { readonly _tag: "Running"; readonly action: NetworkRequest["action"]; readonly progress: Progress | null }
+  | {
+      readonly _tag: "Finished"
+      readonly action: NetworkRequest["action"]
+      readonly outcome: "succeeded" | "failed" | "cancelled"
+      readonly at: Date
+    }
 
 export const networkStateAtom = Atom.family((_repo: RepoId) =>
   Atom.make<NetworkState | null>(null).pipe(Atom.keepAlive),
@@ -243,18 +254,33 @@ const networkAtom = Atom.family((repo: RepoId) =>
       const state = networkStateAtom(repo)
       return Effect.gen(function* () {
         const client = yield* GitClient
-        get.registry.set(state, { action: request.action, progress: null })
+        get.registry.set(state, { _tag: "Running", action: request.action, progress: null })
         const updates =
           request.action === "ForcePush"
             ? client("ForcePush", { repo, expected: request.expected })
             : client(request.action, { repo })
         yield* Reactivity.mutation(
           Stream.runForEach(updates, (progress) =>
-            Effect.sync(() => get.registry.set(state, { action: request.action, progress })),
+            Effect.sync(() => get.registry.set(state, { _tag: "Running", action: request.action, progress })),
           ),
           scopeKeys(repo, "refs"),
         )
-      }).pipe(Effect.ensuring(Effect.sync(() => get.registry.set(state, null))))
+      }).pipe(
+        Effect.onExit((exit) =>
+          Effect.sync(() =>
+            get.registry.set(state, {
+              _tag: "Finished",
+              action: request.action,
+              outcome: Exit.isSuccess(exit)
+                ? "succeeded"
+                : Cause.hasInterruptsOnly(exit.cause)
+                  ? "cancelled"
+                  : "failed",
+              at: new Date(),
+            }),
+          ),
+        ),
+      )
     })
     .pipe(Atom.keepAlive),
 )

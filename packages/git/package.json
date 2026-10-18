@@ -1,0 +1,23 @@
+{
+  "name": "@gitui/git",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gitui/contracts": "workspace:*",
+    "@effect/platform-node": "4.0.4",
+    "effect": "4.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "~6.0.2",
+    "vitest": "^4"
+  }
+}

@@ -11,8 +11,8 @@ import { ConfirmProvider } from "@/components/confirm"
 import { ThemeProvider, useTheme } from "@/components/theme-provider.tsx"
 
 function ThemedToaster() {
-  const { theme } = useTheme()
-  return <Toaster position="bottom-right" theme={theme} />
+  const { resolvedTheme } = useTheme()
+  return <Toaster position="bottom-right" theme={resolvedTheme} />
 }
 
 const poolSize = Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1))

@@ -42,17 +42,17 @@ export function DiffStack({
   actions?: (meta: DiffItemMeta) => ReactNode
   viewRef?: Ref<CodeViewHandle<undefined, undefined>>
 }) {
-  const { theme } = useTheme()
+  const { resolvedTheme } = useTheme()
   const options = useMemo(
     () => ({
       diffStyle: "unified" as const,
-      themeType: theme,
+      themeType: resolvedTheme,
       overflow: "scroll" as const,
       stickyHeaders: true,
       hunkSeparators: "line-info" as const,
       lineDiffType: "word" as const,
     }),
-    [theme],
+    [resolvedTheme],
   )
   return (
     <CodeView

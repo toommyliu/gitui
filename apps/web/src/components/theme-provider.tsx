@@ -1,6 +1,6 @@
 import * as React from "react"
 
-type Theme = "dark" | "light" | "system"
+export type Theme = "dark" | "light" | "system"
 type ResolvedTheme = "dark" | "light"
 
 type ThemeProviderProps = {
@@ -12,6 +12,7 @@ type ThemeProviderProps = {
 
 type ThemeProviderState = {
   theme: Theme
+  resolvedTheme: ResolvedTheme
   setTheme: (theme: Theme) => void
 }
 
@@ -34,6 +35,12 @@ function getSystemTheme(): ResolvedTheme {
   }
 
   return "light"
+}
+
+function subscribeToSystemTheme(notify: () => void) {
+  const mediaQuery = window.matchMedia(COLOR_SCHEME_QUERY)
+  mediaQuery.addEventListener("change", notify)
+  return () => mediaQuery.removeEventListener("change", notify)
 }
 
 function disableTransitionsTemporarily() {
@@ -94,40 +101,17 @@ export function ThemeProvider({
     [storageKey],
   )
 
-  const applyTheme = React.useCallback(
-    (nextTheme: Theme) => {
-      const root = document.documentElement
-      const resolvedTheme = nextTheme === "system" ? getSystemTheme() : nextTheme
-      const restoreTransitions = disableTransitionOnChange ? disableTransitionsTemporarily() : null
+  const systemTheme = React.useSyncExternalStore(subscribeToSystemTheme, getSystemTheme)
+  const resolvedTheme = theme === "system" ? systemTheme : theme
 
-      root.classList.remove("light", "dark")
-      root.classList.add(resolvedTheme)
-
-      if (restoreTransitions) {
-        restoreTransitions()
-      }
-    },
-    [disableTransitionOnChange],
-  )
-
-  React.useEffect(() => {
-    applyTheme(theme)
-
-    if (theme !== "system") {
-      return undefined
-    }
-
-    const mediaQuery = window.matchMedia(COLOR_SCHEME_QUERY)
-    const handleChange = () => {
-      applyTheme("system")
-    }
-
-    mediaQuery.addEventListener("change", handleChange)
-
-    return () => {
-      mediaQuery.removeEventListener("change", handleChange)
-    }
-  }, [theme, applyTheme])
+  React.useLayoutEffect(() => {
+    const root = document.documentElement
+    const restoreTransitions = disableTransitionOnChange ? disableTransitionsTemporarily() : null
+    root.classList.remove("light", "dark")
+    root.classList.add(resolvedTheme)
+    root.style.colorScheme = resolvedTheme
+    restoreTransitions?.()
+  }, [resolvedTheme, disableTransitionOnChange])
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -194,13 +178,7 @@ export function ThemeProvider({
     }
   }, [defaultTheme, storageKey])
 
-  const value = React.useMemo(
-    () => ({
-      theme,
-      setTheme,
-    }),
-    [theme, setTheme],
-  )
+  const value = React.useMemo(() => ({ theme, resolvedTheme, setTheme }), [theme, resolvedTheme, setTheme])
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>

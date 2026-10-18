@@ -9,6 +9,7 @@ import "./app.css"
 import { App } from "./App.tsx"
 import { ConfirmProvider } from "@/components/confirm"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { PromptProvider } from "@/components/prompt"
 import { ThemeProvider, useTheme } from "@/components/theme-provider.tsx"
 
 function ThemedToaster() {
@@ -27,9 +28,11 @@ createRoot(document.getElementById("root")!).render(
           highlighterOptions={{}}
         >
           <ConfirmProvider>
-            <ErrorBoundary>
-              <App />
-            </ErrorBoundary>
+            <PromptProvider>
+              <ErrorBoundary>
+                <App />
+              </ErrorBoundary>
+            </PromptProvider>
           </ConfirmProvider>
         </WorkerPoolContextProvider>
         <ThemedToaster />

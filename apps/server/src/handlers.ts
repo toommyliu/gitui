@@ -34,7 +34,7 @@ export const handlers = (repoRoots: ReadonlyArray<string>) =>
         OpenLog: ({ repo: id }) => repo.openLog(id),
         GetLogPage: ({ repo: id, logId, start, count }) => repo.logPage(id, logId, start, count),
         GetCommit: ({ repo: id, oid }) => repo.commit(id, oid),
-        GetDiff: ({ repo: id, target, path, from }) => repo.diff(id, target, path, from),
+        GetDiff: ({ repo: id, target, paths }) => repo.diff(id, target, paths),
         Stage: ({ repo: id, paths }) => repo.stage(id, paths),
         Unstage: ({ repo: id, paths }) => repo.unstage(id, paths),
         Discard: ({ repo: id, paths }) => repo.discard(id, paths),

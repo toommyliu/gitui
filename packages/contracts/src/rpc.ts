@@ -46,7 +46,7 @@ export class GitRpcs extends RpcGroup.make(
   }),
   Rpc.make("GetCommit", { payload: { repo: RepoId, oid: Oid }, success: CommitDetail, error: GitError }),
   Rpc.make("GetDiff", {
-    payload: { repo: RepoId, target: DiffTarget, path: RepoPath, from: Schema.NullOr(RepoPath) },
+    payload: { repo: RepoId, target: DiffTarget, paths: Schema.Array(RepoPath) },
     success: FileDiff,
     error: GitError,
   }),

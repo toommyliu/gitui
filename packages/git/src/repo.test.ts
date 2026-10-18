@@ -102,8 +102,12 @@ layer(Repo.layer.pipe(Layer.provide(NodeServices.layer)))("Repo", (it) => {
         { path: "img.bin", from: null, change: "added", additions: null, deletions: null },
         { path: "new.txt", from: "old.txt", change: "renamed", additions: 1, deletions: 0 },
       ])
-      const diff = yield* r.diff(id(repo.root), { _tag: "Commit", oid }, p("new.txt"), p("old.txt"))
-      expect(diff._tag === "Patch" && diff.patch.includes("+five")).toBe(true)
+      const diff = yield* r.diff(id(repo.root), { _tag: "Commit", oid }, [p("old.txt"), p("new.txt")])
+      expect(diff._tag === "Patch" && diff.patch.includes("rename from old.txt") && diff.patch.includes("+five")).toBe(
+        true,
+      )
+      const whole = yield* r.diff(id(repo.root), { _tag: "Commit", oid }, [])
+      expect(whole._tag === "Patch" && whole.patch.match(/^diff --git/gm)?.length).toBe(2)
     }),
   )
 })

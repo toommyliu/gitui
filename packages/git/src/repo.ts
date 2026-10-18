@@ -81,7 +81,7 @@ export class Repo extends Context.Service<
       count: number,
     ): Effect.Effect<ReadonlyArray<CommitRow>, GitError | LogExpired>
     commit(repo: RepoId, oid: Oid): Effect.Effect<CommitDetail, GitError>
-    diff(repo: RepoId, target: DiffTarget, path: RepoPath, from: RepoPath | null): Effect.Effect<FileDiff, GitError>
+    diff(repo: RepoId, target: DiffTarget, paths: ReadonlyArray<RepoPath>): Effect.Effect<FileDiff, GitError>
     stage(repo: RepoId, paths: ReadonlyArray<RepoPath>): Effect.Effect<void, GitError>
     unstage(repo: RepoId, paths: ReadonlyArray<RepoPath>): Effect.Effect<void, GitError>
     discard(repo: RepoId, paths: ReadonlyArray<RepoPath>): Effect.Effect<void, GitError>
@@ -233,22 +233,15 @@ export class Repo extends Context.Service<
         }
       }
 
-      const diff = Effect.fn("Repo.diff")(function* (
-        repo: RepoId,
-        target: DiffTarget,
-        path: RepoPath,
-        from: RepoPath | null,
-      ) {
-        const paths = from === null || from === path ? [path] : [from, path]
+      const diff = Effect.fn("Repo.diff")(function* (repo: RepoId, target: DiffTarget, paths: ReadonlyArray<RepoPath>) {
         const bytes = yield* git.run(repo, patchArgs(target, paths), {
           okExitCodes: target._tag === "Untracked" ? [1] : [],
         })
         if (bytes.length > MAX_PATCH_BYTES) return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
         const text = decoder.decode(bytes)
-        if (!text.includes("diff --git")) return { _tag: "Empty" } satisfies FileDiff
-        if (/^Binary files .* differ$/m.test(text) || text.includes("\nGIT binary patch\n")) {
-          return { _tag: "Binary" } satisfies FileDiff
-        }
+        const files = text.match(/^diff --git /gm)?.length ?? 0
+        if (files === 0) return { _tag: "Empty" } satisfies FileDiff
+        if (files === 1 && /^Binary files .* differ$/m.test(text)) return { _tag: "Binary" } satisfies FileDiff
         return { _tag: "Patch", patch: text } satisfies FileDiff
       })
 

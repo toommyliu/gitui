@@ -54,6 +54,7 @@ export const handlers = (repoRoots: ReadonlyArray<string>) =>
         Fetch: ({ repo: id }) => repo.fetch(id),
         Pull: ({ repo: id }) => repo.pull(id),
         Push: ({ repo: id }) => repo.push(id),
+        ForcePush: ({ repo: id, expected }) => repo.forcePush(id, expected),
         StashApply: ({ repo: id, oid, drop }) => repo.stashApply(id, oid, drop),
         StashDrop: ({ repo: id, oid }) => repo.stashDrop(id, oid),
       })

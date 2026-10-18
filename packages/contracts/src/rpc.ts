@@ -94,6 +94,7 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("Fetch", { payload: repo, error: GitError }),
   Rpc.make("Pull", { payload: repo, error: GitError }),
   Rpc.make("Push", { payload: repo, error: GitError }),
+  Rpc.make("ForcePush", { payload: { repo: RepoId, expected: Oid }, error: GitError }),
   Rpc.make("StashApply", { payload: { repo: RepoId, oid: Oid, drop: Schema.Boolean }, error: GitError }),
   Rpc.make("StashDrop", { payload: { repo: RepoId, oid: Oid }, error: GitError }),
 ) {}

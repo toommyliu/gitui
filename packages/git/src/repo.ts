@@ -108,6 +108,7 @@ export class Repo extends Context.Service<
     fetch(repo: RepoId): Effect.Effect<void, GitError>
     pull(repo: RepoId): Effect.Effect<void, GitError>
     push(repo: RepoId): Effect.Effect<void, GitError>
+    forcePush(repo: RepoId, expected: Oid): Effect.Effect<void, GitError>
     stashApply(repo: RepoId, oid: Oid, drop: boolean): Effect.Effect<void, GitError>
     stashDrop(repo: RepoId, oid: Oid): Effect.Effect<void, GitError>
   }
@@ -433,6 +434,25 @@ export class Repo extends Context.Service<
             })
           }
           yield* run(repo, ["push", "--set-upstream", remote.name, `refs/heads/${head.name}`])
+        }),
+        forcePush: Effect.fn("Repo.forcePush")(function* (repo, expected) {
+          const { head, upstream } = yield* status(repo)
+          if (head._tag !== "Branch" || upstream === null) {
+            return yield* new GitError({
+              args: ["push"],
+              exitCode: -1,
+              stderr: "Force push needs a branch with an upstream.",
+            })
+          }
+          const slash = upstream.name.indexOf("/")
+          const remote = upstream.name.slice(0, slash)
+          const remoteBranch = upstream.name.slice(slash + 1)
+          yield* run(repo, [
+            "push",
+            `--force-with-lease=refs/heads/${remoteBranch}:${expected}`,
+            remote,
+            `refs/heads/${head.name}:refs/heads/${remoteBranch}`,
+          ])
         }),
         stashApply: Effect.fn("Repo.stashApply")(function* (repo, oid, drop) {
           const ref = yield* stashIndex(repo, oid)

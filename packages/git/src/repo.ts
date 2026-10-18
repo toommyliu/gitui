@@ -293,6 +293,22 @@ export class Repo extends Context.Service<
         return `stash@{${index}}`
       })
 
+      const ensureMerged = Effect.fn("Repo.ensureMerged")(function* (repo: RepoId, name: string) {
+        const branch = `refs/heads/${name}`
+        const upstream = (yield* git.text(repo, ["rev-parse", "--verify", "-q", `${branch}@{upstream}`], {
+          okExitCodes: [1, 128],
+        })).trim()
+        const target = upstream === "" ? "HEAD" : upstream
+        const unmerged = Number((yield* git.text(repo, ["rev-list", "--count", `${target}..${branch}`])).trim())
+        if (unmerged > 0) {
+          return yield* new GitError({
+            args: ["branch", "-d", name],
+            exitCode: 1,
+            stderr: `${name} has ${unmerged} ${unmerged === 1 ? "commit" : "commits"} that ${upstream === "" ? "HEAD" : upstream} doesn't contain. Nothing was deleted.`,
+          })
+        }
+      })
+
       const removeWorktree = (repo: RepoId, path: string, force: boolean) =>
         run(repo, ["worktree", "remove", ...(force ? ["--force", "--force"] : []), path])
 
@@ -317,6 +333,7 @@ export class Repo extends Context.Service<
         createBranch: (repo, name, startPoint, checkout) =>
           run(repo, checkout ? ["switch", "-c", name, startPoint] : ["branch", name, startPoint]),
         deleteBranch: Effect.fn("Repo.deleteBranch")(function* (repo, name, force, alsoRemoveWorktree) {
+          if (!force) yield* ensureMerged(repo, name)
           if (alsoRemoveWorktree) {
             const worktrees = parseWorktrees(yield* git.run(repo, worktreeArgs))
             for (const worktree of worktrees) {

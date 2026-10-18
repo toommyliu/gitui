@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
@@ -6,7 +7,7 @@ import type { Oid, RepoId, RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import { Repo } from "./repo.ts"
-import { makeRepo } from "./testRepo.ts"
+import { fixtureEnv, makeRepo } from "./testRepo.ts"
 
 const id = (root: string) => root as RepoId
 const p = (path: string) => path as RepoPath
@@ -91,6 +92,22 @@ layer(Repo.layer.pipe(Layer.provide(NodeServices.layer)))("Repo", (it) => {
       yield* (yield* Repo).deleteBranch(id(repo.root), "agent", false, true)
       expect(existsSync(linked)).toBe(false)
       expect(repo.git("branch", "--list", "agent")).toBe("")
+    }),
+  )
+
+  it.effect("refuses to delete an unmerged branch without touching its worktree", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.commit("base")
+      const linked = `${repo.root}-wip`
+      repo.git("worktree", "add", "-q", "-b", "wip", linked)
+      execFileSync("git", ["commit", "-q", "--allow-empty", "-m", "unmerged"], { cwd: linked, env: fixtureEnv() })
+      repo.write(`../${linked.split("/").pop()}/dirty.txt`, "keep me\n")
+
+      const result = yield* Effect.flip((yield* Repo).deleteBranch(id(repo.root), "wip", false, true))
+      expect(result.stderr).toBe("wip has 1 commit that HEAD doesn't contain. Nothing was deleted.")
+      expect(readFileSync(join(linked, "dirty.txt"), "utf8")).toBe("keep me\n")
+      expect(repo.git("branch", "--list", "wip")).toBe("+ wip")
     }),
   )
 

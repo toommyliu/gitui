@@ -2,6 +2,7 @@ import { RegistryContext, useAtomValue } from "@effect/atom-react"
 import type { CommitRow, Head, Oid, Refs, RepoId, Status } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Badge } from "@/components/ui/badge"
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "cn"
@@ -10,6 +11,7 @@ import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } f
 import { shortDate, shortOid } from "@/lib/format"
 import { LOG_PAGE_SIZE, latest, logAtom, logPageAtom, logPageKey, refsAtom, statusAtom } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
+import { CommitMenuItems } from "./commit-menu"
 import { GraphCell, LANE_WIDTH, ROW_HEIGHT, VISIBLE_LANES, lanesUsed } from "./graph"
 
 export type RefLabel = { readonly kind: "head" | "branch" | "remote" | "tag"; readonly name: string }
@@ -218,32 +220,39 @@ const CommitRowView = memo(function CommitRowView({
   }
   const selected = row.oid === selectedOid
   return (
-    <button
-      type="button"
-      role="option"
-      aria-selected={selected}
-      onClick={() => onSelect({ _tag: "Commit", oid: row.oid })}
-      className={cn(
-        "flex h-full w-full items-center gap-2 overflow-hidden px-2 text-left",
-        selected ? "bg-accent" : "hover:bg-muted/60",
-      )}
-    >
-      <span className="-my-px flex shrink-0 overflow-hidden" style={{ width: graphWidth }}>
-        <GraphCell row={row.graph} width={graphWidth} merge={row.parents.length > 1} head={row.oid === headOid} />
-      </span>
-      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        {labels.get(row.oid)?.map((label) => (
-          <RefBadge key={`${label.kind}:${label.name}`} label={label} />
-        ))}
-        <span className={cn("truncate", row.parents.length > 1 && "text-muted-foreground")}>{row.subject}</span>
-      </span>
-      <span className="hidden w-28 shrink-0 truncate text-muted-foreground @xl:block">{row.author}</span>
-      <span className="hidden w-24 shrink-0 truncate text-right text-muted-foreground @md:block">
-        {shortDate(row.time)}
-      </span>
-      <span className="hidden w-14 shrink-0 font-mono text-[11px] text-muted-foreground @3xl:block">
-        {shortOid(row.oid)}
-      </span>
-    </button>
+    <ContextMenu>
+      <ContextMenuTrigger className="block h-full">
+        <button
+          type="button"
+          role="option"
+          aria-selected={selected}
+          onClick={() => onSelect({ _tag: "Commit", oid: row.oid })}
+          className={cn(
+            "flex h-full w-full items-center gap-2 overflow-hidden px-2 text-left",
+            selected ? "bg-accent" : "hover:bg-muted/60",
+          )}
+        >
+          <span className="-my-px flex shrink-0 overflow-hidden" style={{ width: graphWidth }}>
+            <GraphCell row={row.graph} width={graphWidth} merge={row.parents.length > 1} head={row.oid === headOid} />
+          </span>
+          <span className="flex min-w-0 flex-1 items-center gap-1.5">
+            {labels.get(row.oid)?.map((label) => (
+              <RefBadge key={`${label.kind}:${label.name}`} label={label} />
+            ))}
+            <span className={cn("truncate", row.parents.length > 1 && "text-muted-foreground")}>{row.subject}</span>
+          </span>
+          <span className="hidden w-28 shrink-0 truncate text-muted-foreground @xl:block">{row.author}</span>
+          <span className="hidden w-24 shrink-0 truncate text-right text-muted-foreground @md:block">
+            {shortDate(row.time)}
+          </span>
+          <span className="hidden w-14 shrink-0 font-mono text-[11px] text-muted-foreground @3xl:block">
+            {shortOid(row.oid)}
+          </span>
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <CommitMenuItems repo={repo} row={row} />
+      </ContextMenuContent>
+    </ContextMenu>
   )
 })

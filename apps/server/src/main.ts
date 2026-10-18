@@ -26,7 +26,9 @@ const Rpc = RpcServer.layerHttp({ group: GitRpcs, path: "/rpc", protocol: "webso
 const Static = existsSync(webDist) ? HttpStaticServer.layer({ root: webDist, spa: true }) : Layer.empty
 
 HttpRouter.serve(Layer.mergeAll(Rpc, Static)).pipe(
-  Layer.provide(NodeHttpServer.layer(createServer, { port, host })),
+  Layer.provide(
+    NodeHttpServer.layer(createServer, { port, host, websocket: { perMessageDeflate: { threshold: 1024 } } }),
+  ),
   Layer.launch,
   NodeRuntime.runMain,
 )

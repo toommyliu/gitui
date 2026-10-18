@@ -1,9 +1,17 @@
 import { useAtomValue } from "@effect/atom-react"
-import type { RepoPath } from "@gitui/contracts"
-import { type CodeViewDiffItem, type CodeViewLineSelection, type SelectionSide, parsePatchFiles } from "@pierre/diffs"
+import type { FileChange, RepoPath } from "@gitui/contracts"
+import {
+  type ChangeTypes,
+  type CodeViewDiffItem,
+  type CodeViewLineSelection,
+  type FileDiffMetadata,
+  type SelectionSide,
+  parsePatchFiles,
+} from "@pierre/diffs"
 import { CodeView, type CodeViewHandle } from "@pierre/diffs/react"
 import { type ReactNode, type Ref, useCallback, useLayoutEffect, useMemo, useRef } from "react"
 import { settingsAtom } from "@/lib/settings"
+import { ChangeLetter } from "./change-letter"
 import { useTheme } from "./theme-provider"
 
 const hash = (text: string) => {
@@ -11,9 +19,6 @@ const hash = (text: string) => {
   for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0
   return h >>> 0
 }
-
-// Pierre truncates header paths with direction: rtl; the marks keep a leading "." of a dotfile path in place.
-const headerCSS = `[data-title]::before,[data-title]::after,[data-prev-name]::before,[data-prev-name]::after{content:"\\200E"}`
 
 export interface DiffItemMeta {
   readonly section: string
@@ -88,6 +93,46 @@ export function GutterButton({
   )
 }
 
+const changeOf: Record<ChangeTypes, FileChange["change"]> = {
+  new: "added",
+  deleted: "deleted",
+  change: "modified",
+  "rename-pure": "renamed",
+  "rename-changed": "renamed",
+}
+
+const scrollToEnd = (node: HTMLDivElement | null) => {
+  if (node !== null) node.scrollLeft = node.scrollWidth
+}
+
+function FileHeader({ fileDiff, actions }: { fileDiff: FileDiffMetadata; actions: ReactNode }) {
+  let additions = 0
+  let deletions = 0
+  for (const hunk of fileDiff.hunks) {
+    additions += hunk.additionLines
+    deletions += hunk.deletionLines
+  }
+  return (
+    <div className="flex h-11 items-center gap-2 bg-background px-3">
+      <ChangeLetter change={changeOf[fileDiff.type]} />
+      <div
+        ref={scrollToEnd}
+        className="min-w-0 flex-1 [scrollbar-width:none] overflow-x-auto font-medium whitespace-nowrap"
+      >
+        {fileDiff.prevName !== undefined && fileDiff.prevName !== fileDiff.name && (
+          <span className="text-muted-foreground">{fileDiff.prevName} → </span>
+        )}
+        {fileDiff.name}
+      </div>
+      <span className="shrink-0 font-mono text-[11px] tabular-nums">
+        {deletions > 0 && <span className="text-destructive">-{deletions} </span>}
+        {additions > 0 && <span className="text-[var(--lane-1)]">+{additions}</span>}
+      </span>
+      {actions}
+    </div>
+  )
+}
+
 export function DiffStack({
   items,
   header,
@@ -114,7 +159,6 @@ export function DiffStack({
       lineDiffType: "word" as const,
       enableLineSelection: selectable,
       enableGutterUtility: selectable,
-      unsafeCSS: headerCSS,
     }),
     [resolvedTheme, diffStyle, wrapLines, selectable],
   )
@@ -125,7 +169,9 @@ export function DiffStack({
       options={options}
       className="h-full overflow-auto overscroll-contain"
       {...(header === undefined ? {} : { renderCodeViewHeader: header })}
-      {...(actions === undefined ? {} : { renderHeaderMetadata: (item) => actions(itemMeta(item.id)) })}
+      renderCustomHeader={(item) =>
+        item.type === "diff" ? <FileHeader fileDiff={item.fileDiff} actions={actions?.(itemMeta(item.id))} /> : null
+      }
       {...(lines === undefined
         ? {}
         : {

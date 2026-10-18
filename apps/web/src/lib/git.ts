@@ -27,8 +27,9 @@ import * as RpcClient from "effect/rpc/RpcClient"
 import type { RpcClientError } from "effect/rpc/RpcClientError"
 import * as RpcSerialization from "effect/rpc/RpcSerialization"
 import { toast } from "sonner"
+import { desktop } from "./desktop"
 
-const socketUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/rpc`
+const socketUrl = desktop?.rpcUrl ?? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/rpc`
 
 export type Connection = "connecting" | "connected" | "disconnected"
 

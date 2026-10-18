@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react"
 import { Badge } from "@/components/ui/badge"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { useState } from "react"
+import { desktop } from "@/lib/desktop"
 import { latest, reposAtom } from "@/lib/git"
 
 export function RepoPicker({
@@ -26,6 +27,21 @@ export function RepoPicker({
         />
         <CommandList className="max-h-[calc(100svh-8rem)]">
           <CommandEmpty>No repositories match.</CommandEmpty>
+          {desktop !== undefined && (
+            <CommandGroup>
+              <CommandItem
+                value="choose a folder"
+                forceMount
+                onSelect={() =>
+                  void desktop?.pickFolder().then((folder) => {
+                    if (folder !== null) onOpen(folder)
+                  })
+                }
+              >
+                Choose a folder…
+              </CommandItem>
+            </CommandGroup>
+          )}
           {path.startsWith("/") && (
             <CommandGroup heading="Path">
               <CommandItem value={`open ${path}`} forceMount onSelect={() => onOpen(path)}>

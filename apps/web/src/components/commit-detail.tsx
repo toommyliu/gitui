@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react"
 import type { CommitDetail as Detail, FileChange, Oid, RepoId } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { usePanelRef } from "react-resizable-panels"
@@ -141,6 +142,28 @@ export function HistoryButton({ onClick }: { onClick: () => void }) {
   )
 }
 
+function SectionBar({
+  label,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string
+  open: boolean
+  onToggle: () => void
+  children?: ReactNode
+}) {
+  return (
+    <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/40 px-2">
+      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</span>
+      <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-muted-foreground">{children}</span>
+      <Button size="xs" variant="ghost" onClick={onToggle}>
+        {open ? "Hide" : "Show"}
+      </Button>
+    </div>
+  )
+}
+
 function LargeCommit({
   repo,
   detail,
@@ -153,7 +176,8 @@ function LargeCommit({
   onHistory: (path: string) => void
 }) {
   const [open, setOpen] = useState<FileChange | null>(null)
-  const [filesHidden, setFilesHidden] = useState(false)
+  const [detailsShown, setDetailsShown] = useState(true)
+  const [filesShown, setFilesShown] = useState(true)
   const files = usePanelRef()
   const narrow = useNarrow()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -164,21 +188,34 @@ function LargeCommit({
     overscan: 20,
   })
   return (
-    <ResizablePanelGroup orientation="vertical">
-      <ResizablePanel
-        defaultSize="60%"
-        minSize="15%"
-        collapsible
-        panelRef={files}
-        onResize={(size) => setFilesHidden(size.asPercentage === 0)}
+    <div className="flex h-full flex-col">
+      <SectionBar label="Details" open={detailsShown} onToggle={() => setDetailsShown(!detailsShown)}>
+        {!detailsShown && (
+          <>
+            <span className="font-mono">{shortOid(detail.oid)}</span>
+            <span className="truncate text-foreground">{detail.message.split("\n", 1)[0]}</span>
+          </>
+        )}
+      </SectionBar>
+      {detailsShown && <div className="max-h-[40%] shrink-0 overflow-auto border-b [&>*]:border-b-0">{summary}</div>}
+      <SectionBar
+        label="Files"
+        open={filesShown}
+        onToggle={() => (filesShown ? files.current?.collapse() : files.current?.expand())}
       >
-        <div className="flex h-full flex-col">
-          <div className="max-h-[40%] shrink-0 overflow-auto border-b [&>*]:border-b-0">{summary}</div>
-          <ScrollArea
-            className="min-h-0 flex-1"
-            viewportRef={scrollRef}
-            viewportProps={{ className: "[contain:strict]" }}
-          >
+        <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
+          {detail.files.length.toLocaleString()}
+        </Badge>
+      </SectionBar>
+      <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
+        <ResizablePanel
+          defaultSize="45%"
+          minSize="10%"
+          collapsible
+          panelRef={files}
+          onResize={(size) => setFilesShown(size.asPercentage > 0)}
+        >
+          <ScrollArea className="h-full" viewportRef={scrollRef} viewportProps={{ className: "[contain:strict]" }}>
             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
               {virtualizer.getVirtualItems().map((item) => {
                 const file = detail.files[item.index]!
@@ -203,33 +240,17 @@ function LargeCommit({
               })}
             </div>
           </ScrollArea>
-        </div>
-      </ResizablePanel>
-      <ResizableHandle />
-      <ResizablePanel minSize="20%">
-        <div className="flex h-full flex-col">
-          <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2">
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() => (filesHidden ? files.current?.expand() : files.current?.collapse())}
-            >
-              {filesHidden ? "Show files" : "Hide files"}
-            </Button>
-            <span className="truncate text-muted-foreground tabular-nums">
-              {detail.files.length.toLocaleString()} files
-            </span>
-          </div>
-          <div className="min-h-0 flex-1">
-            {open === null ? (
-              <Nothing title="Too large to show at once" description="Pick a file to see its diff." />
-            ) : (
-              <SingleFileDiff key={open.path} repo={repo} oid={detail.oid} file={open} onHistory={onHistory} />
-            )}
-          </div>
-        </div>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+        </ResizablePanel>
+        <ResizableHandle />
+        <ResizablePanel minSize="20%">
+          {open === null ? (
+            <Nothing title="Too large to show at once" description="Pick a file to see its diff." />
+          ) : (
+            <SingleFileDiff key={open.path} repo={repo} oid={detail.oid} file={open} onHistory={onHistory} />
+          )}
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
   )
 }
 

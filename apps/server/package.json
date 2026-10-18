@@ -3,10 +3,14 @@
   "version": "0.0.0",
   "type": "module",
   "private": true,
+  "exports": {
+    "./server": "./src/server.ts"
+  },
   "scripts": {
     "dev": "node --watch src/main.ts",
     "start": "node src/main.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@gitui/contracts": "workspace:*",
@@ -15,6 +19,8 @@
     "effect": "4.0.4"
   },
   "devDependencies": {
-    "@types/node": "^24"
+    "@types/node": "^24",
+    "@effect/vitest": "4.0.4",
+    "vitest": "^5.0.4"
   }
 }

@@ -8,4 +8,5 @@ serverLayer({
   port: Number(process.env.PORT ?? 4600),
   repoRoots: (process.env.REPO_ROOTS ?? "").split(":").filter((root) => root !== ""),
   webDist: resolve(import.meta.dirname, "../../web/dist"),
+  trustedOrigins: [],
 }).pipe(Layer.launch, NodeRuntime.runMain)

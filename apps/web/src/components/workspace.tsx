@@ -6,7 +6,7 @@ import { useState } from "react"
 import { pathQuery, watchAtom } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
-import { CommandLogSheet } from "./command-log"
+import { CommandLogDrawer } from "./command-log"
 import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
 import { Sidebar } from "./sidebar"
@@ -46,39 +46,40 @@ export function Workspace({ repo }: { repo: RepoId }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <Toolbar repo={repo} />
-      <CommandLogSheet repo={repo} />
-      {narrow ? (
-        <Tabs value={pane} onValueChange={(value: Pane) => setPane(value)} className="min-h-0 flex-1 gap-0">
-          <TabsList variant="line" className="h-9 w-full shrink-0 rounded-none border-b p-0">
-            {(Object.keys(paneLabels) as Array<Pane>).map((p) => (
-              <TabsTrigger key={p} value={p} className="h-full rounded-none">
-                {paneLabels[p]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <TabsContent value="locations" className="min-h-0">
-            {sidebar}
-          </TabsContent>
-          <TabsContent value="history" className="min-h-0">
-            {history}
-          </TabsContent>
-          <TabsContent value="detail" className="min-h-0">
-            {detail}
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-          <ResizablePanel defaultSize="18%" minSize="10%">
-            {sidebar}
-          </ResizablePanel>
-          <ResizableHandle />
-          <ResizablePanel defaultSize="38%" minSize="20%">
-            {history}
-          </ResizablePanel>
-          <ResizableHandle />
-          <ResizablePanel minSize="25%">{detail}</ResizablePanel>
-        </ResizablePanelGroup>
-      )}
+      <CommandLogDrawer repo={repo}>
+        {narrow ? (
+          <Tabs value={pane} onValueChange={(value: Pane) => setPane(value)} className="h-full gap-0">
+            <TabsList variant="line" className="h-9 w-full shrink-0 rounded-none border-b p-0">
+              {(Object.keys(paneLabels) as Array<Pane>).map((p) => (
+                <TabsTrigger key={p} value={p} className="h-full rounded-none">
+                  {paneLabels[p]}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <TabsContent value="locations" className="min-h-0">
+              {sidebar}
+            </TabsContent>
+            <TabsContent value="history" className="min-h-0">
+              {history}
+            </TabsContent>
+            <TabsContent value="detail" className="min-h-0">
+              {detail}
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <ResizablePanelGroup orientation="horizontal">
+            <ResizablePanel defaultSize="18%" minSize="10%">
+              {sidebar}
+            </ResizablePanel>
+            <ResizableHandle />
+            <ResizablePanel defaultSize="38%" minSize="20%">
+              {history}
+            </ResizablePanel>
+            <ResizableHandle />
+            <ResizablePanel minSize="25%">{detail}</ResizablePanel>
+          </ResizablePanelGroup>
+        )}
+      </CommandLogDrawer>
     </div>
   )
 }

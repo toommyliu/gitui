@@ -65,8 +65,8 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
         )
         expect(running(marker)).toBe(false)
 
-        const [entries = []] = yield* (yield* CommandLog).entries.pipe(Stream.take(1), Stream.runCollect)
-        const fetch = entries.findLast((entry) => entry.cwd === repo.root && entry.args.includes("fetch"))
+        const [entries = []] = yield* (yield* CommandLog).entries(repo.root).pipe(Stream.take(1), Stream.runCollect)
+        const fetch = entries.findLast((entry) => entry.args.includes("fetch"))
         expect(fetch?.outcome).toEqual({ _tag: "Cancelled" })
       }),
     )

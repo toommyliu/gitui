@@ -7,10 +7,12 @@ function ScrollArea({
   children,
   viewportRef,
   viewportProps,
+  markers,
   ...props
 }: ScrollAreaPrimitive.Root.Props & {
   viewportRef?: React.Ref<HTMLDivElement>
   viewportProps?: Omit<ScrollAreaPrimitive.Viewport.Props, "ref">
+  markers?: React.ReactNode
 }) {
   return (
     <ScrollAreaPrimitive.Root data-slot="scroll-area" className={cn("relative", className)} {...props}>
@@ -25,13 +27,13 @@ function ScrollArea({
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
+      <ScrollBar>{markers}</ScrollBar>
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )
 }
 
-function ScrollBar({ className, orientation = "vertical", ...props }: ScrollAreaPrimitive.Scrollbar.Props) {
+function ScrollBar({ className, orientation = "vertical", children, ...props }: ScrollAreaPrimitive.Scrollbar.Props) {
   return (
     <ScrollAreaPrimitive.Scrollbar
       data-slot="scroll-area-scrollbar"
@@ -44,6 +46,7 @@ function ScrollBar({ className, orientation = "vertical", ...props }: ScrollArea
       {...props}
     >
       <ScrollAreaPrimitive.Thumb data-slot="scroll-area-thumb" className="relative flex-1 rounded-full bg-border" />
+      {children}
     </ScrollAreaPrimitive.Scrollbar>
   )
 }

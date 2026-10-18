@@ -153,11 +153,11 @@ export type CommitRows = ReadonlyArray<CommitRow>
 
 export const COMMAND_LOG_LIMIT = 2000
 
-export const commandLogAtom = GitClient.runtime
-  .atom(
+export const commandLogAtom = Atom.family((repo: RepoId) =>
+  GitClient.runtime.atom(
     Effect.gen(function* () {
       const client = yield* GitClient
-      return client("CommandLog", undefined)
+      return client("CommandLog", { repo })
     }).pipe(
       Stream.unwrap,
       Stream.scan(
@@ -169,19 +169,15 @@ export const commandLogAtom = GitClient.runtime
       ),
       Stream.retry(Schedule.spaced("1 second")),
     ),
-  )
-  .pipe(Atom.keepAlive)
-
-export type LogFilter = "all" | "writes" | "failures"
+  ),
+)
 
 export const isFailure = (entry: CommandEntry) =>
   entry.outcome._tag === "SpawnFailed" || (entry.outcome._tag === "Exited" && !entry.outcome.accepted)
 
-export const logViewAtom = Atom.make<{ readonly open: boolean; readonly filter: LogFilter; readonly seenId: number }>({
-  open: false,
-  filter: "all",
-  seenId: 0,
-}).pipe(Atom.keepAlive)
+export const logOpenAtom = Atom.make(false).pipe(Atom.keepAlive)
+
+export const logSeenAtom = Atom.family((_repo: RepoId) => Atom.make(0).pipe(Atom.keepAlive))
 
 type Client = GitClient["Service"]
 type ActionError = GitError | RpcClientError
@@ -202,11 +198,11 @@ const actionAtom = GitClient.runtime.fn(
 )
 
 const useFailureToast = () => {
-  const setLogView = useAtomSet(logViewAtom)
+  const setLogOpen = useAtomSet(logOpenAtom)
   return (label: string, cause: Cause.Cause<ActionError>) =>
     toast.error(`${label} failed`, {
       description: describeFailure(cause),
-      action: { label: "Show log", onClick: () => setLogView((view) => ({ ...view, open: true, filter: "failures" })) },
+      action: { label: "Show log", onClick: () => setLogOpen(true) },
     })
 }
 

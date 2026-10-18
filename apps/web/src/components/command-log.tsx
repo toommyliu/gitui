@@ -3,16 +3,13 @@ import type { CommandEntry, RepoId } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { Switch } from "@/components/ui/switch"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "cn"
-import { useEffect, useMemo, useState } from "react"
+import { ChevronUpIcon } from "lucide-react"
+import { type ReactNode, useEffect, useMemo, useState } from "react"
 import { copyText } from "@/lib/clipboard"
-import { basename } from "@/lib/format"
-import { commandLogAtom, isFailure, latest, type LogFilter, logViewAtom } from "@/lib/git"
+import { commandLogAtom, isFailure, latest, logOpenAtom, logSeenAtom } from "@/lib/git"
 import { Nothing } from "./loading"
 
 const ROW = 26
@@ -50,12 +47,6 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-const filters: ReadonlyArray<readonly [LogFilter, string]> = [
-  ["all", "All"],
-  ["writes", "Writes"],
-  ["failures", "Failures"],
-]
-
 function Outcome({ entry }: { entry: CommandEntry }) {
   const { outcome } = entry
   switch (outcome._tag) {
@@ -86,27 +77,69 @@ function Outcome({ entry }: { entry: CommandEntry }) {
   }
 }
 
-export function CommandLogSheet({ repo }: { repo: RepoId }) {
-  const [view, setView] = useAtom(logViewAtom)
-  const log = latest(useAtomValue(commandLogAtom))
+export function CommandLogDrawer({ repo, children }: { repo: RepoId; children: ReactNode }) {
+  const [open, setOpen] = useAtom(logOpenAtom)
+  const [seenId, setSeenId] = useAtom(logSeenAtom(repo))
+  const log = latest(useAtomValue(commandLogAtom(repo)))
   const entries = log ?? []
-  const [repoOnly, setRepoOnly] = useState(true)
-  const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set())
+  const rows = useMemo(() => (log ?? []).toReversed(), [log])
 
-  const rows = useMemo(() => {
-    const matches = (log ?? []).filter(
-      (entry) =>
-        (!repoOnly || entry.cwd === repo) &&
-        (view.filter === "all" || (view.filter === "writes" ? entry.kind === "write" : isFailure(entry))),
-    )
-    return matches.reverse()
-  }, [log, repoOnly, repo, view.filter])
-
-  const lastId = log?.at(-1)?.id ?? 0
+  const lastId = entries.at(-1)?.id ?? 0
   useEffect(() => {
-    if (view.open && lastId > view.seenId) setView((current) => ({ ...current, seenId: lastId }))
-  }, [view.open, view.seenId, lastId, setView])
+    if (open && lastId > seenId) setSeenId(lastId)
+  }, [open, seenId, lastId, setSeenId])
 
+  const unseen = entries.filter((entry) => entry.id > seenId && isFailure(entry)).length
+
+  const bar = (
+    <div className={cn("flex h-8 shrink-0 items-center gap-2 px-1.5", open ? "border-b" : "border-t")}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="group/log flex h-6 shrink-0 items-center gap-1.5 rounded-sm px-1.5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+      >
+        <ChevronUpIcon
+          className={cn(
+            "size-3 text-muted-foreground transition-transform group-hover/log:text-foreground",
+            open && "rotate-180",
+          )}
+        />
+        Command log
+        {unseen > 0 && (
+          <Badge variant="destructive" className="h-4 rounded-sm px-1 tabular-nums">
+            {unseen}
+          </Badge>
+        )}
+      </button>
+    </div>
+  )
+
+  return (
+    <>
+      <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
+        <ResizablePanel id="main" minSize="30%">
+          {children}
+        </ResizablePanel>
+        {open && (
+          <>
+            <ResizableHandle />
+            <ResizablePanel id="log" defaultSize="35%" minSize={120}>
+              <div className="flex h-full flex-col">
+                {bar}
+                <LogRows rows={rows} />
+              </div>
+            </ResizablePanel>
+          </>
+        )}
+      </ResizablePanelGroup>
+      {!open && bar}
+    </>
+  )
+}
+
+function LogRows({ rows }: { rows: ReadonlyArray<CommandEntry> }) {
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set())
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null)
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -123,107 +156,107 @@ export function CommandLogSheet({ repo }: { repo: RepoId }) {
       return next
     })
 
+  const total = virtualizer.getTotalSize()
+
+  const jump = (index: number, id: number) => {
+    setExpanded((current) => new Set(current).add(id))
+    virtualizer.scrollToIndex(index, { align: "center" })
+  }
+
+  if (rows.length === 0) {
+    return <Nothing title="Nothing logged" description="Git commands for this repository appear here as they run." />
+  }
+
   return (
-    <Sheet open={view.open} onOpenChange={(open: boolean) => setView((current) => ({ ...current, open }))}>
-      <SheetContent side="right" className="w-full gap-0 p-0 data-[side=right]:sm:max-w-2xl">
-        <SheetHeader className="border-b">
-          <SheetTitle>Command log</SheetTitle>
-          <SheetDescription>
-            Every git command the server ran, newest first. Reads refresh status and history; writes change the
-            repository.
-          </SheetDescription>
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <ToggleGroup
-              aria-label="Show"
-              variant="outline"
-              size="sm"
-              spacing={0}
-              value={[view.filter]}
-              onValueChange={(next: Array<string>) => {
-                const picked = filters.find(([value]) => value === next[0])
-                if (picked !== undefined) setView((current) => ({ ...current, filter: picked[0] }))
-              }}
+    <ScrollArea
+      className="min-h-0 flex-1"
+      viewportRef={setScrollElement}
+      viewportProps={{ className: "data-has-overflow-y:pr-3" }}
+      markers={rows.flatMap((entry, index) => {
+        const item = virtualizer.measurementsCache[index]
+        const failed = isFailure(entry)
+        if (item === undefined || (!failed && entry.kind !== "write")) return []
+        return (
+          <button
+            key={entry.id}
+            type="button"
+            tabIndex={-1}
+            title={shortCommand(entry)}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => jump(index, entry.id)}
+            className={cn(
+              "group/marker absolute inset-x-0 flex min-h-2 -translate-y-1/2 items-center px-px",
+              failed && "z-10",
+            )}
+            style={{
+              top: `${((item.start + item.size / 2) / total) * 100}%`,
+              height: `${(item.size / total) * 100}%`,
+            }}
+          >
+            <span
+              className={cn(
+                "h-0.5 w-full rounded-full group-hover/marker:h-1",
+                failed ? "bg-destructive" : "bg-muted-foreground/60",
+              )}
+            />
+          </button>
+        )
+      })}
+    >
+      <div className="relative w-full" style={{ height: total }}>
+        {virtualizer.getVirtualItems().map((item) => {
+          const entry = rows[item.index]!
+          const open = expanded.has(entry.id)
+          return (
+            <div
+              key={item.key}
+              data-index={item.index}
+              ref={virtualizer.measureElement}
+              className={cn("absolute top-0 left-0 w-full border-b", open && "bg-muted/40")}
+              style={{ transform: `translateY(${item.start}px)` }}
             >
-              {filters.map(([value, label]) => (
-                <ToggleGroupItem key={value} value={value}>
-                  {label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            <Field orientation="horizontal" className="w-auto">
-              <Switch id="log-repo-only" checked={repoOnly} onCheckedChange={setRepoOnly} />
-              <FieldLabel htmlFor="log-repo-only" className="font-normal">
-                Only {basename(repo)}
-              </FieldLabel>
-            </Field>
-            <span className="ml-auto text-muted-foreground tabular-nums">
-              {rows.length} of {entries.length}
-            </span>
-          </div>
-        </SheetHeader>
-        {rows.length === 0 ? (
-          <Nothing title="Nothing logged" description="Commands appear here as soon as the server runs them." />
-        ) : (
-          <ScrollArea className="min-h-0 flex-1" viewportRef={setScrollElement}>
-            <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-              {virtualizer.getVirtualItems().map((item) => {
-                const entry = rows[item.index]!
-                const open = expanded.has(entry.id)
-                return (
-                  <div
-                    key={item.key}
-                    data-index={item.index}
-                    ref={virtualizer.measureElement}
-                    className={cn("absolute top-0 left-0 w-full border-b", open && "bg-muted/40")}
-                    style={{ transform: `translateY(${item.start}px)` }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => toggle(entry.id)}
-                      aria-expanded={open}
-                      className="flex w-full items-center gap-2 px-3 text-left hover:bg-muted/60"
-                      style={{ height: ROW }}
-                    >
-                      <span className="shrink-0 text-muted-foreground tabular-nums">
-                        {clock.format(entry.startedAt)}
-                      </span>
-                      <Outcome entry={entry} />
-                      {entry.kind === "write" && (
-                        <Badge variant="outline" className="h-4 rounded-sm px-1">
-                          write
-                        </Badge>
+              <button
+                type="button"
+                onClick={() => toggle(entry.id)}
+                aria-expanded={open}
+                className="flex w-full items-center gap-2 px-3 text-left hover:bg-muted/60"
+                style={{ height: ROW }}
+              >
+                <span className="shrink-0 text-muted-foreground tabular-nums">{clock.format(entry.startedAt)}</span>
+                <Outcome entry={entry} />
+                {entry.kind === "write" && (
+                  <Badge variant="outline" className="h-4 rounded-sm px-1">
+                    write
+                  </Badge>
+                )}
+                <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{shortCommand(entry)}</span>
+                <span className="shrink-0 text-muted-foreground tabular-nums">{duration(entry.durationMs)}</span>
+              </button>
+              {open && (
+                <div className="space-y-2 px-3 pt-1 pb-3">
+                  <pre className="font-mono text-[11px] break-all whitespace-pre-wrap">{fullCommand(entry)}</pre>
+                  {entry.outcome._tag === "SpawnFailed" && (
+                    <pre className="font-mono text-[11px] whitespace-pre-wrap text-destructive">
+                      {entry.outcome.message}
+                    </pre>
+                  )}
+                  {entry.stderr !== "" && (
+                    <pre
+                      className={cn(
+                        "max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap",
+                        isFailure(entry) && "text-destructive",
                       )}
-                      <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{shortCommand(entry)}</span>
-                      <span className="shrink-0 text-muted-foreground tabular-nums">{duration(entry.durationMs)}</span>
-                    </button>
-                    {open && (
-                      <div className="space-y-2 px-3 pt-1 pb-3">
-                        <pre className="font-mono text-[11px] break-all whitespace-pre-wrap">{fullCommand(entry)}</pre>
-                        {entry.outcome._tag === "SpawnFailed" && (
-                          <pre className="font-mono text-[11px] whitespace-pre-wrap text-destructive">
-                            {entry.outcome.message}
-                          </pre>
-                        )}
-                        {entry.stderr !== "" && (
-                          <pre
-                            className={cn(
-                              "max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap",
-                              isFailure(entry) && "text-destructive",
-                            )}
-                          >
-                            {entry.stderr}
-                          </pre>
-                        )}
-                        <CopyButton text={fullCommand(entry)} />
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                    >
+                      {entry.stderr}
+                    </pre>
+                  )}
+                  <CopyButton text={fullCommand(entry)} />
+                </div>
+              )}
             </div>
-          </ScrollArea>
-        )}
-      </SheetContent>
-    </Sheet>
+          )
+        })}
+      </div>
+    </ScrollArea>
   )
 }

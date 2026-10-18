@@ -11,7 +11,7 @@ export const handlers = GitRpcs.toLayer(
     const commandLog = yield* CommandLog
     return GitRpcs.of({
       ListDirectory: ({ path }) => listDirectory(path),
-      CommandLog: () => commandLog.entries,
+      CommandLog: ({ repo: id }) => commandLog.entries(id),
       OpenRepo: ({ path }) => repo.open(path),
       WatchRepo: ({ repo: id }) =>
         repo.open(id).pipe(

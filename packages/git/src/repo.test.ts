@@ -146,19 +146,20 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       const repo = makeRepo()
       repo.commit("base")
       repo.write("a.txt", "a\n")
+      const other = makeRepo()
+      other.commit("base")
       const r = yield* Repo
       yield* r.stage(id(repo.root), [p("a.txt")])
+      yield* r.checkout(id(other.root), "main")
       yield* Effect.flip(r.checkout(id(repo.root), "missing"))
 
-      const [entries = []] = yield* (yield* CommandLog).entries.pipe(Stream.take(1), Stream.runCollect)
-      const mine = entries
-        .filter((entry) => entry.cwd === repo.root)
-        .map((entry) => ({
-          command: entry.args.slice(entry.prefixLength).join(" "),
-          kind: entry.kind,
-          outcome: entry.outcome,
-          failed: entry.stderr.includes("invalid reference: missing"),
-        }))
+      const [entries = []] = yield* (yield* CommandLog).entries(repo.root).pipe(Stream.take(1), Stream.runCollect)
+      const mine = entries.map((entry) => ({
+        command: entry.args.slice(entry.prefixLength).join(" "),
+        kind: entry.kind,
+        outcome: entry.outcome,
+        failed: entry.stderr.includes("invalid reference: missing"),
+      }))
       expect(mine).toEqual([
         {
           command: "add -A --pathspec-from-file=- --pathspec-file-nul",

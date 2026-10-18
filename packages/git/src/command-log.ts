@@ -11,35 +11,38 @@ export class CommandLog extends Context.Service<
   CommandLog,
   {
     record(entry: Omit<CommandEntry, "id">): Effect.Effect<void>
-    readonly entries: Stream.Stream<ReadonlyArray<CommandEntry>>
+    entries(cwd: string): Stream.Stream<ReadonlyArray<CommandEntry>>
   }
 >()("@gitui/git/CommandLog") {
   static readonly layer = Layer.effect(
     CommandLog,
     Effect.gen(function* () {
-      const buffer: Array<CommandEntry> = []
+      const buffers = new Map<string, Array<CommandEntry>>()
       const pubsub = yield* PubSub.unbounded<CommandEntry>()
       let nextId = 1
 
       const record = (entry: Omit<CommandEntry, "id">) => {
         const full = { ...entry, id: nextId++ }
+        const buffer = buffers.get(full.cwd) ?? []
+        buffers.set(full.cwd, buffer)
         buffer.push(full)
         if (buffer.length > COMMAND_LOG_CAPACITY) buffer.splice(0, buffer.length - COMMAND_LOG_CAPACITY)
         return Effect.asVoid(PubSub.publish(pubsub, full))
       }
 
-      const entries = Stream.unwrap(
-        Effect.gen(function* () {
-          const subscription = yield* PubSub.subscribe(pubsub)
-          const snapshot = buffer.slice()
-          const lastId = snapshot.at(-1)?.id ?? 0
-          const live = Stream.fromSubscription(subscription).pipe(
-            Stream.filter((entry) => entry.id > lastId),
-            Stream.groupedWithin(200, "100 millis"),
-          )
-          return Stream.concat(Stream.make(snapshot), live)
-        }),
-      )
+      const entries = (cwd: string) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const subscription = yield* PubSub.subscribe(pubsub)
+            const snapshot = buffers.get(cwd)?.slice() ?? []
+            const lastId = snapshot.at(-1)?.id ?? 0
+            const live = Stream.fromSubscription(subscription).pipe(
+              Stream.filter((entry) => entry.cwd === cwd && entry.id > lastId),
+              Stream.groupedWithin(200, "100 millis"),
+            )
+            return Stream.concat(Stream.make(snapshot), live)
+          }),
+        )
 
       return CommandLog.of({ record, entries })
     }),

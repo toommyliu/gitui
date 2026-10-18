@@ -3,33 +3,19 @@ import type { RepoId } from "@gitui/contracts"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { ButtonGroup } from "@workspace/ui/components/button-group"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu"
 import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
 import { useState } from "react"
 import { shortOid } from "@/lib/format"
 import { latest, statusAtom, useGitAction } from "@/lib/git"
-import { type Theme, useTheme } from "./theme-provider"
+import { SettingsDialog } from "./settings-dialog"
 
 type NetworkAction = "Fetch" | "Pull" | "Push"
-
-const themes: ReadonlyArray<readonly [Theme, string]> = [
-  ["system", "System"],
-  ["light", "Light"],
-  ["dark", "Dark"],
-]
 
 export function Toolbar({ repo }: { repo: RepoId }) {
   const status = latest(useAtomValue(statusAtom(repo)))
   const git = useGitAction()
   const [running, setRunning] = useState<NetworkAction | null>(null)
-  const { theme, setTheme } = useTheme()
 
   const run = async (action: NetworkAction) => {
     setRunning(action)
@@ -72,18 +58,7 @@ export function Toolbar({ repo }: { repo: RepoId }) {
             </Button>
           ))}
         </ButtonGroup>
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button size="sm" variant="ghost" />}>Theme</DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuRadioGroup value={theme} onValueChange={(value: Theme) => setTheme(value)}>
-              {themes.map(([value, label]) => (
-                <DropdownMenuRadioItem key={value} value={value}>
-                  {label}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <SettingsDialog />
       </div>
     </div>
   )

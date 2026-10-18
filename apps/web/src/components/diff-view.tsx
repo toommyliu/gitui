@@ -1,6 +1,8 @@
+import { useAtomValue } from "@effect/atom-react"
 import { type CodeViewDiffItem, parsePatchFiles } from "@pierre/diffs"
 import { CodeView, type CodeViewHandle } from "@pierre/diffs/react"
 import { type ReactNode, type Ref, useMemo } from "react"
+import { settingsAtom } from "@/lib/settings"
 import { useTheme } from "./theme-provider"
 
 const hash = (text: string) => {
@@ -43,16 +45,17 @@ export function DiffStack({
   viewRef?: Ref<CodeViewHandle<undefined, undefined>>
 }) {
   const { resolvedTheme } = useTheme()
+  const { diffStyle, wrapLines } = useAtomValue(settingsAtom)
   const options = useMemo(
     () => ({
-      diffStyle: "unified" as const,
+      diffStyle,
       themeType: resolvedTheme,
-      overflow: "scroll" as const,
+      overflow: wrapLines ? ("wrap" as const) : ("scroll" as const),
       stickyHeaders: true,
       hunkSeparators: "line-info" as const,
       lineDiffType: "word" as const,
     }),
-    [resolvedTheme],
+    [resolvedTheme, diffStyle, wrapLines],
   )
   return (
     <CodeView

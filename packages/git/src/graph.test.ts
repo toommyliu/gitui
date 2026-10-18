@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
-import { GraphLayout } from "../src/graph.ts"
+import { describe, expect, it } from "@effect/vitest"
+import { GraphLayout } from "./graph.ts"
 
 const edges = (flat: ReadonlyArray<number>) => {
   const out: Array<string> = []

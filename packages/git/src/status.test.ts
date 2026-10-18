@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
-import { parseStatus, statusArgs } from "../src/status.ts"
-import { makeRepo } from "./fixture.ts"
+import { describe, expect, it } from "@effect/vitest"
+import { parseStatus, statusArgs } from "./status.ts"
+import { makeRepo } from "./testRepo.ts"
 
 const status = (repo: ReturnType<typeof makeRepo>) => parseStatus(repo.raw(...statusArgs))
 

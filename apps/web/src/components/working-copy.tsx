@@ -30,6 +30,7 @@ import { hunkChanges, selectedChanges } from "@/lib/lines"
 import { ChangeLetter } from "./commit-detail"
 import { useConfirm } from "./confirm"
 import { Loading, Nothing } from "./loading"
+import { useStashPrompt } from "./stash-prompt"
 import { DiffStack, type DiffItemMeta, GutterButton, type HoveredLine, itemMeta, patchItems } from "./diff-view"
 
 type Area = "unstaged" | "untracked" | "conflicted" | "staged"
@@ -378,6 +379,7 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
   const [amend, setAmend] = useState(false)
   const [busy, setBusy] = useState(false)
   const git = useGitAction()
+  const stash = useStashPrompt(repo)
 
   useEffect(() => {
     if (message === "") localStorage.removeItem(draftKey(repo))
@@ -418,7 +420,16 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
             Amend previous commit
           </FieldLabel>
         </Field>
-        <Button size="sm" className="ml-auto" disabled={!canCommit} onClick={() => void commit()}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="ml-auto"
+          disabled={status.entries.length === 0 || status.operation !== null}
+          onClick={stash}
+        >
+          Stash…
+        </Button>
+        <Button size="sm" disabled={!canCommit} onClick={() => void commit()}>
           {busy && <Spinner data-icon="inline-start" />}
           {amend
             ? "Amend"

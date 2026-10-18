@@ -1,0 +1,20 @@
+{
+  "name": "server",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "node --watch src/main.ts",
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gitui/contracts": "workspace:*",
+    "@gitui/git": "workspace:*",
+    "@effect/platform-node": "4.0.4",
+    "effect": "4.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24"
+  }
+}

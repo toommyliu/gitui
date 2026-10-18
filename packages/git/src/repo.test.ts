@@ -22,7 +22,7 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       const expected = repo.git("log", "--format=%H").split("\n")
       const r = yield* Repo
 
-      const handle = yield* r.openLog(id(repo.root))
+      const handle = yield* r.openLog(id(repo.root), "")
       const first = yield* r.logPage(id(repo.root), handle.logId, 0, 100)
       const last = yield* r.logPage(id(repo.root), handle.logId, 250, 100)
       expect(handle.total).toBe(300)

@@ -30,7 +30,7 @@ import * as Semaphore from "effect/Semaphore"
 import * as Stream from "effect/Stream"
 import { diffTreeArgs, parseCommit, parseFileChanges, showArgs } from "./commit.ts"
 import { Git, nulList } from "./git.ts"
-import { LogParser, logArgs, logRevArgs } from "./log.ts"
+import { filterArgs, hasGraph, LogParser, logArgs, logRevArgs, parseLogQuery, shaCandidate } from "./log.ts"
 import {
   forEachRefArgs,
   parseRefs,
@@ -60,8 +60,9 @@ const operationMarkers: ReadonlyArray<readonly [string, Operation]> = [
   ["BISECT_LOG", "bisect"],
 ]
 
+const MAX_LOG_SESSIONS = 4
+
 interface LogSession {
-  readonly logId: string
   readonly total: number
   readonly rows: Array<CommitRow>
   readonly parser: LogParser
@@ -77,7 +78,7 @@ export class Repo extends Context.Service<
     open(path: string): Effect.Effect<RepoInfo, RepoNotFound>
     status(repo: RepoId): Effect.Effect<Status, GitError>
     refs(repo: RepoId): Effect.Effect<Refs, GitError>
-    openLog(repo: RepoId): Effect.Effect<LogHandle, GitError>
+    openLog(repo: RepoId, query: string): Effect.Effect<LogHandle, GitError>
     logPage(
       repo: RepoId,
       logId: string,
@@ -128,7 +129,7 @@ export class Repo extends Context.Service<
     Repo,
     Effect.gen(function* () {
       const git = yield* Git
-      const sessions = new Map<RepoId, LogSession>()
+      const sessions = new Map<RepoId, Map<string, LogSession>>()
 
       const hasHead = (repo: RepoId) =>
         git
@@ -201,41 +202,68 @@ export class Repo extends Context.Service<
         }
       })
 
-      const closeSession = (repo: RepoId) => {
-        const session = sessions.get(repo)
-        sessions.delete(repo)
-        return session === undefined ? Effect.void : Scope.close(session.scope, Exit.void)
-      }
+      const closeSession = (session: LogSession) => Scope.close(session.scope, Exit.void)
 
-      const openLog = Effect.fn("Repo.openLog")(function* (repo: RepoId) {
+      const openLog = Effect.fn("Repo.openLog")(function* (repo: RepoId, search: string) {
+        const parsed = parseLogQuery(search)
         const head = yield* hasHead(repo)
-        const tips = yield* git.text(repo, ["rev-parse", ...logRevArgs(head)], { okExitCodes: [128] })
-        const logId = createHash("sha1").update(tips).digest("hex").slice(0, 16)
-        const existing = sessions.get(repo)
-        if (existing?.logId === logId) return { logId, total: existing.total }
-        yield* closeSession(repo)
+        const sha = shaCandidate(parsed)
+        const commit =
+          sha === undefined
+            ? ""
+            : (yield* git.text(repo, ["rev-parse", "--verify", "--quiet", `${sha}^{commit}`], {
+                okExitCodes: [1, 128],
+              })).trim()
+        const query = commit === "" ? parsed : parseLogQuery("")
+        const revs = commit === "" ? logRevArgs(head) : ["--no-walk", commit]
+        const tips = commit || (yield* git.text(repo, ["rev-parse", ...revs], { okExitCodes: [128] }))
+        const logId = createHash("sha1")
+          .update(`${tips}\0${JSON.stringify(query)}`)
+          .digest("hex")
+          .slice(0, 16)
+        const open = sessions.get(repo) ?? new Map<string, LogSession>()
+        sessions.set(repo, open)
+        const reuse = (session: LogSession) => {
+          open.delete(logId)
+          open.set(logId, session)
+          return { logId, total: session.total }
+        }
+        const existing = open.get(logId)
+        if (existing !== undefined) return reuse(existing)
 
         const total = Number(
-          (yield* git.text(repo, ["rev-list", "--count", ...logRevArgs(head)], { okExitCodes: [128] })).trim() || 0,
+          (yield* git.text(repo, ["rev-list", "--count", ...filterArgs(query), ...revs, "--", ...query.paths], {
+            okExitCodes: [128],
+          })).trim() || 0,
         )
         const scope = yield* Scope.make()
-        const pull = yield* Stream.toPull(git.stream(repo, logArgs(head))).pipe(Scope.provide(scope))
-        sessions.set(repo, {
-          logId,
+        const pull = yield* Stream.toPull(git.stream(repo, logArgs(revs, query))).pipe(Scope.provide(scope))
+        const session: LogSession = {
           total,
           rows: [],
-          parser: new LogParser(),
+          parser: new LogParser(hasGraph(query)),
           pull,
           scope,
           lock: Semaphore.makeUnsafe(1),
           done: total === 0,
-        })
+        }
+        const raced = open.get(logId)
+        if (raced !== undefined) {
+          yield* closeSession(session)
+          return reuse(raced)
+        }
+        open.set(logId, session)
+        for (const [id, old] of open) {
+          if (open.size <= MAX_LOG_SESSIONS) break
+          open.delete(id)
+          yield* closeSession(old)
+        }
         return { logId, total }
       })
 
       const logPage = Effect.fn("Repo.logPage")(function* (repo: RepoId, logId: string, start: number, count: number) {
-        const session = sessions.get(repo)
-        if (session === undefined || session.logId !== logId) return yield* new LogExpired()
+        const session = sessions.get(repo)?.get(logId)
+        if (session === undefined) return yield* new LogExpired()
         const end = start + count
         yield* session.lock.withPermits(1)(
           Effect.gen(function* () {

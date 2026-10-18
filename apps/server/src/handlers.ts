@@ -33,7 +33,7 @@ export const handlers = (repoRoots: ReadonlyArray<string>) =>
           ),
         GetStatus: ({ repo: id }) => repo.status(id),
         GetRefs: ({ repo: id }) => repo.refs(id),
-        OpenLog: ({ repo: id }) => repo.openLog(id),
+        OpenLog: ({ repo: id, query }) => repo.openLog(id, query),
         GetLogPage: ({ repo: id, logId, start, count }) => repo.logPage(id, logId, start, count),
         GetCommit: ({ repo: id, oid }) => repo.commit(id, oid),
         GetDiff: ({ repo: id, target, paths }) => repo.diff(id, target, paths),

@@ -21,7 +21,7 @@ const program = Effect.gen(function* () {
   const info = yield* client.OpenRepo({ path })
   yield* timed("status", client.GetStatus({ repo: info.id }))
   yield* timed("refs", client.GetRefs({ repo: info.id }))
-  const log = yield* timed("open log", client.OpenLog({ repo: info.id }))
+  const log = yield* timed("open log", client.OpenLog({ repo: info.id, query: "" }))
   yield* timed("first page (200)", client.GetLogPage({ repo: info.id, logId: log.logId, start: 0, count: 200 }))
   const last = yield* timed(
     `last page of ${log.total}`,

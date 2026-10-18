@@ -30,7 +30,7 @@ const program = Effect.gen(function* () {
     "worktrees:",
     refs.worktrees.length,
   )
-  const log = yield* client.OpenLog({ repo: info.id })
+  const log = yield* client.OpenLog({ repo: info.id, query: "" })
   const rows = yield* client.GetLogPage({ repo: info.id, logId: log.logId, start: 0, count: 3 })
   yield* Console.log(
     "log total:",

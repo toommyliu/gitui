@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { SettingsIcon } from "lucide-react"
 import type { ReactNode } from "react"
 import { type Settings, settingsAtom } from "@/lib/settings"
 import { type Theme, useTheme } from "./theme-provider"
@@ -76,14 +78,25 @@ const shortcuts: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
   [["d"], "Toggle light and dark"],
 ]
 
-export function SettingsDialog() {
+export function SettingsDialog({ icon = false }: { icon?: boolean }) {
   const { theme, setTheme } = useTheme()
   const [settings, setSettings] = useAtom(settingsAtom)
   const update = (patch: Partial<Settings>) => setSettings({ ...settings, ...patch })
 
   return (
     <Dialog>
-      <DialogTrigger render={<Button size="sm" variant="ghost" />}>Settings</DialogTrigger>
+      {icon ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={<DialogTrigger render={<Button size="icon-sm" variant="ghost" aria-label="Settings" />} />}
+          >
+            <SettingsIcon />
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Settings</TooltipContent>
+        </Tooltip>
+      ) : (
+        <DialogTrigger render={<Button size="sm" variant="ghost" />}>Settings</DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>

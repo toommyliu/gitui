@@ -2,6 +2,7 @@ import { RegistryProvider } from "@effect/atom-react"
 import { WorkerPoolContextProvider } from "@pierre/diffs/react"
 import DiffsWorker from "@pierre/diffs/worker/worker.js?worker"
 import { Toaster } from "@/components/ui/sonner"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import "./globals.css"
@@ -37,9 +38,11 @@ createRoot(document.getElementById("root")!).render(
         >
           <ConfirmProvider>
             <PromptProvider>
-              <ErrorBoundary>
-                <App />
-              </ErrorBoundary>
+              <TooltipProvider>
+                <ErrorBoundary>
+                  <App />
+                </ErrorBoundary>
+              </TooltipProvider>
             </PromptProvider>
           </ConfirmProvider>
         </WorkerPoolContextProvider>

@@ -9,8 +9,8 @@ import type { Selection } from "@/lib/selection"
 import { CommandLogDrawer } from "./command-log"
 import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
+import { NetworkProgress } from "./network"
 import { Sidebar } from "./sidebar"
-import { Toolbar } from "./toolbar"
 import { WorkingCopy } from "./working-copy"
 
 type Pane = "locations" | "history" | "detail"
@@ -45,7 +45,7 @@ export function Workspace({ repo }: { repo: RepoId }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <Toolbar repo={repo} />
+      <NetworkProgress repo={repo} />
       <CommandLogDrawer repo={repo}>
         {narrow ? (
           <Tabs value={pane} onValueChange={(value: Pane) => setPane(value)} className="h-full gap-0">

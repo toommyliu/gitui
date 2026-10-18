@@ -13,6 +13,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "cn"
+import { SearchIcon } from "lucide-react"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { shortDate, shortOid } from "@/lib/format"
@@ -170,33 +171,34 @@ export function CommitList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center border-b px-2">
-        <InputGroup>
-          <InputGroupInput
-            aria-label="Search history"
-            placeholder="Search messages, author:name, path:file or a SHA"
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            enterKeyHint="search"
-            onKeyDown={(event) => {
-              if (event.key === "Escape") onQueryChange("")
-              if (event.key === "Enter") event.currentTarget.blur()
-            }}
-          />
-          {summary !== null && (
-            <InputGroupAddon align="inline-end">
-              <InputGroupText className="tabular-nums">{summary}</InputGroupText>
-              <InputGroupButton size="xs" onClick={() => onQueryChange("")}>
-                Clear
-              </InputGroupButton>
-            </InputGroupAddon>
-          )}
-        </InputGroup>
-      </div>
+      <InputGroup className="h-8 shrink-0 rounded-none border-0 border-b border-border bg-transparent ring-inset dark:bg-transparent">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          aria-label="Search history"
+          placeholder="Search messages, author:name, path:file or a SHA"
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          enterKeyHint="search"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onQueryChange("")
+            if (event.key === "Enter") event.currentTarget.blur()
+          }}
+        />
+        {summary !== null && (
+          <InputGroupAddon align="inline-end">
+            <InputGroupText className="tabular-nums">{summary}</InputGroupText>
+            <InputGroupButton size="xs" onClick={() => onQueryChange("")}>
+              Clear
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
       {filtering && log?.total === 0 && !pending ? (
         <Nothing title="No matching commits" description="Search looks at branches, remotes and HEAD." />
       ) : (

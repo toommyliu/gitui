@@ -5,7 +5,9 @@ import { DragDropProvider, PointerSensor } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
 import { useAtomValue } from "@effect/atom-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "cn"
 import * as Cause from "effect/Cause"
@@ -13,9 +15,10 @@ import { XIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Loading } from "@/components/loading"
 import { RepoPicker } from "@/components/repo-picker"
+import { SettingsDialog } from "@/components/settings-dialog"
 import { Workspace } from "@/components/workspace"
 import { basename } from "@/lib/format"
-import { repoInfoAtom } from "@/lib/git"
+import { connectionAtom, repoInfoAtom } from "@/lib/git"
 
 const PICKER = "\0picker"
 const tabClassName =
@@ -40,6 +43,7 @@ const stored = <T,>(key: string, fallback: T): T => {
 export function App() {
   const [tabs, setTabs] = useState<ReadonlyArray<string>>(() => stored("gitui.tabs", []))
   const [active, setActive] = useState<string | null>(() => stored("gitui.active", null))
+  const connection = useAtomValue(connectionAtom)
 
   useEffect(() => localStorage.setItem("gitui.tabs", JSON.stringify(tabs)), [tabs])
   useEffect(() => localStorage.setItem("gitui.active", JSON.stringify(active)), [active])
@@ -59,36 +63,47 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <Tabs
-        value={active ?? PICKER}
-        onValueChange={(value: string) => setActive(value === PICKER ? null : value)}
-        className="shrink-0 gap-0 border-b bg-muted/40"
-      >
-        <TabsList
-          variant="line"
-          className="h-8 w-full [scrollbar-width:none] justify-start gap-0 overflow-x-auto overflow-y-hidden rounded-none p-0"
+      <div className="flex shrink-0 border-b bg-muted/40">
+        <Tabs
+          value={active ?? PICKER}
+          onValueChange={(value: string) => setActive(value === PICKER ? null : value)}
+          className="min-w-0 flex-1 gap-0"
         >
-          <DragDropProvider
-            sensors={tabSensors}
-            modifiers={tabModifiers}
-            onDragEnd={({ canceled, operation: { source } }) => {
-              if (canceled || !isSortable(source)) return
-              setTabs((current) => arrayMove([...current], source.initialIndex, source.index))
-            }}
+          <TabsList
+            variant="line"
+            className="h-8 w-full [scrollbar-width:none] justify-start gap-0 overflow-x-auto overflow-y-hidden rounded-none p-0"
           >
-            <div className="flex h-full shrink-0">
-              {tabs.map((path, index) => (
-                <SortableRepoTab key={path} path={path} index={index} onClose={() => close(path)} />
-              ))}
+            <DragDropProvider
+              sensors={tabSensors}
+              modifiers={tabModifiers}
+              onDragEnd={({ canceled, operation: { source } }) => {
+                if (canceled || !isSortable(source)) return
+                setTabs((current) => arrayMove([...current], source.initialIndex, source.index))
+              }}
+            >
+              <div className="flex h-full shrink-0">
+                {tabs.map((path, index) => (
+                  <SortableRepoTab key={path} path={path} index={index} onClose={() => close(path)} />
+                ))}
+              </div>
+            </DragDropProvider>
+            <div className={tabFrameClassName}>
+              <TabsTrigger value={PICKER} className={tabClassName}>
+                Open…
+              </TabsTrigger>
             </div>
-          </DragDropProvider>
-          <div className={tabFrameClassName}>
-            <TabsTrigger value={PICKER} className={tabClassName}>
-              Open…
-            </TabsTrigger>
-          </div>
-        </TabsList>
-      </Tabs>
+          </TabsList>
+        </Tabs>
+        <div className="flex shrink-0 items-center gap-1 px-1">
+          {connection === "disconnected" && (
+            <Badge variant="destructive">
+              <Spinner data-icon="inline-start" />
+              Reconnecting to server
+            </Badge>
+          )}
+          {active !== null && <SettingsDialog icon />}
+        </div>
+      </div>
       {active === null ? <RepoPicker onOpen={open} openPaths={tabs} /> : <RepoTab key={active} path={active} />}
     </div>
   )

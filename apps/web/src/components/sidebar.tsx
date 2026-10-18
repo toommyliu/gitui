@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react"
-import type { Branch, Head, Oid, Refs, RemoteBranch, RepoId, Stash, Tag, Worktree } from "@gitui/contracts"
+import type { Branch, Head, Oid, Refs, RemoteBranch, RepoId, Stash, Status, Tag, Worktree } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import {
   AlertDialog,
@@ -23,13 +23,16 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
-import { ChevronRightIcon } from "lucide-react"
+import { ChevronRightIcon, GitBranchIcon } from "lucide-react"
 import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "react"
 import { basename, shortDate, shortOid } from "@/lib/format"
 import { latest, refsAtom, statusAtom, useGitAction, useNetwork } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import { useConfirm } from "./confirm"
+import { SyncButtons } from "./network"
 import { usePrompt } from "./prompt"
 import { useStashPrompt } from "./stash-prompt"
 
@@ -87,7 +90,8 @@ const flattenTree = <T,>(
 
 export function Sidebar({ repo, onSelect }: { repo: RepoId; onSelect: (selection: Selection) => void }) {
   const refs = latest(useAtomValue(refsAtom(repo)))
-  const head = latest(useAtomValue(statusAtom(repo)))?.head
+  const status = latest(useAtomValue(statusAtom(repo)))
+  const head = status?.head
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set(["remotes", "tags"]))
   const toggle = (id: string) =>
     setCollapsed((current) => {
@@ -162,7 +166,7 @@ export function Sidebar({ repo, onSelect }: { repo: RepoId; onSelect: (selection
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center border-b px-3 font-medium text-muted-foreground">Locations</div>
+      <CurrentBranch repo={repo} status={status} />
       <ScrollArea
         className="min-h-0 flex-1"
         viewportRef={scrollRef}
@@ -198,6 +202,34 @@ export function Sidebar({ repo, onSelect }: { repo: RepoId; onSelect: (selection
           onClose={() => setDeleting(null)}
         />
       )}
+    </div>
+  )
+}
+
+function CurrentBranch({ repo, status }: { repo: RepoId; status: Status | undefined }) {
+  if (status === undefined) {
+    return (
+      <div className="flex h-8 shrink-0 items-center border-b px-2">
+        <Skeleton className="h-3 w-24" />
+      </div>
+    )
+  }
+  const { head, upstream, operation } = status
+  const name = head._tag === "Detached" ? `HEAD at ${shortOid(head.oid)}` : head.name
+  return (
+    <div className="flex h-8 shrink-0 items-center gap-1.5 border-b pr-1 pl-2 whitespace-nowrap">
+      <GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      <Tooltip>
+        <TooltipTrigger render={<span className="min-w-0 truncate font-semibold" />}>{name}</TooltipTrigger>
+        <TooltipContent side="bottom">{name}</TooltipContent>
+      </Tooltip>
+      {head._tag === "Unborn" && <span className="min-w-0 truncate text-muted-foreground">no commits yet</span>}
+      {operation !== null && (
+        <Badge variant="destructive" className="shrink-0">
+          {operation} in progress
+        </Badge>
+      )}
+      <SyncButtons repo={repo} upstream={upstream} />
     </div>
   )
 }
@@ -567,7 +599,7 @@ function SectionRow({
     <button
       type="button"
       onClick={() => toggle(row.id)}
-      className="flex h-full w-full items-center gap-1.5 px-2 text-left text-[11px] font-semibold tracking-wide text-muted-foreground uppercase hover:text-foreground"
+      className="flex h-full w-full items-center gap-1.5 px-2 text-left font-medium text-muted-foreground hover:text-foreground"
     >
       <Disclosure open={open} />
       {row.label}

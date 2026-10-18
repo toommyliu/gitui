@@ -17,6 +17,14 @@ function ThemedToaster() {
   return <Toaster position="bottom-right" theme={resolvedTheme} />
 }
 
+document.addEventListener("pointerdown", (event) => {
+  if (event.pointerType !== "touch") return
+  const active = document.activeElement
+  if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) return
+  if (event.target instanceof Node && active.contains(event.target)) return
+  active.blur()
+})
+
 const poolSize = Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1))
 
 createRoot(document.getElementById("root")!).render(

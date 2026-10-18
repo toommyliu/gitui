@@ -181,8 +181,10 @@ export function CommitList({
             spellCheck={false}
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
+            enterKeyHint="search"
             onKeyDown={(event) => {
               if (event.key === "Escape") onQueryChange("")
+              if (event.key === "Enter") event.currentTarget.blur()
             }}
           />
           {summary !== null && (

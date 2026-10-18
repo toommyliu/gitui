@@ -27,7 +27,7 @@ import { cn } from "cn"
 import { ChevronRightIcon } from "lucide-react"
 import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "react"
 import { basename, shortDate, shortOid } from "@/lib/format"
-import { latest, refsAtom, statusAtom, useGitAction } from "@/lib/git"
+import { latest, refsAtom, statusAtom, useGitAction, useNetwork } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import { useConfirm } from "./confirm"
 import { usePrompt } from "./prompt"
@@ -262,6 +262,7 @@ function SidebarRow({
   const git = useGitAction()
   const confirm = useConfirm()
   const prompt = usePrompt()
+  const network = useNetwork(repo)
   const select = (oid: Oid) => onSelect({ _tag: "Commit", oid })
   const current = head?._tag === "Branch" ? head.name : "HEAD"
   const integrate = (ref: string, disabled: boolean) => (
@@ -308,7 +309,7 @@ function SidebarRow({
           ),
           confirmLabel: "Force push",
           destructive: true,
-          onConfirm: () => void git("Force push", repo, (c) => c("ForcePush", { repo, expected })),
+          onConfirm: () => void network.run({ action: "ForcePush", expected }),
         })
       return (
         <ContextMenu>

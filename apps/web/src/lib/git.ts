@@ -8,6 +8,7 @@ import {
   GitError,
   GitRpcs,
   type Oid,
+  type Progress,
   type RepoId,
   type RepoPath,
 } from "@gitui/contracts"
@@ -183,16 +184,79 @@ const actionAtom = GitClient.runtime.fn(
   { concurrent: true },
 )
 
+const useFailureToast = () => {
+  const setLogView = useAtomSet(logViewAtom)
+  return (label: string, cause: Cause.Cause<ActionError>) =>
+    toast.error(`${label} failed`, {
+      description: describeFailure(cause),
+      action: { label: "Show log", onClick: () => setLogView((view) => ({ ...view, open: true, filter: "failures" })) },
+    })
+}
+
 export const useGitAction = () => {
   const run = useAtomSet(actionAtom, { mode: "promiseExit" })
-  const setLogView = useAtomSet(logViewAtom)
+  const fail = useFailureToast()
   return async (label: string, repo: RepoId, action: Action) => {
     const exit = await run({ repo, run: action })
     if (Exit.isSuccess(exit)) return true
-    toast.error(`${label} failed`, {
-      description: describeFailure(exit.cause),
-      action: { label: "Show log", onClick: () => setLogView((view) => ({ ...view, open: true, filter: "failures" })) },
-    })
+    fail(label, exit.cause)
     return false
+  }
+}
+
+export type NetworkRequest =
+  | { readonly action: "Fetch" | "Pull" | "Push" }
+  | { readonly action: "ForcePush"; readonly expected: Oid }
+
+export const networkLabels: Record<NetworkRequest["action"], string> = {
+  Fetch: "Fetch",
+  Pull: "Pull",
+  Push: "Push",
+  ForcePush: "Force push",
+}
+
+export interface NetworkState {
+  readonly action: NetworkRequest["action"]
+  readonly progress: Progress | null
+}
+
+export const networkStateAtom = Atom.family((_repo: RepoId) =>
+  Atom.make<NetworkState | null>(null).pipe(Atom.keepAlive),
+)
+
+const networkAtom = Atom.family((repo: RepoId) =>
+  GitClient.runtime
+    .fn((request: NetworkRequest, get) => {
+      const state = networkStateAtom(repo)
+      return Effect.gen(function* () {
+        const client = yield* GitClient
+        get.registry.set(state, { action: request.action, progress: null })
+        const updates =
+          request.action === "ForcePush"
+            ? client("ForcePush", { repo, expected: request.expected })
+            : client(request.action, { repo })
+        yield* Reactivity.mutation(
+          Stream.runForEach(updates, (progress) =>
+            Effect.sync(() => get.registry.set(state, { action: request.action, progress })),
+          ),
+          scopeKeys(repo, "refs"),
+        )
+      }).pipe(Effect.ensuring(Effect.sync(() => get.registry.set(state, null))))
+    })
+    .pipe(Atom.keepAlive),
+)
+
+export const useNetwork = (repo: RepoId) => {
+  const run = useAtomSet(networkAtom(repo), { mode: "promiseExit" })
+  const interrupt = useAtomSet(networkAtom(repo))
+  const fail = useFailureToast()
+  return {
+    run: async (request: NetworkRequest) => {
+      const exit = await run(request)
+      if (Exit.isSuccess(exit)) return true
+      if (!Cause.hasInterruptsOnly(exit.cause)) fail(networkLabels[request.action], exit.cause)
+      return false
+    },
+    cancel: () => interrupt(Atom.Interrupt),
   }
 }

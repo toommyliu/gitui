@@ -77,6 +77,12 @@ function Outcome({ entry }: { entry: CommandEntry }) {
           streamed
         </Badge>
       )
+    case "Cancelled":
+      return (
+        <Badge variant="outline" className="h-4 rounded-sm px-1">
+          cancelled
+        </Badge>
+      )
   }
 }
 

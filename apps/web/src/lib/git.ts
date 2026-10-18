@@ -4,6 +4,7 @@ import {
   type ChangeScope,
   type CommitRow,
   type DiffTarget,
+  GitError,
   GitRpcs,
   type Oid,
   type RepoId,
@@ -20,6 +21,7 @@ import * as Atom from "effect/reactivity/Atom"
 import * as AtomRpc from "effect/reactivity/AtomRpc"
 import * as Reactivity from "effect/reactivity/Reactivity"
 import * as RpcClient from "effect/rpc/RpcClient"
+import type { RpcClientError } from "effect/rpc/RpcClientError"
 import * as RpcSerialization from "effect/rpc/RpcSerialization"
 import { toast } from "sonner"
 
@@ -109,18 +111,19 @@ export const watchAtom = Atom.family((repo: RepoId) =>
 
 export type CommitRows = ReadonlyArray<CommitRow>
 
-const describeFailure = (cause: Cause.Cause<unknown>) => {
+type Client = GitClient["Service"]
+type ActionError = GitError | RpcClientError
+type Action = (client: Client) => Effect.Effect<unknown, ActionError>
+
+const describeFailure = (cause: Cause.Cause<ActionError>) => {
   const error = Cause.squash(cause)
-  if (typeof error === "object" && error !== null && "stderr" in error && typeof error.stderr === "string") {
-    return error.stderr || "git exited with an error"
-  }
-  return String(error)
+  return error instanceof GitError
+    ? error.stderr || `git ${error.args[0] ?? ""} exited with ${error.exitCode}`
+    : String(error)
 }
 
-type Client = GitClient["Service"]
-
 const actionAtom = GitClient.runtime.fn(
-  (action: { readonly repo: RepoId; readonly run: (client: Client) => Effect.Effect<unknown, unknown> }) =>
+  (action: { readonly repo: RepoId; readonly run: Action }) =>
     Effect.gen(function* () {
       const client = yield* GitClient
       return yield* Reactivity.mutation(action.run(client), scopeKeys(action.repo, "refs"))
@@ -130,7 +133,7 @@ const actionAtom = GitClient.runtime.fn(
 
 export const useGitAction = () => {
   const run = useAtomSet(actionAtom, { mode: "promiseExit" })
-  return async (label: string, repo: RepoId, action: (client: Client) => Effect.Effect<unknown, unknown>) => {
+  return async (label: string, repo: RepoId, action: Action) => {
     const exit = await run({ repo, run: action })
     if (Exit.isSuccess(exit)) return true
     toast.error(`${label} failed`, { description: describeFailure(exit.cause) })

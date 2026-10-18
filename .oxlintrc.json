@@ -44,6 +44,8 @@
         ]
       }
     ],
-    "effecttsgo/unstable-api-usage": "off"
+    "effecttsgo/unstable-api-usage": "off",
+    "import/default": "off",
+    "react/incompatible-library": "off"
   }
 }

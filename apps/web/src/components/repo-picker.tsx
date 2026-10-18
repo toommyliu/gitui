@@ -11,11 +11,12 @@ export function RepoPicker({
   onOpen: (path: string) => void
   openPaths: ReadonlyArray<string>
 }) {
-  const repos = latest(useAtomValue(reposAtom)) ?? []
+  const repos = latest(useAtomValue(reposAtom))
   const [query, setQuery] = useState("")
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return q === "" ? repos : repos.filter((r) => r.name.toLowerCase().includes(q))
+    const all = repos ?? []
+    return q === "" ? all : all.filter((r) => r.name.toLowerCase().includes(q))
   }, [repos, query])
   const isPath = query.startsWith("/")
 

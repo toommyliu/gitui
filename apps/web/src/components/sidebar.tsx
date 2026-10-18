@@ -11,7 +11,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@workspace/ui/components/alert-dialog"
+import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert"
+import { Badge } from "@workspace/ui/components/badge"
 import { Checkbox } from "@workspace/ui/components/checkbox"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -19,8 +22,10 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@workspace/ui/components/context-menu"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { cn } from "cn"
-import { type ReactNode, useMemo, useRef, useState } from "react"
+import { ChevronRightIcon } from "lucide-react"
+import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "react"
 import { basename, shortDate } from "@/lib/format"
 import { latest, refsAtom, statusAtom, useGitAction } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
@@ -156,7 +161,11 @@ export function Sidebar({ repo, onSelect }: { repo: RepoId; onSelect: (selection
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-8 shrink-0 items-center border-b px-3 font-medium text-muted-foreground">Locations</div>
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto py-1 [contain:strict]">
+      <ScrollArea
+        className="min-h-0 flex-1"
+        viewportRef={scrollRef}
+        viewportProps={{ className: "py-1 [contain:strict]" }}
+      >
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => (
             <div
@@ -177,7 +186,7 @@ export function Sidebar({ repo, onSelect }: { repo: RepoId; onSelect: (selection
             </div>
           ))}
         </div>
-      </div>
+      </ScrollArea>
       {deleting !== null && (
         <DeleteBranchDialog
           repo={repo}
@@ -187,6 +196,12 @@ export function Sidebar({ repo, onSelect }: { repo: RepoId; onSelect: (selection
         />
       )}
     </div>
+  )
+}
+
+function SmallBadge({ className, ...props }: ComponentProps<typeof Badge>) {
+  return (
+    <Badge variant="secondary" className={cn("h-4 rounded-sm px-1 text-[10px] tabular-nums", className)} {...props} />
   )
 }
 
@@ -217,14 +232,7 @@ function Line({
 }
 
 const Disclosure = ({ open }: { open: boolean }) => (
-  <span
-    className={cn(
-      "inline-block w-2 shrink-0 text-[9px] text-muted-foreground transition-transform",
-      open && "rotate-90",
-    )}
-  >
-    ▶
-  </span>
+  <ChevronRightIcon className={cn("size-3 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
 )
 
 function SidebarRow({
@@ -269,15 +277,15 @@ function SidebarRow({
         <ContextMenu>
           <ContextMenuTrigger className="block h-full">
             <Line depth={row.depth} active={isHead} onClick={() => select(branch.oid)}>
-              <span className="w-2 shrink-0" />
+              <span className="w-3 shrink-0" />
               <span className="truncate">{row.label}</span>
               {worktree !== undefined && (
                 <span className="truncate text-[11px] text-muted-foreground">in {basename(worktree.path)}</span>
               )}
-              <span className="ml-auto flex shrink-0 gap-1 text-[11px] text-muted-foreground tabular-nums">
-                {upstream?._tag === "Gone" && <span>gone</span>}
-                {upstream?._tag === "Tracking" && upstream.ahead > 0 && <span>{upstream.ahead}↑</span>}
-                {upstream?._tag === "Tracking" && upstream.behind > 0 && <span>{upstream.behind}↓</span>}
+              <span className="ml-auto flex shrink-0 gap-1 tabular-nums">
+                {upstream?._tag === "Gone" && <SmallBadge variant="outline">gone</SmallBadge>}
+                {upstream?._tag === "Tracking" && upstream.ahead > 0 && <SmallBadge>{upstream.ahead}↑</SmallBadge>}
+                {upstream?._tag === "Tracking" && upstream.behind > 0 && <SmallBadge>{upstream.behind}↓</SmallBadge>}
               </span>
             </Line>
           </ContextMenuTrigger>
@@ -302,7 +310,7 @@ function SidebarRow({
         <ContextMenu>
           <ContextMenuTrigger className="block h-full">
             <Line depth={row.depth} onClick={() => select(row.ref.oid)}>
-              <span className="w-2 shrink-0" />
+              <span className="w-3 shrink-0" />
               <span className="truncate">{row.label}</span>
             </Line>
           </ContextMenuTrigger>
@@ -317,7 +325,7 @@ function SidebarRow({
     case "tag":
       return (
         <Line depth={row.depth} onClick={() => select(row.tag.oid)}>
-          <span className="w-2 shrink-0" />
+          <span className="w-3 shrink-0" />
           <span className="truncate">{row.label}</span>
         </Line>
       )
@@ -327,7 +335,7 @@ function SidebarRow({
         <ContextMenu>
           <ContextMenuTrigger className="block h-full">
             <Line depth={1} onClick={() => select(stash.oid)}>
-              <span className="w-2 shrink-0" />
+              <span className="w-3 shrink-0" />
               <span className="truncate">{stash.message}</span>
               <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{shortDate(stash.time)}</span>
             </Line>
@@ -385,12 +393,19 @@ function SidebarRow({
         <ContextMenu>
           <ContextMenuTrigger className="block h-full">
             <Line depth={1} active={current} onClick={() => worktree.head._tag !== "Bare" && select(worktree.head.oid)}>
-              <span className="w-2 shrink-0" />
+              <span className="w-3 shrink-0" />
               <span className="truncate">{basename(worktree.path)}</span>
               <span className="truncate text-[11px] text-muted-foreground">{label}</span>
-              <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
-                {worktree.locked !== null ? "locked" : worktree.prunable !== null ? "missing" : ""}
-              </span>
+              {worktree.locked !== null && (
+                <SmallBadge variant="outline" className="ml-auto">
+                  locked
+                </SmallBadge>
+              )}
+              {worktree.prunable !== null && (
+                <SmallBadge variant="destructive" className="ml-auto">
+                  missing
+                </SmallBadge>
+              )}
             </Line>
           </ContextMenuTrigger>
           <ContextMenuContent>
@@ -427,7 +442,7 @@ function SectionRow({
     >
       <Disclosure open={open} />
       {row.label}
-      <span className="font-normal tabular-nums">{row.count}</span>
+      <SmallBadge>{row.count}</SmallBadge>
     </button>
   )
   if (row.id !== "worktrees") return header
@@ -463,10 +478,12 @@ function DeleteBranchDialog({
           <AlertDialogTitle>Delete {branch.name}?</AlertDialogTitle>
           <AlertDialogDescription render={<div className="space-y-3 text-left" />}>
             {worktree !== undefined && <WorktreeWarning worktree={worktree} />}
-            <label className="flex items-start gap-2">
-              <Checkbox checked={force} onCheckedChange={setForce} className="mt-0.5" />
-              <span>Delete even if it has commits that aren't merged anywhere</span>
-            </label>
+            <Field orientation="horizontal">
+              <Checkbox id="delete-branch-force" checked={force} onCheckedChange={setForce} />
+              <FieldLabel htmlFor="delete-branch-force" className="font-normal">
+                Delete even if it has commits that aren't merged anywhere
+              </FieldLabel>
+            </Field>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -492,18 +509,18 @@ function WorktreeWarning({ worktree }: { worktree: Worktree }) {
   const status = useAtomValue(statusAtom(worktree.path as RepoId))
   const dirty = latest(status)?.entries.length
   return (
-    <div className="space-y-1 rounded-md bg-destructive/10 p-2 text-destructive">
-      <p>
-        This branch is checked out in <span className="font-mono break-all">{worktree.path}</span>. The worktree will be
-        removed{worktree.locked !== null ? " even though it is locked" : ""}.
-      </p>
-      <p className="font-medium">
+    <Alert variant="destructive">
+      <AlertTitle>
         {dirty === undefined
           ? "Checking for uncommitted changes…"
           : dirty === 0
-            ? "It has no uncommitted changes."
+            ? "The worktree has no uncommitted changes."
             : `${dirty} uncommitted ${dirty === 1 ? "file" : "files"} will be deleted.`}
-      </p>
-    </div>
+      </AlertTitle>
+      <AlertDescription>
+        This branch is checked out in <span className="font-mono break-all">{worktree.path}</span>. The worktree will be
+        removed{worktree.locked !== null ? " even though it is locked" : ""}.
+      </AlertDescription>
+    </Alert>
   )
 }

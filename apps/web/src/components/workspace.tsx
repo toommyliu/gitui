@@ -1,7 +1,7 @@
 import { useAtomMount } from "@effect/atom-react"
 import type { RepoId } from "@gitui/contracts"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@workspace/ui/components/resizable"
-import { cn } from "cn"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import { useState, useSyncExternalStore } from "react"
 import { watchAtom } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
@@ -48,24 +48,24 @@ export function Workspace({ repo }: { repo: RepoId }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <Toolbar repo={repo} />
       {narrow ? (
-        <>
-          <div className="flex shrink-0 border-b">
+        <Tabs value={pane} onValueChange={(value: Pane) => setPane(value)} className="min-h-0 flex-1 gap-0">
+          <TabsList variant="line" className="h-9 w-full shrink-0 rounded-none border-b p-0">
             {(Object.keys(paneLabels) as Array<Pane>).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPane(p)}
-                className={cn(
-                  "h-9 flex-1 border-b-2 font-medium",
-                  pane === p ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
-                )}
-              >
+              <TabsTrigger key={p} value={p} className="h-full rounded-none">
                 {paneLabels[p]}
-              </button>
+              </TabsTrigger>
             ))}
-          </div>
-          <div className="min-h-0 flex-1">{pane === "locations" ? sidebar : pane === "history" ? history : detail}</div>
-        </>
+          </TabsList>
+          <TabsContent value="locations" className="min-h-0">
+            {sidebar}
+          </TabsContent>
+          <TabsContent value="history" className="min-h-0">
+            {history}
+          </TabsContent>
+          <TabsContent value="detail" className="min-h-0">
+            {detail}
+          </TabsContent>
+        </Tabs>
       ) : (
         <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
           <ResizablePanel defaultSize="18%" minSize="10%">

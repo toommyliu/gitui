@@ -1,11 +1,16 @@
 import { useAtomValue } from "@effect/atom-react"
 import type { CommitDetail as Detail, FileChange, Oid, RepoId } from "@gitui/contracts"
+import { useVirtualizer } from "@tanstack/react-virtual"
+import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert"
+import { Button } from "@workspace/ui/components/button"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { cn } from "cn"
-import { type ReactNode, useMemo, useState } from "react"
+import { type ReactNode, useMemo, useRef, useState } from "react"
 import { longDate, shortOid } from "@/lib/format"
 import { commitAtom, diffAtom, diffKey, latest } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import { DiffStack, patchItems } from "./diff-view"
+import { Loading, Nothing } from "./loading"
 
 const changeLetter: Record<FileChange["change"], string> = {
   added: "A",
@@ -53,14 +58,15 @@ function Summary({ detail, onSelect }: { detail: Detail; onSelect: (selection: S
             <span className="text-muted-foreground">none</span>
           ) : (
             detail.parents.map((parent) => (
-              <button
+              <Button
                 key={parent}
-                type="button"
-                className="mr-2 font-mono text-primary underline-offset-2 hover:underline"
+                variant="link"
+                size="xs"
+                className="mr-2 h-auto p-0 font-mono text-xs"
                 onClick={() => onSelect({ _tag: "Commit", oid: parent })}
               >
                 {shortOid(parent)}
-              </button>
+              </Button>
             ))
           )}
         </Field>
@@ -98,7 +104,7 @@ export function CommitDetail({
   const items = useMemo(() => (diff?._tag === "Patch" ? patchItems("commit", diff.patch) : []), [diff])
 
   if (detail === undefined || detail.oid !== oid) {
-    return <div className="p-3 text-muted-foreground">Loading commit…</div>
+    return <Loading label="Loading commit" />
   }
   if (diff?._tag === "TooLarge") {
     return (
@@ -111,30 +117,49 @@ export function CommitDetail({
   return <DiffStack key={oid} items={items} header={() => <Summary detail={detail} onSelect={onSelect} />} />
 }
 
+const FILE_ROW = 24
+
 function LargeCommitFiles({ repo, detail }: { repo: RepoId; detail: Detail }) {
   const [open, setOpen] = useState<FileChange | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: detail.files.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => FILE_ROW,
+    overscan: 20,
+  })
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <p className="px-3 py-2 text-muted-foreground">
-        This commit's diff is too large to show at once. Pick a file to view it.
-      </p>
-      <ul className="max-h-64 shrink-0 overflow-auto border-y">
-        {detail.files.map((file) => (
-          <li key={file.path}>
-            <button
-              type="button"
-              onClick={() => setOpen(file)}
-              className={cn(
-                "flex h-6 w-full items-center gap-2 px-3 text-left hover:bg-muted/60",
-                open?.path === file.path && "bg-accent",
-              )}
-            >
-              <ChangeLetter change={file.change} />
-              <span className="truncate">{file.path}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <Alert className="mx-3 my-2 w-auto">
+        <AlertTitle>Too large to show at once</AlertTitle>
+        <AlertDescription>Pick a file to see its diff.</AlertDescription>
+      </Alert>
+      <ScrollArea
+        className="h-64 shrink-0 border-y"
+        viewportRef={scrollRef}
+        viewportProps={{ className: "[contain:strict]" }}
+      >
+        <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map((item) => {
+            const file = detail.files[item.index]!
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setOpen(file)}
+                className={cn(
+                  "absolute top-0 left-0 flex w-full items-center gap-2 px-3 text-left hover:bg-muted/60",
+                  open?.path === file.path && "bg-accent",
+                )}
+                style={{ height: FILE_ROW, transform: `translateY(${item.start}px)` }}
+              >
+                <ChangeLetter change={file.change} />
+                <span className="truncate">{file.path}</span>
+              </button>
+            )
+          })}
+        </div>
+      </ScrollArea>
       {open !== null && <SingleFileDiff repo={repo} oid={detail.oid} file={open} />}
     </div>
   )
@@ -144,9 +169,10 @@ function SingleFileDiff({ repo, oid, file }: { repo: RepoId; oid: Oid; file: Fil
   const paths = file.from === null ? [file.path] : [file.from, file.path]
   const diff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Commit", oid }, paths))))
   const items = useMemo(() => (diff?._tag === "Patch" ? patchItems("file", diff.patch) : []), [diff])
-  if (diff?._tag === "TooLarge")
-    return <p className="p-3 text-muted-foreground">This file's diff is too large to display.</p>
-  if (diff?._tag === "Binary") return <p className="p-3 text-muted-foreground">Binary file.</p>
+  if (diff === undefined) return <Loading label="Loading diff" />
+  if (diff._tag === "TooLarge")
+    return <Nothing title="Too large to display" description="This file's diff is over 4 MB." />
+  if (diff._tag === "Binary") return <Nothing title="Binary file" />
   return (
     <div className="min-h-0 flex-1">
       <DiffStack items={items} />

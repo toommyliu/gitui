@@ -1,7 +1,14 @@
 import { useAtomValue } from "@effect/atom-react"
-import { Input } from "@workspace/ui/components/input"
-import { cn } from "cn"
-import { useMemo, useState } from "react"
+import { Badge } from "@workspace/ui/components/badge"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@workspace/ui/components/command"
+import { useState } from "react"
 import { latest, reposAtom } from "@/lib/git"
 
 export function RepoPicker({
@@ -11,56 +18,43 @@ export function RepoPicker({
   onOpen: (path: string) => void
   openPaths: ReadonlyArray<string>
 }) {
-  const repos = latest(useAtomValue(reposAtom))
+  const repos = latest(useAtomValue(reposAtom)) ?? []
   const [query, setQuery] = useState("")
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const all = repos ?? []
-    return q === "" ? all : all.filter((r) => r.name.toLowerCase().includes(q))
-  }, [repos, query])
-  const isPath = query.startsWith("/")
+  const path = query.trim()
 
   return (
-    <div className="flex min-h-0 flex-1 justify-center overflow-auto p-4">
-      <div className="flex w-full max-w-lg flex-col gap-2">
-        <h1 className="text-sm font-semibold">Open a repository</h1>
-        <Input
+    <div className="flex min-h-0 flex-1 justify-center p-4">
+      <Command className="h-fit max-h-full w-full max-w-lg border">
+        <CommandInput
           autoFocus
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter") return
-            if (isPath) onOpen(query.trim())
-            else if (matches[0] !== undefined) onOpen(matches[0].path)
-          }}
+          onValueChange={setQuery}
           placeholder="Filter by name, or type an absolute path"
         />
-        {isPath && (
-          <button
-            type="button"
-            onClick={() => onOpen(query.trim())}
-            className="rounded-md px-2 py-1.5 text-left hover:bg-muted"
-          >
-            Open <span className="font-mono">{query.trim()}</span>
-          </button>
-        )}
-        <ul className="divide-y rounded-md border">
-          {matches.map((repo) => (
-            <li key={repo.path}>
-              <button
-                type="button"
-                onClick={() => onOpen(repo.path)}
-                className={cn("flex w-full items-baseline gap-2 px-2 py-1.5 text-left hover:bg-muted")}
-              >
+        <CommandList className="max-h-[calc(100svh-8rem)]">
+          <CommandEmpty>No repositories match.</CommandEmpty>
+          {path.startsWith("/") && (
+            <CommandGroup heading="Path">
+              <CommandItem value={`open ${path}`} forceMount onSelect={() => onOpen(path)}>
+                Open <span className="font-mono">{path}</span>
+              </CommandItem>
+            </CommandGroup>
+          )}
+          <CommandGroup heading="Repositories">
+            {repos.map((repo) => (
+              <CommandItem key={repo.path} value={repo.path} keywords={[repo.name]} onSelect={() => onOpen(repo.path)}>
                 <span className="font-medium">{repo.name}</span>
                 <span className="truncate text-muted-foreground">{repo.path}</span>
-                {openPaths.includes(repo.path) && <span className="ml-auto shrink-0 text-muted-foreground">open</span>}
-              </button>
-            </li>
-          ))}
-          {matches.length === 0 && <li className="px-2 py-1.5 text-muted-foreground">No repositories match.</li>}
-        </ul>
-      </div>
+                {openPaths.includes(repo.path) && (
+                  <Badge variant="secondary" className="ml-auto">
+                    open
+                  </Badge>
+                )}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </Command>
     </div>
   )
 }

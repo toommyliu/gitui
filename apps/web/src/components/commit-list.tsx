@@ -1,6 +1,9 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react"
 import type { CommitRow, Head, Oid, Refs, RepoId, Status } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import { Badge } from "@workspace/ui/components/badge"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
+import { Skeleton } from "@workspace/ui/components/skeleton"
 import { cn } from "cn"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
@@ -31,19 +34,16 @@ export const refLabels = (refs: Refs | undefined, head: Head | undefined) => {
 
 const kindOrder: Record<RefLabel["kind"], number> = { head: 0, branch: 1, remote: 2, tag: 3 }
 
+const badgeVariant = { head: "default", branch: "secondary", remote: "outline", tag: "ghost" } as const
+
 export function RefBadge({ label }: { label: RefLabel }) {
   return (
-    <span
-      className={cn(
-        "inline-flex h-4 shrink-0 items-center rounded-sm px-1 text-[11px] leading-none font-medium whitespace-nowrap",
-        label.kind === "head" && "bg-primary text-primary-foreground",
-        label.kind === "branch" && "bg-secondary text-secondary-foreground ring-1 ring-border",
-        label.kind === "remote" && "text-muted-foreground ring-1 ring-border",
-        label.kind === "tag" && "bg-muted text-muted-foreground italic",
-      )}
+    <Badge
+      variant={badgeVariant[label.kind]}
+      className={cn("h-4 rounded-sm px-1 text-[11px]", label.kind === "tag" && "bg-muted italic")}
     >
       {label.name}
-    </span>
+    </Badge>
   )
 }
 
@@ -126,13 +126,16 @@ export function CommitList({
   }
 
   return (
-    <div
-      ref={scrollRef}
-      tabIndex={0}
-      onKeyDown={onKeyDown}
-      className="@container h-full overflow-auto [contain:strict] outline-none"
-      role="listbox"
-      aria-label="Commits"
+    <ScrollArea
+      className="@container h-full"
+      viewportRef={scrollRef}
+      viewportProps={{
+        tabIndex: 0,
+        onKeyDown,
+        role: "listbox",
+        "aria-label": "Commits",
+        className: "[contain:strict]",
+      }}
     >
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => (
@@ -174,7 +177,7 @@ export function CommitList({
           </div>
         ))}
       </div>
-    </div>
+    </ScrollArea>
   )
 }
 
@@ -208,8 +211,8 @@ const CommitRowView = memo(function CommitRowView({
   if (row === undefined) {
     return (
       <div className="flex h-full items-center gap-2 px-2">
-        <span style={{ width: graphWidth }} />
-        <span className="h-2 w-1/3 rounded-sm bg-muted" />
+        <span className="shrink-0" style={{ width: graphWidth }} />
+        <Skeleton className="h-2.5 w-1/3" />
       </div>
     )
   }

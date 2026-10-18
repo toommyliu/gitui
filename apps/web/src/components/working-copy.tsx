@@ -3,8 +3,13 @@ import type { Change, RepoId, RepoPath, Status, StatusEntry } from "@gitui/contr
 import type { CodeViewHandle } from "@pierre/diffs/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@workspace/ui/components/button"
+import { Badge } from "@workspace/ui/components/badge"
 import { Checkbox } from "@workspace/ui/components/checkbox"
+import { Field, FieldLabel } from "@workspace/ui/components/field"
+import { Kbd, KbdGroup } from "@workspace/ui/components/kbd"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@workspace/ui/components/resizable"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
+import { Spinner } from "@workspace/ui/components/spinner"
 import { Textarea } from "@workspace/ui/components/textarea"
 import { cn } from "cn"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -12,6 +17,7 @@ import { basename, dirname } from "@/lib/format"
 import { diffAtom, diffKey, latest, statusAtom, useGitAction } from "@/lib/git"
 import { ChangeLetter } from "./commit-detail"
 import { useConfirm } from "./confirm"
+import { Loading, Nothing } from "./loading"
 import { DiffStack, type DiffItemMeta, patchItems } from "./diff-view"
 
 type Area = "unstaged" | "untracked" | "conflicted" | "staged"
@@ -89,7 +95,9 @@ export function WorkingCopy({ repo }: { repo: RepoId }) {
     ],
     [unstagedDiff, stagedDiff, untrackedDiff, untrackedPaths.length],
   )
-  const tooLarge = [unstagedDiff, stagedDiff].some((d) => d?._tag === "TooLarge")
+  const diffs = untrackedPaths.length > 0 ? [unstagedDiff, stagedDiff, untrackedDiff] : [unstagedDiff, stagedDiff]
+  const diffsLoading = diffs.some((d) => d === undefined)
+  const tooLarge = diffs.some((d) => d?._tag === "TooLarge")
 
   const git = useGitAction()
   const confirm = useConfirm()
@@ -140,7 +148,7 @@ export function WorkingCopy({ repo }: { repo: RepoId }) {
     )
   }
 
-  if (status === undefined) return <div className="p-3 text-muted-foreground">Loading changes…</div>
+  if (status === undefined) return <Loading label="Loading changes" />
 
   return (
     <ResizablePanelGroup orientation="vertical">
@@ -159,10 +167,15 @@ export function WorkingCopy({ repo }: { repo: RepoId }) {
       </ResizablePanel>
       <ResizableHandle />
       <ResizablePanel minSize="20%">
-        {tooLarge ? (
-          <p className="p-3 text-muted-foreground">These changes are too large to diff at once.</p>
+        {diffsLoading ? (
+          <Loading label="Loading diffs" />
+        ) : tooLarge ? (
+          <Nothing
+            title="Too large to diff"
+            description="These changes are over 4 MB, so they aren't shown together."
+          />
         ) : items.length === 0 ? (
-          <p className="p-3 text-muted-foreground">No changes.</p>
+          <Nothing title="No changes" description="The working tree matches HEAD." />
         ) : (
           <DiffStack items={items} actions={actions} viewRef={viewRef} />
         )}
@@ -210,16 +223,23 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
         className="min-h-0 resize-none font-mono text-xs"
       />
       <div className="flex items-center gap-2">
-        <label className="flex items-center gap-1.5 text-muted-foreground">
-          <Checkbox checked={amend} onCheckedChange={setAmend} />
-          Amend previous commit
-        </label>
+        <Field orientation="horizontal" className="w-auto">
+          <Checkbox id={`amend-${repo}`} checked={amend} onCheckedChange={setAmend} />
+          <FieldLabel htmlFor={`amend-${repo}`} className="font-normal text-muted-foreground">
+            Amend previous commit
+          </FieldLabel>
+        </Field>
         <Button size="sm" className="ml-auto" disabled={!canCommit} onClick={() => void commit()}>
+          {busy && <Spinner data-icon="inline-start" />}
           {amend
             ? "Amend"
             : stagedCount > 0
               ? `Commit ${stagedCount} ${stagedCount === 1 ? "file" : "files"}`
               : "Commit"}
+          <KbdGroup className="max-md:hidden">
+            <Kbd>⌘</Kbd>
+            <Kbd>↩</Kbd>
+          </KbdGroup>
         </Button>
       </div>
     </div>
@@ -259,7 +279,7 @@ function FileLists({
   })
 
   return (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto [contain:strict]">
+    <ScrollArea className="min-h-0 flex-1" viewportRef={scrollRef} viewportProps={{ className: "[contain:strict]" }}>
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index]!
@@ -272,7 +292,9 @@ function FileLists({
               {"kind" in row ? (
                 <div className="flex h-full items-center gap-2 bg-muted/40 px-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
                   {row.side === "unstaged" ? "Unstaged" : "Staged"}
-                  <span className="font-normal tabular-nums">{row.count}</span>
+                  <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
+                    {row.count}
+                  </Badge>
                   {row.count > 0 && (
                     <span className="ml-auto flex gap-1 normal-case">
                       {row.side === "unstaged" ? (
@@ -343,6 +365,6 @@ function FileLists({
           )
         })}
       </div>
-    </div>
+    </ScrollArea>
   )
 }

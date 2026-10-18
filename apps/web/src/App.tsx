@@ -1,11 +1,17 @@
 import { useAtomValue } from "@effect/atom-react"
-import { cn } from "cn"
+import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert"
+import { Button } from "@workspace/ui/components/button"
+import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs"
 import * as Cause from "effect/Cause"
+import { XIcon } from "lucide-react"
 import { useEffect, useState } from "react"
+import { Loading } from "@/components/loading"
 import { RepoPicker } from "@/components/repo-picker"
 import { Workspace } from "@/components/workspace"
 import { basename } from "@/lib/format"
 import { repoInfoAtom } from "@/lib/git"
+
+const PICKER = "\0picker"
 
 const stored = <T,>(key: string, fallback: T): T => {
   try {
@@ -35,36 +41,33 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <nav className="flex h-8 shrink-0 items-stretch overflow-x-auto border-b bg-muted/40">
-        {tabs.map((path) => (
-          <div
-            key={path}
-            className={cn(
-              "group flex shrink-0 items-center gap-1 border-r pr-1 pl-3",
-              active === path ? "bg-background font-medium" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <button type="button" onClick={() => setActive(path)} className="h-full">
-              {basename(path)}
-            </button>
-            <button
-              type="button"
-              aria-label={`Close ${basename(path)}`}
-              onClick={() => close(path)}
-              className="rounded-sm px-1 text-muted-foreground opacity-60 group-hover:opacity-100 hover:bg-muted"
-            >
-              ×
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => setActive(null)}
-          className={cn("px-3 text-muted-foreground hover:text-foreground", active === null && "bg-background")}
-        >
-          Open…
-        </button>
-      </nav>
+      <Tabs
+        value={active ?? PICKER}
+        onValueChange={(value: string) => setActive(value === PICKER ? null : value)}
+        className="shrink-0 gap-0 border-b bg-muted/40"
+      >
+        <TabsList variant="line" className="h-8 w-full justify-start gap-0 overflow-x-auto rounded-none p-0">
+          {tabs.map((path) => (
+            <div key={path} className="group/repo-tab flex h-full shrink-0 items-center border-r pr-1">
+              <TabsTrigger value={path} className="h-full flex-none rounded-none px-3">
+                {basename(path)}
+              </TabsTrigger>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={`Close ${basename(path)}`}
+                onClick={() => close(path)}
+                className="opacity-50 group-hover/repo-tab:opacity-100"
+              >
+                <XIcon />
+              </Button>
+            </div>
+          ))}
+          <TabsTrigger value={PICKER} className="h-full flex-none rounded-none px-3">
+            Open…
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
       {active === null ? <RepoPicker onOpen={open} openPaths={tabs} /> : <RepoTab key={active} path={active} />}
     </div>
   )
@@ -76,10 +79,12 @@ function RepoTab({ path }: { path: string }) {
   if (info._tag === "Failure") {
     return (
       <div className="p-4">
-        <p className="font-medium">Couldn't open {path}</p>
-        <p className="text-muted-foreground">{Cause.pretty(info.cause).split("\n")[0]}</p>
+        <Alert variant="destructive">
+          <AlertTitle>Couldn't open {path}</AlertTitle>
+          <AlertDescription>{Cause.pretty(info.cause).split("\n")[0]}</AlertDescription>
+        </Alert>
       </div>
     )
   }
-  return <div className="p-4 text-muted-foreground">Opening {basename(path)}…</div>
+  return <Loading label={`Opening ${basename(path)}`} />
 }

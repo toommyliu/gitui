@@ -1,8 +1,8 @@
 import { useAtomValue } from "@effect/atom-react"
 import type { CommitDetail as Detail, FileChange, Oid, RepoId } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "cn"
 import { type ReactNode, useMemo, useRef, useState } from "react"
@@ -110,10 +110,13 @@ export function CommitDetail({
   }
   if (diff?._tag === "TooLarge") {
     return (
-      <div className="flex h-full flex-col overflow-auto">
-        <Summary detail={detail} onSelect={onSelect} />
-        <LargeCommitFiles repo={repo} detail={detail} onHistory={onHistory} />
-      </div>
+      <LargeCommit
+        key={oid}
+        repo={repo}
+        detail={detail}
+        summary={<Summary detail={detail} onSelect={onSelect} />}
+        onHistory={onHistory}
+      />
     )
   }
   return (
@@ -136,13 +139,15 @@ export function HistoryButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function LargeCommitFiles({
+function LargeCommit({
   repo,
   detail,
+  summary,
   onHistory,
 }: {
   repo: RepoId
   detail: Detail
+  summary: ReactNode
   onHistory: (path: string) => void
 }) {
   const [open, setOpen] = useState<FileChange | null>(null)
@@ -154,39 +159,47 @@ function LargeCommitFiles({
     overscan: 20,
   })
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <Alert className="mx-3 my-2 w-auto">
-        <AlertTitle>Too large to show at once</AlertTitle>
-        <AlertDescription>Pick a file to see its diff.</AlertDescription>
-      </Alert>
-      <ScrollArea
-        className="h-64 shrink-0 border-y"
-        viewportRef={scrollRef}
-        viewportProps={{ className: "[contain:strict]" }}
-      >
-        <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-          {virtualizer.getVirtualItems().map((item) => {
-            const file = detail.files[item.index]!
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setOpen(file)}
-                className={cn(
-                  "absolute top-0 left-0 flex w-full items-center gap-2 px-3 text-left hover:bg-muted/60",
-                  open?.path === file.path && "bg-accent",
-                )}
-                style={{ height: FILE_ROW, transform: `translateY(${item.start}px)` }}
-              >
-                <ChangeLetter change={file.change} />
-                <span className="truncate">{file.path}</span>
-              </button>
-            )
-          })}
+    <ResizablePanelGroup orientation="vertical">
+      <ResizablePanel defaultSize="45%" minSize="15%">
+        <div className="flex h-full flex-col overflow-auto">
+          {summary}
+          <ScrollArea
+            className="h-64 shrink-0 border-t"
+            viewportRef={scrollRef}
+            viewportProps={{ className: "[contain:strict]" }}
+          >
+            <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+              {virtualizer.getVirtualItems().map((item) => {
+                const file = detail.files[item.index]!
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setOpen(file)}
+                    className={cn(
+                      "absolute top-0 left-0 flex w-full items-center gap-2 px-3 text-left hover:bg-muted/60",
+                      open?.path === file.path && "bg-accent",
+                    )}
+                    style={{ height: FILE_ROW, transform: `translateY(${item.start}px)` }}
+                  >
+                    <ChangeLetter change={file.change} />
+                    <span className="truncate">{file.path}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </ScrollArea>
         </div>
-      </ScrollArea>
-      {open !== null && <SingleFileDiff repo={repo} oid={detail.oid} file={open} onHistory={onHistory} />}
-    </div>
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel minSize="20%">
+        {open === null ? (
+          <Nothing title="Too large to show at once" description="Pick a file to see its diff." />
+        ) : (
+          <SingleFileDiff key={open.path} repo={repo} oid={detail.oid} file={open} onHistory={onHistory} />
+        )}
+      </ResizablePanel>
+    </ResizablePanelGroup>
   )
 }
 
@@ -208,9 +221,5 @@ function SingleFileDiff({
   if (diff._tag === "TooLarge")
     return <Nothing title="Too large to display" description="This file's diff is over 4 MB." />
   if (diff._tag === "Binary") return <Nothing title="Binary file" />
-  return (
-    <div className="min-h-0 flex-1">
-      <DiffStack items={items} actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />} />
-    </div>
-  )
+  return <DiffStack items={items} actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />} />
 }

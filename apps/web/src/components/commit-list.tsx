@@ -208,7 +208,7 @@ export function CommitList({
             onKeyDown,
             role: "listbox",
             "aria-label": "Commits",
-            className: "[contain:strict]",
+            className: "[contain:strict] data-has-overflow-y:pr-2.5",
           }}
         >
           <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>

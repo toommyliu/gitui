@@ -18,7 +18,14 @@ import {
   LogExpired,
   RepoNotFound,
 } from "@gitui/contracts"
-import { Context, Effect, Exit, Layer, Pull, Scope, Semaphore, Stream } from "effect"
+import * as Context from "effect/Context"
+import * as Effect from "effect/Effect"
+import * as Exit from "effect/Exit"
+import * as Layer from "effect/Layer"
+import * as Pull from "effect/Pull"
+import * as Scope from "effect/Scope"
+import * as Semaphore from "effect/Semaphore"
+import * as Stream from "effect/Stream"
 import { diffTreeArgs, parseCommit, parseFileChanges, showArgs } from "./commit.ts"
 import { Git, nulList } from "./git.ts"
 import { LogParser, logArgs, logRevArgs } from "./log.ts"

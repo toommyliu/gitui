@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import * as Schema from "effect/Schema"
 
 export const RepoId = Schema.String.pipe(Schema.brand("RepoId"))
 export type RepoId = typeof RepoId.Type

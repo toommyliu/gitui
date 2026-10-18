@@ -1,5 +1,6 @@
-import { Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/rpc"
+import * as Schema from "effect/Schema"
+import * as Rpc from "effect/rpc/Rpc"
+import * as RpcGroup from "effect/rpc/RpcGroup"
 import {
   CommitDetail,
   CommitRow,

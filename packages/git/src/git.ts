@@ -1,6 +1,10 @@
 import { GitError } from "@gitui/contracts"
-import { Context, Effect, Layer, Stream } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/process"
+import * as Context from "effect/Context"
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
+import * as Stream from "effect/Stream"
+import * as ChildProcess from "effect/process/ChildProcess"
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
 
 const repositoryRoutingVars = [
   "GIT_DIR",

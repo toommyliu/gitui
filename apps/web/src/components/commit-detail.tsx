@@ -13,29 +13,8 @@ import { commitAtom, diffAtom, diffKey, latest } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
 import { DiffStack, patchItems } from "./diff-view"
+import { ChangeLetter } from "./change-letter"
 import { Loading, Nothing } from "./loading"
-
-const changeLetter: Record<FileChange["change"], string> = {
-  added: "A",
-  deleted: "D",
-  modified: "M",
-  renamed: "R",
-  copied: "C",
-  typechange: "T",
-}
-
-export const changeColor: Record<FileChange["change"], string> = {
-  added: "text-[var(--lane-1)]",
-  deleted: "text-destructive",
-  modified: "text-[var(--lane-2)]",
-  renamed: "text-[var(--lane-0)]",
-  copied: "text-[var(--lane-0)]",
-  typechange: "text-[var(--lane-6)]",
-}
-
-export function ChangeLetter({ change }: { change: FileChange["change"] }) {
-  return <span className={cn("w-3 shrink-0 font-mono font-semibold", changeColor[change])}>{changeLetter[change]}</span>
-}
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -142,25 +121,21 @@ export function HistoryButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function SectionBar({
-  label,
-  open,
-  onToggle,
-  children,
-}: {
-  label: string
-  open: boolean
-  onToggle: () => void
-  children?: ReactNode
-}) {
+function SectionBar({ label, actions, children }: { label: string; actions: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/40 px-2">
       <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</span>
       <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-muted-foreground">{children}</span>
-      <Button size="xs" variant="ghost" onClick={onToggle}>
-        {open ? "Hide" : "Show"}
-      </Button>
+      <span className="flex shrink-0 gap-1">{actions}</span>
     </div>
+  )
+}
+
+function BarButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <Button size="xs" variant="ghost" onClick={onClick}>
+      {children}
+    </Button>
   )
 }
 
@@ -178,7 +153,9 @@ function LargeCommit({
   const [open, setOpen] = useState<FileChange | null>(null)
   const [detailsShown, setDetailsShown] = useState(true)
   const [filesShown, setFilesShown] = useState(true)
+  const [diffShown, setDiffShown] = useState(true)
   const files = usePanelRef()
+  const diff = usePanelRef()
   const narrow = useNarrow()
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
@@ -189,7 +166,10 @@ function LargeCommit({
   })
   return (
     <div className="flex h-full flex-col">
-      <SectionBar label="Details" open={detailsShown} onToggle={() => setDetailsShown(!detailsShown)}>
+      <SectionBar
+        label="Details"
+        actions={<BarButton onClick={() => setDetailsShown(!detailsShown)}>{detailsShown ? "Hide" : "Show"}</BarButton>}
+      >
         {!detailsShown && (
           <>
             <span className="font-mono">{shortOid(detail.oid)}</span>
@@ -200,8 +180,27 @@ function LargeCommit({
       {detailsShown && <div className="max-h-[40%] shrink-0 overflow-auto border-b [&>*]:border-b-0">{summary}</div>}
       <SectionBar
         label="Files"
-        open={filesShown}
-        onToggle={() => (filesShown ? files.current?.collapse() : files.current?.expand())}
+        actions={
+          filesShown ? (
+            <>
+              {diffShown ? (
+                <BarButton onClick={() => diff.current?.collapse()}>Expand</BarButton>
+              ) : (
+                <BarButton onClick={() => diff.current?.expand()}>Split</BarButton>
+              )}
+              <BarButton
+                onClick={() => {
+                  diff.current?.expand()
+                  files.current?.collapse()
+                }}
+              >
+                Hide
+              </BarButton>
+            </>
+          ) : (
+            <BarButton onClick={() => files.current?.expand()}>Show</BarButton>
+          )
+        }
       >
         <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
           {detail.files.length.toLocaleString()}
@@ -225,6 +224,7 @@ function LargeCommit({
                     type="button"
                     onClick={() => {
                       setOpen(file)
+                      diff.current?.expand()
                       if (narrow) files.current?.collapse()
                     }}
                     className={cn(
@@ -241,8 +241,13 @@ function LargeCommit({
             </div>
           </ScrollArea>
         </ResizablePanel>
-        <ResizableHandle />
-        <ResizablePanel minSize="20%">
+        <ResizableHandle withHandle className="aria-[orientation=horizontal]:after:h-5" />
+        <ResizablePanel
+          minSize="20%"
+          collapsible
+          panelRef={diff}
+          onResize={(size) => setDiffShown(size.asPercentage > 0)}
+        >
           {open === null ? (
             <Nothing title="Too large to show at once" description="Pick a file to see its diff." />
           ) : (

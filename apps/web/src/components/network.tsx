@@ -46,7 +46,7 @@ export function SyncButtons({ repo, upstream }: { repo: RepoId; upstream: Tracki
               />
             }
           >
-            {running?.action === action ? <Spinner /> : <Icon />}
+            {running?.action === action ? <Spinner className="size-3" /> : <Icon />}
             {count > 0 && <span className="text-foreground tabular-nums">{count}</span>}
           </TooltipTrigger>
           <TooltipContent side="bottom">{label}</TooltipContent>

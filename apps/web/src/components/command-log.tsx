@@ -10,7 +10,6 @@ import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "cn"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { toast } from "sonner"
 import { copyText } from "@/lib/clipboard"
 import { basename } from "@/lib/format"
 import { commandLogAtom, isFailure, latest, type LogFilter, logViewAtom } from "@/lib/git"
@@ -27,6 +26,29 @@ const quote = (arg: string) => (/^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.rep
 const shortCommand = (entry: CommandEntry) => ["git", ...entry.args.slice(entry.prefixLength)].map(quote).join(" ")
 
 const fullCommand = (entry: CommandEntry) => ["git", "-C", entry.cwd, ...entry.args].map(quote).join(" ")
+
+function CopyButton({ text }: { text: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "blocked">("idle")
+  useEffect(() => {
+    if (state === "idle") return
+    const timer = setTimeout(() => setState("idle"), 1500)
+    return () => clearTimeout(timer)
+  }, [state])
+  return (
+    <Button
+      size="xs"
+      variant="outline"
+      onClick={() =>
+        copyText(text).then(
+          () => setState("copied"),
+          () => setState("blocked"),
+        )
+      }
+    >
+      {state === "copied" ? "Copied" : state === "blocked" ? "Clipboard blocked" : "Copy command"}
+    </Button>
+  )
+}
 
 const filters: ReadonlyArray<readonly [LogFilter, string]> = [
   ["all", "All"],
@@ -94,12 +116,6 @@ export function CommandLogSheet({ repo }: { repo: RepoId }) {
       if (!next.delete(id)) next.add(id)
       return next
     })
-
-  const copy = (entry: CommandEntry) =>
-    copyText(fullCommand(entry)).then(
-      () => toast.success("Command copied"),
-      () => toast.error("Couldn't copy", { description: "This browser blocked clipboard access." }),
-    )
 
   return (
     <Sheet open={view.open} onOpenChange={(open: boolean) => setView((current) => ({ ...current, open }))}>
@@ -192,9 +208,7 @@ export function CommandLogSheet({ repo }: { repo: RepoId }) {
                             {entry.stderr}
                           </pre>
                         )}
-                        <Button size="xs" variant="outline" onClick={() => void copy(entry)}>
-                          Copy command
-                        </Button>
+                        <CopyButton text={fullCommand(entry)} />
                       </div>
                     )}
                   </div>

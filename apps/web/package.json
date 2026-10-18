@@ -16,10 +16,12 @@
     "@pierre/diffs": "1.5.2",
     "@tanstack/react-virtual": "^3.14.18",
     "@workspace/ui": "workspace:*",
+    "cn": "^0.4.0",
     "effect": "4.0.4",
     "lucide-react": "^1.56.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "sonner": "^2.0.8"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4",

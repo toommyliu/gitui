@@ -1,0 +1,49 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "extends": ["./node_modules/@effect/tsgo/oxlint-presets/recommended.json"],
+  "plugins": ["typescript", "react", "import", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error"
+  },
+  "options": {
+    "typeAware": true
+  },
+  "ignorePatterns": ["**/dist/**", "**/node_modules/**"],
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "effect",
+            "message": "Import the module by subpath, e.g. import * as Schema from \"effect/Schema\"."
+          },
+          {
+            "name": "effect/rpc",
+            "message": "Import the module by subpath, e.g. import * as Rpc from \"effect/rpc/Rpc\"."
+          },
+          {
+            "name": "effect/process",
+            "message": "Import the module by subpath, e.g. import * as ChildProcess from \"effect/process/ChildProcess\"."
+          },
+          {
+            "name": "effect/reactivity",
+            "message": "Import the module by subpath, e.g. import * as Atom from \"effect/reactivity/Atom\"."
+          },
+          {
+            "name": "effect/http",
+            "message": "Import the module by subpath, e.g. import * as HttpRouter from \"effect/http/HttpRouter\"."
+          },
+          {
+            "name": "effect/socket",
+            "message": "Import the module by subpath, e.g. import * as Socket from \"effect/socket/Socket\"."
+          }
+        ]
+      }
+    ],
+    "effecttsgo/unstable-api-usage": "off"
+  }
+}

@@ -5,18 +5,20 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
-    "lint": "turbo lint",
-    "format": "turbo format",
     "typecheck": "turbo typecheck",
-    "lint:effect": "eslint ."
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "prepare": "effect-tsgo patch --typescript --oxlint",
+    "test": "turbo test"
   },
   "devDependencies": {
-    "eslint": "^10.12.0",
-    "prettier": "^3.9.10",
-    "prettier-plugin-tailwindcss": "^0.8.1",
+    "@effect/tsgo": "0.51.1",
+    "oxfmt": "0.72.0",
+    "oxlint": "1.87.0",
+    "oxlint-tsgolint": "7.0.2003",
     "turbo": "^2.11.7",
-    "typescript": "~6.0.2",
-    "typescript-eslint": "^8.71.1"
+    "typescript": "7.0.2"
   },
   "packageManager": "pnpm@11.27.1",
   "engines": {

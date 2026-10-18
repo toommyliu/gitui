@@ -12,7 +12,5 @@
   "dependencies": {
     "effect": "4.0.4"
   },
-  "devDependencies": {
-    "typescript": "~6.0.2"
-  }
+  "devDependencies": {}
 }

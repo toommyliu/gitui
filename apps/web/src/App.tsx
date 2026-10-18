@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "cn"
 import * as Cause from "effect/Cause"
 import { XIcon } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -12,6 +13,8 @@ import { basename } from "@/lib/format"
 import { repoInfoAtom } from "@/lib/git"
 
 const PICKER = "\0picker"
+const tabClassName = "h-full flex-none rounded-none px-3 after:hidden"
+const tabFrameClassName = "flex h-full shrink-0 items-center border-r has-data-active:bg-background"
 
 const stored = <T,>(key: string, fallback: T): T => {
   try {
@@ -49,10 +52,13 @@ export function App() {
         onValueChange={(value: string) => setActive(value === PICKER ? null : value)}
         className="shrink-0 gap-0 border-b bg-muted/40"
       >
-        <TabsList variant="line" className="h-8 w-full justify-start gap-0 overflow-x-auto rounded-none p-0">
+        <TabsList
+          variant="line"
+          className="h-8 w-full [scrollbar-width:none] justify-start gap-0 overflow-x-auto overflow-y-hidden rounded-none p-0"
+        >
           {tabs.map((path) => (
-            <div key={path} className="group/repo-tab flex h-full shrink-0 items-center border-r pr-1">
-              <TabsTrigger value={path} className="h-full flex-none rounded-none px-3">
+            <div key={path} className={cn(tabFrameClassName, "group/repo-tab pr-1")}>
+              <TabsTrigger value={path} className={tabClassName}>
                 {basename(path)}
               </TabsTrigger>
               <Button
@@ -66,9 +72,11 @@ export function App() {
               </Button>
             </div>
           ))}
-          <TabsTrigger value={PICKER} className="h-full flex-none rounded-none px-3">
-            Open…
-          </TabsTrigger>
+          <div className={tabFrameClassName}>
+            <TabsTrigger value={PICKER} className={tabClassName}>
+              Open…
+            </TabsTrigger>
+          </div>
         </TabsList>
       </Tabs>
       {active === null ? <RepoPicker onOpen={open} openPaths={tabs} /> : <RepoTab key={active} path={active} />}

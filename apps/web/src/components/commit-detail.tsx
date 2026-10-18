@@ -241,7 +241,7 @@ function LargeCommit({
             </div>
           </ScrollArea>
         </ResizablePanel>
-        <ResizableHandle withHandle className="aria-[orientation=horizontal]:after:h-5" />
+        <ResizableHandle />
         <ResizablePanel
           minSize="20%"
           collapsible

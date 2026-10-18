@@ -6,6 +6,8 @@ import {
   type CommitRow,
   type DiffTarget,
   type FileDiff,
+  type LineAction,
+  type LineSelection,
   type LogHandle,
   type Oid,
   type Operation,
@@ -39,6 +41,7 @@ import {
   stashArgs,
   worktreeArgs,
 } from "./refs.ts"
+import { parseFilePatch, selectLines } from "./patch.ts"
 import { parseStatus, statusArgs } from "./status.ts"
 
 const chunks = <T>(items: ReadonlyArray<T>, size: number) =>
@@ -86,6 +89,12 @@ export class Repo extends Context.Service<
     stage(repo: RepoId, paths: ReadonlyArray<RepoPath>): Effect.Effect<void, GitError>
     unstage(repo: RepoId, paths: ReadonlyArray<RepoPath>): Effect.Effect<void, GitError>
     discard(repo: RepoId, paths: ReadonlyArray<RepoPath>): Effect.Effect<void, GitError>
+    applyLines(
+      repo: RepoId,
+      action: LineAction,
+      path: RepoPath,
+      lines: ReadonlyArray<LineSelection>,
+    ): Effect.Effect<void, GitError>
     commitIndex(repo: RepoId, message: string, amend: boolean): Effect.Effect<void, GitError>
     checkout(repo: RepoId, branch: string): Effect.Effect<void, GitError>
     createBranch(repo: RepoId, name: string, startPoint: Oid, checkout: boolean): Effect.Effect<void, GitError>
@@ -287,6 +296,26 @@ export class Repo extends Context.Service<
         )
       })
 
+      const applyLines = Effect.fn("Repo.applyLines")(function* (
+        repo: RepoId,
+        action: LineAction,
+        path: RepoPath,
+        lines: ReadonlyArray<LineSelection>,
+      ) {
+        const source = action === "unstage" ? ["diff", "--cached"] : ["diff"]
+        const text = decoder.decode(yield* git.run(repo, [...source, "--no-ext-diff", "--no-color", "--", path]))
+        const selected = selectLines(parseFilePatch(text), lines, action === "stage" ? "forward" : "reverse")
+        if (selected._tag !== "Patch") {
+          return yield* new GitError({ args: ["apply"], exitCode: -1, stderr: selected.reason })
+        }
+        const target = action === "discard" ? [] : ["--cached"]
+        const reverse = action === "stage" ? [] : ["--reverse"]
+        yield* git.run(repo, ["apply", ...target, ...reverse, "--recount", "--whitespace=nowarn", "-"], {
+          stdin: new TextEncoder().encode(selected.patch),
+          write: true,
+        })
+      })
+
       const run = (repo: RepoId, args: ReadonlyArray<string>, stdin?: Uint8Array) =>
         Effect.asVoid(git.run(repo, args, stdin === undefined ? { write: true } : { stdin, write: true }))
 
@@ -327,6 +356,7 @@ export class Repo extends Context.Service<
         stage,
         unstage,
         discard,
+        applyLines,
         commitIndex: (repo, message, amend) =>
           run(
             repo,

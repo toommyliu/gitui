@@ -40,6 +40,7 @@ export const handlers = (repoRoots: ReadonlyArray<string>) =>
         Stage: ({ repo: id, paths }) => repo.stage(id, paths),
         Unstage: ({ repo: id, paths }) => repo.unstage(id, paths),
         Discard: ({ repo: id, paths }) => repo.discard(id, paths),
+        ApplyLines: ({ repo: id, action, path, lines }) => repo.applyLines(id, action, path, lines),
         Commit: ({ repo: id, message, amend }) => repo.commitIndex(id, message, amend),
         Checkout: ({ repo: id, branch }) => repo.checkout(id, branch),
         CreateBranch: ({ repo: id, name, startPoint, checkout }) => repo.createBranch(id, name, startPoint, checkout),

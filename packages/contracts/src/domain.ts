@@ -223,3 +223,13 @@ export const CommandEntry = Schema.Struct({
   stderr: Schema.String,
 })
 export type CommandEntry = typeof CommandEntry.Type
+
+export const LineSelection = Schema.Struct({
+  side: Schema.Literals(["old", "new"]),
+  line: Schema.Int,
+  text: Schema.String,
+})
+export type LineSelection = typeof LineSelection.Type
+
+export const LineAction = Schema.Literals(["stage", "unstage", "discard"])
+export type LineAction = typeof LineAction.Type

@@ -7,6 +7,8 @@ import {
   CommitRow,
   DiffTarget,
   FileDiff,
+  LineAction,
+  LineSelection,
   LogHandle,
   Oid,
   Refs,
@@ -55,6 +57,15 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("Stage", { payload: paths, error: GitError }),
   Rpc.make("Unstage", { payload: paths, error: GitError }),
   Rpc.make("Discard", { payload: paths, error: GitError }),
+  Rpc.make("ApplyLines", {
+    payload: {
+      repo: RepoId,
+      action: LineAction,
+      path: RepoPath,
+      lines: Schema.Array(LineSelection),
+    },
+    error: GitError,
+  }),
   Rpc.make("Commit", {
     payload: { repo: RepoId, message: Schema.String, amend: Schema.Boolean },
     error: GitError,

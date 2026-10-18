@@ -18,7 +18,7 @@ export interface ServerOptions {
   readonly host: string
   readonly port: number
   readonly repoRoots: ReadonlyArray<string>
-  readonly webDist: string
+  readonly webDist: string | null
   readonly trustedOrigins: ReadonlyArray<string>
 }
 
@@ -51,9 +51,10 @@ export const serverLayer = (options: ServerOptions) => {
     Layer.provide(CommandLog.layer),
     Layer.provide(RpcSerialization.layerJson),
   )
-  const assets = existsSync(options.webDist)
-    ? HttpStaticServer.layer({ root: options.webDist, spa: true, cacheControl: "no-cache" })
-    : Layer.empty
+  const assets =
+    options.webDist !== null && existsSync(options.webDist)
+      ? HttpStaticServer.layer({ root: options.webDist, spa: true, cacheControl: "no-cache" })
+      : Layer.empty
   const compression = HttpRouter.middleware(HttpMiddleware.compression(), { global: true })
   return HttpRouter.serve(Layer.mergeAll(rpc, assets, compression, rejectForeignOrigins(options.trustedOrigins))).pipe(
     Layer.provideMerge(

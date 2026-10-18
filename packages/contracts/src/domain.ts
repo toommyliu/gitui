@@ -205,7 +205,7 @@ export const RepoEvent = Schema.Struct({
 export type RepoEvent = typeof RepoEvent.Type
 
 export const CommandOutcome = Schema.Union([
-  Schema.TaggedStruct("Exited", { code: Schema.Int }),
+  Schema.TaggedStruct("Exited", { code: Schema.Int, accepted: Schema.Boolean }),
   Schema.TaggedStruct("SpawnFailed", { message: Schema.String }),
   Schema.TaggedStruct("Streamed", {}),
 ])

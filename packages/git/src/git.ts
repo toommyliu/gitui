@@ -109,8 +109,9 @@ export class Git extends Context.Service<
             ),
           ),
         )
-        yield* finish({ _tag: "Exited", code: exitCode }, stderr)
-        if (exitCode !== 0 && !(options?.okExitCodes ?? []).includes(exitCode)) {
+        const accepted = exitCode === 0 || (options?.okExitCodes ?? []).includes(exitCode)
+        yield* finish({ _tag: "Exited", code: exitCode, accepted }, stderr)
+        if (!accepted) {
           return yield* new GitError({ args: [...args], exitCode, stderr })
         }
         return stdout

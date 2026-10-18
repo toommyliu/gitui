@@ -135,10 +135,15 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
         {
           command: "add -A --pathspec-from-file=- --pathspec-file-nul",
           kind: "write",
-          outcome: { _tag: "Exited", code: 0 },
+          outcome: { _tag: "Exited", code: 0, accepted: true },
           failed: false,
         },
-        { command: "switch missing", kind: "write", outcome: { _tag: "Exited", code: 128 }, failed: true },
+        {
+          command: "switch missing",
+          kind: "write",
+          outcome: { _tag: "Exited", code: 128, accepted: false },
+          failed: true,
+        },
       ])
     }),
   )

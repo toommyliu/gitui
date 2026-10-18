@@ -19,6 +19,17 @@ pnpm serve
 
 Anyone who can reach the port can run git in any directory the server's user can read. Bind it to a private address.
 
+## Desktop app
+
+```sh
+pnpm install
+pnpm desktop
+```
+
+`pnpm desktop` builds the web app and the Electron bundles, then opens the app. The window loads the web app from a `gitui://app` scheme and talks to a server that Electron starts as a child process on a random local port. The repository picker lists repositories under `~/projects`, `~/code`, `~/src`, `~/dev`, `~/Developer`, `~/repos` and `~/git`, or under `REPO_ROOTS` when it is set, and **Choose a folder…** opens any other one.
+
+The server only accepts RPC connections from its own origin, from `gitui://app`, or from clients that send no `Origin` header, so websites open in a browser can't drive it.
+
 ## Layout
 
 | Path                         | What it holds                                                                      |
@@ -27,6 +38,7 @@ Anyone who can reach the port can run git in any directory the server's user can
 | `packages/git`               | git runner, NUL-delimited output parsers, commit graph layout, repo service        |
 | `apps/server`                | RPC handlers, file watcher, static file serving                                    |
 | `apps/web`                   | React client: tabs, locations sidebar, commit graph, commit and working-copy views |
+| `apps/desktop`               | Electron shell: main process, preload bridge, and the server's child-process entry |
 | `apps/web/src/components/ui` | shadcn components (base-ui, mira preset)                                           |
 
 ## Performance

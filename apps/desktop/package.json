@@ -1,0 +1,23 @@
+{
+  "name": "desktop",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "start": "node scripts/start.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.4",
+    "effect": "4.0.4",
+    "server": "workspace:*",
+    "web": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "electron": "44.7.0",
+    "esbuild": "0.28.2"
+  }
+}

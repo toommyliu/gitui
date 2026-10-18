@@ -301,7 +301,7 @@ function FileHeader({
         </div>
         <CopyPathButton path={fileDiff.name} />
         {note === null ? (
-          <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums">
+          <span className="ml-auto shrink-0 tabular-nums">
             {deletions > 0 && <span className="text-destructive">-{deletions} </span>}
             {additions > 0 && <span className="text-[var(--lane-1)]">+{additions}</span>}
           </span>

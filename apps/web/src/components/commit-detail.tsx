@@ -34,7 +34,7 @@ function ChangeTotals({ files }: { files: Detail["files"] }) {
       <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
         {files.length.toLocaleString()}
       </Badge>
-      <span className="font-mono text-[11px] tabular-nums">
+      <span className="tabular-nums">
         <span className="text-[var(--lane-1)]">+{additions}</span>{" "}
         <span className="text-destructive">−{deletions}</span>
       </span>

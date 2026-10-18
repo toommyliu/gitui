@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react"
-import type { Change, RepoId, RepoPath, Status, StatusEntry } from "@gitui/contracts"
+import type { Change, LineAction, LineSelection, RepoId, RepoPath, Status, StatusEntry } from "@gitui/contracts"
+import type { CodeViewDiffItem, CodeViewLineSelection } from "@pierre/diffs"
 import type { CodeViewHandle } from "@pierre/diffs/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@workspace/ui/components/button"
@@ -15,10 +16,11 @@ import { cn } from "cn"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { basename, dirname } from "@/lib/format"
 import { diffAtom, diffKey, latest, statusAtom, useGitAction } from "@/lib/git"
+import { hunkChanges, selectedChanges } from "@/lib/lines"
 import { ChangeLetter } from "./commit-detail"
 import { useConfirm } from "./confirm"
 import { Loading, Nothing } from "./loading"
-import { DiffStack, type DiffItemMeta, patchItems } from "./diff-view"
+import { DiffStack, type DiffItemMeta, GutterButton, type HoveredLine, itemMeta, patchItems } from "./diff-view"
 
 type Area = "unstaged" | "untracked" | "conflicted" | "staged"
 
@@ -116,6 +118,47 @@ export function WorkingCopy({ repo }: { repo: RepoId }) {
       onConfirm: () => git("Discard", repo, (c) => c("Discard", { repo, paths: rows.flatMap((r) => r.paths) })),
     })
 
+  const [selection, setSelection] = useState<CodeViewLineSelection | null>(null)
+  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
+  const selected = useMemo(() => {
+    const item = selection === null ? undefined : itemsById.get(selection.id)
+    if (selection === null || item === undefined) return null
+    const changes = selectedChanges(item.fileDiff, selection.range)
+    return changes.length === 0 ? null : { meta: itemMeta(item.id), changes }
+  }, [selection, itemsById])
+
+  const applyLines = async (action: LineAction, path: RepoPath, lines: ReadonlyArray<LineSelection>) => {
+    const label = action === "stage" ? "Stage lines" : action === "unstage" ? "Unstage lines" : "Discard lines"
+    if (await git(label, repo, (c) => c("ApplyLines", { repo, action, path, lines }))) setSelection(null)
+  }
+  const discardLines = (path: RepoPath, lines: ReadonlyArray<LineSelection>) =>
+    confirm({
+      title: `Discard ${lines.length} ${lines.length === 1 ? "line" : "lines"} in ${basename(path)}?`,
+      body: <p>The working tree will lose these changes. This can't be undone.</p>,
+      confirmLabel: "Discard",
+      destructive: true,
+      onConfirm: () => void applyLines("discard", path, lines),
+    })
+
+  const hunkAt = (line: HoveredLine, item: CodeViewDiffItem) => {
+    const meta = itemMeta(item.id)
+    if (meta.section === "untracked") return null
+    const lines = hunkChanges(item.fileDiff, line.lineNumber, line.side)
+    return lines.length === 0 ? null : { meta, lines, staged: meta.section === "staged" }
+  }
+  const gutter = (line: HoveredLine, item: CodeViewDiffItem) => {
+    const hunk = hunkAt(line, item)
+    if (hunk === null) return null
+    return (
+      <GutterButton
+        label={hunk.staged ? "Unstage hunk" : "Stage hunk"}
+        onPress={() => void applyLines(hunk.staged ? "unstage" : "stage", hunk.meta.path, hunk.lines)}
+      >
+        {hunk.staged ? "−" : "+"}
+      </GutterButton>
+    )
+  }
+
   const viewRef = useRef<CodeViewHandle<undefined, undefined>>(null)
   const reveal = (row: FileRow) => {
     const section = row.area === "staged" ? "staged" : row.area === "untracked" ? "untracked" : "unstaged"
@@ -177,7 +220,45 @@ export function WorkingCopy({ repo }: { repo: RepoId }) {
         ) : items.length === 0 ? (
           <Nothing title="No changes" description="The working tree matches HEAD." />
         ) : (
-          <DiffStack items={items} actions={actions} viewRef={viewRef} />
+          <div className="relative h-full">
+            <DiffStack
+              items={items}
+              actions={actions}
+              viewRef={viewRef}
+              lines={{ selection, onSelectionChange: setSelection, gutter }}
+            />
+            {selected !== null && (
+              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-lg border bg-popover px-3 py-1.5 text-popover-foreground shadow-md">
+                <span className="whitespace-nowrap">
+                  {selected.changes.length} {selected.changes.length === 1 ? "line" : "lines"} in{" "}
+                  {basename(selected.meta.path)}
+                </span>
+                {selected.meta.section === "untracked" ? (
+                  <span className="text-muted-foreground">Untracked files stage as a whole.</span>
+                ) : selected.meta.section === "staged" ? (
+                  <Button size="xs" onClick={() => void applyLines("unstage", selected.meta.path, selected.changes)}>
+                    Unstage
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => discardLines(selected.meta.path, selected.changes)}
+                    >
+                      Discard
+                    </Button>
+                    <Button size="xs" onClick={() => void applyLines("stage", selected.meta.path, selected.changes)}>
+                      Stage
+                    </Button>
+                  </>
+                )}
+                <Button size="xs" variant="ghost" onClick={() => setSelection(null)}>
+                  Clear
+                </Button>
+              </div>
+            )}
+          </div>
         )}
       </ResizablePanel>
     </ResizablePanelGroup>

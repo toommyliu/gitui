@@ -12,6 +12,9 @@ const hash = (text: string) => {
   return h >>> 0
 }
 
+// Pierre truncates header paths with direction: rtl; the marks keep a leading "." of a dotfile path in place.
+const headerCSS = `[data-title]::before,[data-title]::after,[data-prev-name]::before,[data-prev-name]::after{content:"\\200E"}`
+
 export interface DiffItemMeta {
   readonly section: string
   readonly path: RepoPath
@@ -111,6 +114,7 @@ export function DiffStack({
       lineDiffType: "word" as const,
       enableLineSelection: selectable,
       enableGutterUtility: selectable,
+      unsafeCSS: headerCSS,
     }),
     [resolvedTheme, diffStyle, wrapLines, selectable],
   )

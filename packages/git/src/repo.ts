@@ -420,7 +420,20 @@ export class Repo extends Context.Service<
         pruneWorktrees: (repo) => run(repo, ["worktree", "prune"]),
         fetch: (repo) => run(repo, ["fetch", "--all", "--prune"]),
         pull: (repo) => run(repo, ["pull"]),
-        push: (repo) => run(repo, ["push"]),
+        push: Effect.fn("Repo.push")(function* (repo) {
+          const { head, upstream } = yield* status(repo)
+          if (upstream !== null || head._tag !== "Branch") return yield* run(repo, ["push"])
+          const remotes = parseRemotes(yield* git.run(repo, remotesArgs, { okExitCodes: [1] }))
+          const remote = remotes.find((r) => r.name === "origin") ?? (remotes.length === 1 ? remotes[0] : undefined)
+          if (remote === undefined) {
+            return yield* new GitError({
+              args: ["push"],
+              exitCode: -1,
+              stderr: remotes.length === 0 ? "This repository has no remotes." : "Pick a remote: there's no origin.",
+            })
+          }
+          yield* run(repo, ["push", "--set-upstream", remote.name, `refs/heads/${head.name}`])
+        }),
         stashApply: Effect.fn("Repo.stashApply")(function* (repo, oid, drop) {
           const ref = yield* stashIndex(repo, oid)
           yield* run(repo, ["stash", drop ? "pop" : "apply", ref])

@@ -70,6 +70,13 @@ export class GitRpcs extends RpcGroup.make(
     payload: { repo: RepoId, message: Schema.String, amend: Schema.Boolean },
     error: GitError,
   }),
+  Rpc.make("ContinueOperation", { payload: repo, error: GitError }),
+  Rpc.make("SkipOperation", { payload: repo, error: GitError }),
+  Rpc.make("AbortOperation", { payload: repo, error: GitError }),
+  Rpc.make("ResolveConflict", {
+    payload: { repo: RepoId, path: RepoPath, side: Schema.Literals(["ours", "theirs"]) },
+    error: GitError,
+  }),
   Rpc.make("Checkout", { payload: { repo: RepoId, branch: Schema.String }, error: GitError }),
   Rpc.make("CreateBranch", {
     payload: { repo: RepoId, name: Schema.String, startPoint: Oid, checkout: Schema.Boolean },

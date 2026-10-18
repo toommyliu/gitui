@@ -96,6 +96,10 @@ export class Repo extends Context.Service<
       lines: ReadonlyArray<LineSelection>,
     ): Effect.Effect<void, GitError>
     commitIndex(repo: RepoId, message: string, amend: boolean): Effect.Effect<void, GitError>
+    continueOperation(repo: RepoId): Effect.Effect<void, GitError>
+    skipOperation(repo: RepoId): Effect.Effect<void, GitError>
+    abortOperation(repo: RepoId): Effect.Effect<void, GitError>
+    resolveConflict(repo: RepoId, path: RepoPath, side: "ours" | "theirs"): Effect.Effect<void, GitError>
     checkout(repo: RepoId, branch: string): Effect.Effect<void, GitError>
     createBranch(repo: RepoId, name: string, startPoint: Oid, checkout: boolean): Effect.Effect<void, GitError>
     deleteBranch(repo: RepoId, name: string, force: boolean, removeWorktree: boolean): Effect.Effect<void, GitError>
@@ -131,12 +135,40 @@ export class Repo extends Context.Service<
       const gitDirOf = (repo: RepoId) =>
         git.text(repo, ["rev-parse", "--absolute-git-dir"]).pipe(Effect.map((s) => s.trim()))
 
+      const operationOf = (gitDir: string) =>
+        operationMarkers.find(([marker]) => existsSync(join(gitDir, marker)))?.[1] ?? null
+
       const status = Effect.fn("Repo.status")(function* (repo: RepoId) {
         const [bytes, gitDir] = yield* Effect.all([git.run(repo, statusArgs), gitDirOf(repo)], { concurrency: 2 })
-        const parsed = parseStatus(bytes)
-        const operation = operationMarkers.find(([marker]) => existsSync(join(gitDir, marker)))?.[1] ?? null
-        return { ...parsed, operation }
+        return { ...parseStatus(bytes), operation: operationOf(gitDir) }
       })
+
+      const operationCommand = Effect.fn("Repo.operationCommand")(function* (
+        repo: RepoId,
+        step: "continue" | "skip" | "abort",
+      ) {
+        const operation = operationOf(yield* gitDirOf(repo))
+        const fail = (reason: string) => new GitError({ args: [step], exitCode: -1, stderr: reason })
+        switch (operation) {
+          case null:
+            return yield* fail("Nothing is in progress.")
+          case "merge":
+            if (step === "skip") return yield* fail("A merge can't skip; continue or abort it.")
+            return step === "continue" ? ["commit", "--no-edit"] : ["merge", "--abort"]
+          case "bisect":
+            if (step !== "abort") return yield* fail("Finish the bisect from a terminal, or abort it here.")
+            return ["bisect", "reset"]
+          case "rebase":
+          case "cherry-pick":
+          case "revert":
+            return [operation, `--${step}`]
+        }
+      })
+
+      const stepOperation = (step: "continue" | "skip" | "abort") =>
+        Effect.fn("Repo.stepOperation")(function* (repo: RepoId) {
+          yield* run(repo, yield* operationCommand(repo, step))
+        })
 
       const refs = Effect.fn("Repo.refs")(function* (repo: RepoId) {
         const [remotesOut, refsOut, stashOut, worktreeOut] = yield* Effect.all(
@@ -363,6 +395,13 @@ export class Repo extends Context.Service<
             ["commit", "--cleanup=strip", "-F", "-", ...(amend ? ["--amend"] : [])],
             new TextEncoder().encode(message),
           ),
+        continueOperation: stepOperation("continue"),
+        skipOperation: stepOperation("skip"),
+        abortOperation: stepOperation("abort"),
+        resolveConflict: Effect.fn("Repo.resolveConflict")(function* (repo, path, side) {
+          yield* run(repo, ["checkout", `--${side}`, "--", path])
+          yield* run(repo, ["add", "--", path])
+        }),
         checkout: (repo, branch) => run(repo, ["switch", branch]),
         createBranch: (repo, name, startPoint, checkout) =>
           run(repo, checkout ? ["switch", "-c", name, startPoint] : ["branch", name, startPoint]),

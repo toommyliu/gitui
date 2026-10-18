@@ -22,7 +22,14 @@ const repositoryRoutingVars = [
 const gitEnv = (): Record<string, string | undefined> => {
   const env: Record<string, string | undefined> = { ...process.env }
   for (const name of repositoryRoutingVars) delete env[name]
-  return { ...env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" }
+  return {
+    ...env,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_OPTIONAL_LOCKS: "0",
+    GIT_EDITOR: "true",
+    GIT_SEQUENCE_EDITOR: "true",
+    LC_ALL: "C",
+  }
 }
 
 const globalArgs = [

@@ -599,7 +599,7 @@ function SectionRow({
     <button
       type="button"
       onClick={() => toggle(row.id)}
-      className="flex h-full w-full items-center gap-1.5 px-2 text-left font-medium text-muted-foreground hover:text-foreground"
+      className="flex h-full w-full items-center gap-1.5 px-2 text-left text-[11px] font-semibold tracking-wide text-muted-foreground uppercase hover:text-foreground"
     >
       <Disclosure open={open} />
       {row.label}

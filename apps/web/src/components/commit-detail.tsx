@@ -163,7 +163,7 @@ export function HistoryButton({ onClick }: { onClick: () => void }) {
 function SectionBar({ label, actions, children }: { label: string; actions: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-muted/40 px-2">
-      <span className="font-medium text-muted-foreground">{label}</span>
+      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</span>
       <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-muted-foreground">{children}</span>
       <span className="flex shrink-0 gap-1">{actions}</span>
     </div>

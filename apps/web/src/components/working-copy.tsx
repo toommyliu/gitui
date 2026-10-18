@@ -728,12 +728,12 @@ function SectionHeader({
   const discardable = targets.filter((r) => r.area !== "conflicted")
   const conflicted = targets.filter((r) => r.area === "conflicted")
   return (
-    <div className="flex h-7 shrink-0 items-center gap-2 bg-muted/40 px-2 text-xs font-medium text-muted-foreground">
+    <div className="flex h-7 shrink-0 items-center gap-2 bg-muted/40 px-2 text-muted-foreground">
       <button
         type="button"
         aria-expanded={open}
         onClick={onToggle}
-        className="-ml-1 flex h-6 items-center gap-1.5 rounded-sm px-1 hover:text-foreground"
+        className="-ml-1 flex h-6 items-center gap-1.5 rounded-sm px-1 text-[11px] font-semibold tracking-wide uppercase hover:text-foreground"
       >
         {open ? <ChevronDownIcon className="size-3.5" /> : <ChevronRightIcon className="size-3.5" />}
         {label}

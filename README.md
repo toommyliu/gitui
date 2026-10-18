@@ -9,13 +9,13 @@ pnpm install
 pnpm serve
 ```
 
-`pnpm serve` builds the web app and starts the server.
+`pnpm serve` builds the web app and starts the server. The repo picker also opens any absolute path you type.
 
-| Variable     | Meaning                                                          |
-| ------------ | ---------------------------------------------------------------- |
-| `HOST`       | Address to bind                                                  |
-| `PORT`       | Port to bind, 4600 by default                                    |
-| `REPO_ROOTS` | `:`-separated directories whose repositories the picker suggests |
+| Variable     | Default     | Meaning                                                          |
+| ------------ | ----------- | ---------------------------------------------------------------- |
+| `HOST`       | `127.0.0.1` | Address to bind                                                  |
+| `PORT`       | `4600`      | Port to bind                                                     |
+| `REPO_ROOTS` | none        | `:`-separated directories whose repositories the picker suggests |
 
 Anyone who can reach the port can run git in any directory the server's user can read. Bind it to a private address.
 

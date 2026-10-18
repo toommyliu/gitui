@@ -1,12 +1,14 @@
-import { type CommandOutcome, GitError } from "@gitui/contracts"
+import { type CommandOutcome, GitError, type Progress } from "@gitui/contracts"
 import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Exit from "effect/Exit"
 import * as Layer from "effect/Layer"
 import * as Stream from "effect/Stream"
 import * as ChildProcess from "effect/process/ChildProcess"
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
 import { CommandLog } from "./command-log.ts"
+import { ProgressSplitter, parseProgress } from "./progress.ts"
 
 const repositoryRoutingVars = [
   "GIT_DIR",
@@ -67,6 +69,7 @@ export class Git extends Context.Service<
     run(cwd: string, args: ReadonlyArray<string>, options?: RunOptions): Effect.Effect<Uint8Array, GitError>
     text(cwd: string, args: ReadonlyArray<string>, options?: RunOptions): Effect.Effect<string, GitError>
     stream(cwd: string, args: ReadonlyArray<string>): Stream.Stream<Uint8Array, GitError>
+    progress(cwd: string, args: ReadonlyArray<string>): Stream.Stream<Progress, GitError>
   }
 >()("@gitui/git/Git") {
   static readonly layer = Layer.effect(
@@ -140,6 +143,37 @@ export class Git extends Context.Service<
               ),
             ),
           ),
+        progress: (cwd, args) =>
+          Stream.unwrap(
+            Effect.gen(function* () {
+              const options = { write: true }
+              const finish = yield* recorder(cwd, args, options)
+              const handle = yield* spawner.spawn(command(cwd, args, options))
+              const splitter = new ProgressSplitter()
+              const lines = handle.stderr.pipe(
+                Stream.decodeText(),
+                Stream.mapAccum(
+                  () => undefined,
+                  (state, text) => [state, splitter.push(text)] as const,
+                  { onHalt: () => splitter.flush() },
+                ),
+              )
+              const exited = Effect.gen(function* () {
+                const exitCode = yield* handle.exitCode
+                yield* finish({ _tag: "Exited", code: exitCode, accepted: exitCode === 0 }, splitter.transcript)
+                if (exitCode !== 0) {
+                  return yield* new GitError({ args: [...args], exitCode, stderr: splitter.transcript })
+                }
+              })
+              return Stream.merge(lines, Stream.drain(handle.stdout)).pipe(
+                Stream.concat(Stream.drain(Stream.fromEffect(exited))),
+                Stream.map(parseProgress),
+                Stream.onExit((exit) =>
+                  Exit.hasInterrupts(exit) ? finish({ _tag: "Cancelled" }, splitter.transcript) : Effect.void,
+                ),
+              )
+            }),
+          ).pipe(Stream.mapError((error) => (error instanceof GitError ? error : spawnError(args)(error)))),
       })
     }),
   )

@@ -208,6 +208,7 @@ export const CommandOutcome = Schema.Union([
   Schema.TaggedStruct("Exited", { code: Schema.Int, accepted: Schema.Boolean }),
   Schema.TaggedStruct("SpawnFailed", { message: Schema.String }),
   Schema.TaggedStruct("Streamed", {}),
+  Schema.TaggedStruct("Cancelled", {}),
 ])
 export type CommandOutcome = typeof CommandOutcome.Type
 
@@ -233,3 +234,9 @@ export type LineSelection = typeof LineSelection.Type
 
 export const LineAction = Schema.Literals(["stage", "unstage", "discard"])
 export type LineAction = typeof LineAction.Type
+
+export const Progress = Schema.Struct({
+  line: Schema.String,
+  percent: Schema.NullOr(Schema.Int),
+})
+export type Progress = typeof Progress.Type

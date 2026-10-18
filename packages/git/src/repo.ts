@@ -11,6 +11,7 @@ import {
   type LogHandle,
   type Oid,
   type Operation,
+  type Progress,
   type Refs,
   type RepoId,
   type RepoInfo,
@@ -75,54 +76,73 @@ interface LogSession {
 export class Repo extends Context.Service<
   Repo,
   {
-    open(path: string): Effect.Effect<RepoInfo, RepoNotFound>
-    status(repo: RepoId): Effect.Effect<Status, GitError>
-    refs(repo: RepoId): Effect.Effect<Refs, GitError>
-    openLog(repo: RepoId, query: string): Effect.Effect<LogHandle, GitError>
-    logPage(
+    readonly open: (path: string) => Effect.Effect<RepoInfo, RepoNotFound>
+    readonly status: (repo: RepoId) => Effect.Effect<Status, GitError>
+    readonly refs: (repo: RepoId) => Effect.Effect<Refs, GitError>
+    readonly openLog: (repo: RepoId, query: string) => Effect.Effect<LogHandle, GitError>
+    readonly logPage: (
       repo: RepoId,
       logId: string,
       start: number,
       count: number,
-    ): Effect.Effect<ReadonlyArray<CommitRow>, GitError | LogExpired>
-    commit(repo: RepoId, oid: Oid): Effect.Effect<CommitDetail, GitError>
-    diff(repo: RepoId, target: DiffTarget, paths: ReadonlyArray<RepoPath>): Effect.Effect<FileDiff, GitError>
-    stage(repo: RepoId, paths: ReadonlyArray<RepoPath>): Effect.Effect<void, GitError>
-    unstage(repo: RepoId, paths: ReadonlyArray<RepoPath>): Effect.Effect<void, GitError>
-    discard(repo: RepoId, paths: ReadonlyArray<RepoPath>): Effect.Effect<void, GitError>
-    applyLines(
+    ) => Effect.Effect<ReadonlyArray<CommitRow>, GitError | LogExpired>
+    readonly commit: (repo: RepoId, oid: Oid) => Effect.Effect<CommitDetail, GitError>
+    readonly diff: (
+      repo: RepoId,
+      target: DiffTarget,
+      paths: ReadonlyArray<RepoPath>,
+    ) => Effect.Effect<FileDiff, GitError>
+    readonly stage: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
+    readonly unstage: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
+    readonly discard: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
+    readonly applyLines: (
       repo: RepoId,
       action: LineAction,
       path: RepoPath,
       lines: ReadonlyArray<LineSelection>,
-    ): Effect.Effect<void, GitError>
-    commitIndex(repo: RepoId, message: string, amend: boolean): Effect.Effect<void, GitError>
-    continueOperation(repo: RepoId): Effect.Effect<void, GitError>
-    skipOperation(repo: RepoId): Effect.Effect<void, GitError>
-    abortOperation(repo: RepoId): Effect.Effect<void, GitError>
-    resolveConflict(repo: RepoId, path: RepoPath, side: "ours" | "theirs"): Effect.Effect<void, GitError>
-    checkout(repo: RepoId, branch: string): Effect.Effect<void, GitError>
-    createBranch(repo: RepoId, name: string, startPoint: Oid, checkout: boolean): Effect.Effect<void, GitError>
-    deleteBranch(repo: RepoId, name: string, force: boolean, removeWorktree: boolean): Effect.Effect<void, GitError>
-    removeWorktree(repo: RepoId, path: string, force: boolean): Effect.Effect<void, GitError>
-    pruneWorktrees(repo: RepoId): Effect.Effect<void, GitError>
-    fetch(repo: RepoId): Effect.Effect<void, GitError>
-    pull(repo: RepoId): Effect.Effect<void, GitError>
-    push(repo: RepoId): Effect.Effect<void, GitError>
-    forcePush(repo: RepoId, expected: Oid): Effect.Effect<void, GitError>
-    renameBranch(repo: RepoId, from: string, to: string): Effect.Effect<void, GitError>
-    merge(repo: RepoId, ref: string): Effect.Effect<void, GitError>
-    rebase(repo: RepoId, onto: string): Effect.Effect<void, GitError>
-    cherryPick(repo: RepoId, oid: Oid): Effect.Effect<void, GitError>
-    revert(repo: RepoId, oid: Oid): Effect.Effect<void, GitError>
-    reset(repo: RepoId, oid: Oid, mode: "soft" | "mixed" | "hard"): Effect.Effect<void, GitError>
-    checkoutDetached(repo: RepoId, oid: Oid): Effect.Effect<void, GitError>
-    createTag(repo: RepoId, name: string, oid: Oid, message: string): Effect.Effect<void, GitError>
-    deleteTag(repo: RepoId, name: string): Effect.Effect<void, GitError>
-    stashPush(repo: RepoId, message: string, includeUntracked: boolean): Effect.Effect<void, GitError>
-    addWorktree(repo: RepoId, path: string, branch: string, startPoint: Oid | null): Effect.Effect<void, GitError>
-    stashApply(repo: RepoId, oid: Oid, drop: boolean): Effect.Effect<void, GitError>
-    stashDrop(repo: RepoId, oid: Oid): Effect.Effect<void, GitError>
+    ) => Effect.Effect<void, GitError>
+    readonly commitIndex: (repo: RepoId, message: string, amend: boolean) => Effect.Effect<void, GitError>
+    readonly continueOperation: (repo: RepoId) => Effect.Effect<void, GitError>
+    readonly skipOperation: (repo: RepoId) => Effect.Effect<void, GitError>
+    readonly abortOperation: (repo: RepoId) => Effect.Effect<void, GitError>
+    readonly resolveConflict: (repo: RepoId, path: RepoPath, side: "ours" | "theirs") => Effect.Effect<void, GitError>
+    readonly checkout: (repo: RepoId, branch: string) => Effect.Effect<void, GitError>
+    readonly createBranch: (
+      repo: RepoId,
+      name: string,
+      startPoint: Oid,
+      checkout: boolean,
+    ) => Effect.Effect<void, GitError>
+    readonly deleteBranch: (
+      repo: RepoId,
+      name: string,
+      force: boolean,
+      removeWorktree: boolean,
+    ) => Effect.Effect<void, GitError>
+    readonly removeWorktree: (repo: RepoId, path: string, force: boolean) => Effect.Effect<void, GitError>
+    readonly pruneWorktrees: (repo: RepoId) => Effect.Effect<void, GitError>
+    readonly fetch: (repo: RepoId) => Stream.Stream<Progress, GitError>
+    readonly pull: (repo: RepoId) => Stream.Stream<Progress, GitError>
+    readonly push: (repo: RepoId) => Stream.Stream<Progress, GitError>
+    readonly forcePush: (repo: RepoId, expected: Oid) => Stream.Stream<Progress, GitError>
+    readonly renameBranch: (repo: RepoId, from: string, to: string) => Effect.Effect<void, GitError>
+    readonly merge: (repo: RepoId, ref: string) => Effect.Effect<void, GitError>
+    readonly rebase: (repo: RepoId, onto: string) => Effect.Effect<void, GitError>
+    readonly cherryPick: (repo: RepoId, oid: Oid) => Effect.Effect<void, GitError>
+    readonly revert: (repo: RepoId, oid: Oid) => Effect.Effect<void, GitError>
+    readonly reset: (repo: RepoId, oid: Oid, mode: "soft" | "mixed" | "hard") => Effect.Effect<void, GitError>
+    readonly checkoutDetached: (repo: RepoId, oid: Oid) => Effect.Effect<void, GitError>
+    readonly createTag: (repo: RepoId, name: string, oid: Oid, message: string) => Effect.Effect<void, GitError>
+    readonly deleteTag: (repo: RepoId, name: string) => Effect.Effect<void, GitError>
+    readonly stashPush: (repo: RepoId, message: string, includeUntracked: boolean) => Effect.Effect<void, GitError>
+    readonly addWorktree: (
+      repo: RepoId,
+      path: string,
+      branch: string,
+      startPoint: Oid | null,
+    ) => Effect.Effect<void, GitError>
+    readonly stashApply: (repo: RepoId, oid: Oid, drop: boolean) => Effect.Effect<void, GitError>
+    readonly stashDrop: (repo: RepoId, oid: Oid) => Effect.Effect<void, GitError>
   }
 >()("@gitui/git/Repo") {
   static readonly layer = Layer.effect(
@@ -416,6 +436,42 @@ export class Repo extends Context.Service<
       const removeWorktree = (repo: RepoId, path: string, force: boolean) =>
         run(repo, ["worktree", "remove", ...(force ? ["--force", "--force"] : []), path])
 
+      const pushArgs = Effect.fn("Repo.pushArgs")(function* (repo: RepoId) {
+        const { head, upstream } = yield* status(repo)
+        if (upstream !== null || head._tag !== "Branch") return ["push", "--progress"]
+        const remotes = parseRemotes(yield* git.run(repo, remotesArgs, { okExitCodes: [1] }))
+        const remote = remotes.find((r) => r.name === "origin") ?? (remotes.length === 1 ? remotes[0] : undefined)
+        if (remote === undefined) {
+          return yield* new GitError({
+            args: ["push"],
+            exitCode: -1,
+            stderr: remotes.length === 0 ? "This repository has no remotes." : "Pick a remote: there's no origin.",
+          })
+        }
+        return ["push", "--progress", "--set-upstream", remote.name, `refs/heads/${head.name}`]
+      })
+
+      const forcePushArgs = Effect.fn("Repo.forcePushArgs")(function* (repo: RepoId, expected: Oid) {
+        const { head, upstream } = yield* status(repo)
+        if (head._tag !== "Branch" || upstream === null) {
+          return yield* new GitError({
+            args: ["push"],
+            exitCode: -1,
+            stderr: "Force push needs a branch with an upstream.",
+          })
+        }
+        const slash = upstream.name.indexOf("/")
+        const remote = upstream.name.slice(0, slash)
+        const remoteBranch = upstream.name.slice(slash + 1)
+        return [
+          "push",
+          "--progress",
+          `--force-with-lease=refs/heads/${remoteBranch}:${expected}`,
+          remote,
+          `refs/heads/${head.name}:refs/heads/${remoteBranch}`,
+        ]
+      })
+
       return Repo.of({
         open,
         status,
@@ -457,41 +513,11 @@ export class Repo extends Context.Service<
         }),
         removeWorktree,
         pruneWorktrees: (repo) => run(repo, ["worktree", "prune"]),
-        fetch: (repo) => run(repo, ["fetch", "--all", "--prune"]),
-        pull: (repo) => run(repo, ["pull"]),
-        push: Effect.fn("Repo.push")(function* (repo) {
-          const { head, upstream } = yield* status(repo)
-          if (upstream !== null || head._tag !== "Branch") return yield* run(repo, ["push"])
-          const remotes = parseRemotes(yield* git.run(repo, remotesArgs, { okExitCodes: [1] }))
-          const remote = remotes.find((r) => r.name === "origin") ?? (remotes.length === 1 ? remotes[0] : undefined)
-          if (remote === undefined) {
-            return yield* new GitError({
-              args: ["push"],
-              exitCode: -1,
-              stderr: remotes.length === 0 ? "This repository has no remotes." : "Pick a remote: there's no origin.",
-            })
-          }
-          yield* run(repo, ["push", "--set-upstream", remote.name, `refs/heads/${head.name}`])
-        }),
-        forcePush: Effect.fn("Repo.forcePush")(function* (repo, expected) {
-          const { head, upstream } = yield* status(repo)
-          if (head._tag !== "Branch" || upstream === null) {
-            return yield* new GitError({
-              args: ["push"],
-              exitCode: -1,
-              stderr: "Force push needs a branch with an upstream.",
-            })
-          }
-          const slash = upstream.name.indexOf("/")
-          const remote = upstream.name.slice(0, slash)
-          const remoteBranch = upstream.name.slice(slash + 1)
-          yield* run(repo, [
-            "push",
-            `--force-with-lease=refs/heads/${remoteBranch}:${expected}`,
-            remote,
-            `refs/heads/${head.name}:refs/heads/${remoteBranch}`,
-          ])
-        }),
+        fetch: (repo) => git.progress(repo, ["fetch", "--all", "--prune", "--progress"]),
+        pull: (repo) => git.progress(repo, ["pull", "--progress"]),
+        push: (repo) => Stream.unwrap(pushArgs(repo).pipe(Effect.map((args) => git.progress(repo, args)))),
+        forcePush: (repo, expected) =>
+          Stream.unwrap(forcePushArgs(repo, expected).pipe(Effect.map((args) => git.progress(repo, args)))),
         renameBranch: (repo, from, to) => run(repo, ["branch", "-m", from, to]),
         merge: (repo, ref) => run(repo, ["merge", "--no-edit", ref]),
         rebase: (repo, onto) => run(repo, ["rebase", onto]),

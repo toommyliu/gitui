@@ -7,6 +7,7 @@ import { expect, layer } from "@effect/vitest"
 import type { Oid, RepoId } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Stream from "effect/Stream"
 import { CommandLog } from "./command-log.ts"
 import { Repo } from "./repo.ts"
 import { fixtureEnv, makeRepo } from "./testRepo.ts"
@@ -40,7 +41,7 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         const { repo, remote } = withRemote()
         repo.git("switch", "-q", "-c", "feature")
         const tip = repo.commit("feature work")
-        yield* (yield* Repo).push(id(repo.root))
+        yield* Stream.runDrain((yield* Repo).push(id(repo.root)))
         expect(repo.git("rev-parse", "--abbrev-ref", "feature@{upstream}")).toBe("origin/feature")
         expect(execFileSync("git", ["--git-dir", remote, "rev-parse", "feature"], { encoding: "utf8" }).trim()).toBe(
           tip,
@@ -59,10 +60,10 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         repo.git("fetch", "-q", "origin")
 
         const r = yield* Repo
-        const error = yield* Effect.flip(r.forcePush(id(repo.root), seen))
+        const error = yield* Effect.flip(Stream.runDrain(r.forcePush(id(repo.root), seen)))
         expect(error.stderr).toContain("stale info")
         const current = repo.git("rev-parse", "origin/main") as Oid
-        yield* r.forcePush(id(repo.root), current)
+        yield* Stream.runDrain(r.forcePush(id(repo.root), current))
         expect(
           execFileSync("git", ["--git-dir", remote, "log", "-1", "--format=%s", "main"], { encoding: "utf8" }).trim(),
         ).toBe("rewritten")

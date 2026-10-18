@@ -1,9 +1,19 @@
 import { useAtomValue } from "@effect/atom-react"
-import type { Change, LineAction, LineSelection, RepoId, RepoPath, Status, StatusEntry } from "@gitui/contracts"
+import type {
+  Change,
+  LineAction,
+  LineSelection,
+  Operation,
+  RepoId,
+  RepoPath,
+  Status,
+  StatusEntry,
+} from "@gitui/contracts"
 import type { CodeViewDiffItem, CodeViewLineSelection } from "@pierre/diffs"
 import type { CodeViewHandle } from "@pierre/diffs/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@workspace/ui/components/button"
+import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import { Checkbox } from "@workspace/ui/components/checkbox"
 import { Field, FieldLabel } from "@workspace/ui/components/field"
@@ -67,6 +77,90 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
     }
   }
   return { unstaged, staged }
+}
+
+type SideLabels = { readonly ours: string; readonly theirs: string }
+
+const sideLabels: Record<Operation, SideLabels> = {
+  merge: { ours: "Keep mine", theirs: "Take theirs" },
+  rebase: { ours: "Keep upstream", theirs: "Keep my commit" },
+  "cherry-pick": { ours: "Keep mine", theirs: "Take picked" },
+  revert: { ours: "Keep mine", theirs: "Take revert" },
+  bisect: { ours: "Keep mine", theirs: "Take theirs" },
+}
+
+const operationNames: Record<Operation, string> = {
+  merge: "Merge",
+  rebase: "Rebase",
+  "cherry-pick": "Cherry-pick",
+  revert: "Revert",
+  bisect: "Bisect",
+}
+
+function OperationBanner({ repo, operation, conflicts }: { repo: RepoId; operation: Operation; conflicts: number }) {
+  const git = useGitAction()
+  const confirm = useConfirm()
+  const name = operationNames[operation]
+  const canSkip = operation === "rebase" || operation === "cherry-pick" || operation === "revert"
+  return (
+    <Alert className="m-2 w-auto">
+      <AlertTitle>{name} in progress</AlertTitle>
+      <AlertDescription>
+        {conflicts > 0
+          ? `${conflicts} ${conflicts === 1 ? "file has" : "files have"} conflicts. Resolve them, then continue.`
+          : "No conflicts left. Continue to finish."}
+      </AlertDescription>
+      <div className="col-span-full mt-1 flex gap-1">
+        {operation !== "bisect" && (
+          <Button
+            size="xs"
+            disabled={conflicts > 0}
+            onClick={() => void git(`Continue ${name.toLowerCase()}`, repo, (c) => c("ContinueOperation", { repo }))}
+          >
+            Continue
+          </Button>
+        )}
+        {canSkip && (
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => void git(`Skip`, repo, (c) => c("SkipOperation", { repo }))}
+          >
+            Skip this commit
+          </Button>
+        )}
+        <Button
+          size="xs"
+          variant="destructive"
+          onClick={() =>
+            confirm({
+              title: `Abort ${name.toLowerCase()}?`,
+              body: <p>The branch goes back to where it was before the {name.toLowerCase()} started.</p>,
+              confirmLabel: "Abort",
+              destructive: true,
+              onConfirm: () => void git(`Abort ${name.toLowerCase()}`, repo, (c) => c("AbortOperation", { repo })),
+            })
+          }
+        >
+          Abort
+        </Button>
+      </div>
+    </Alert>
+  )
+}
+
+function EmptyDiff({ conflicts, files }: { conflicts: boolean; files: number }) {
+  if (conflicts) {
+    return (
+      <Nothing
+        title="Resolve conflicts"
+        description="Keep one side with the buttons in the file list, or edit the file and mark it resolved."
+      />
+    )
+  }
+  if (files > 0)
+    return <Nothing title="No text diff" description="These changes are binary or only change file modes." />
+  return <Nothing title="No changes" description="The working tree matches HEAD." />
 }
 
 const draftKey = (repo: RepoId) => `gitui.draft:${repo}`
@@ -197,6 +291,13 @@ export function WorkingCopy({ repo }: { repo: RepoId }) {
     <ResizablePanelGroup orientation="vertical">
       <ResizablePanel defaultSize="42%" minSize="20%">
         <div className="flex h-full flex-col">
+          {status.operation !== null && (
+            <OperationBanner
+              repo={repo}
+              operation={status.operation}
+              conflicts={unstaged.filter((row) => row.area === "conflicted").length}
+            />
+          )}
           <CommitBox repo={repo} status={status} stagedCount={staged.length} />
           <FileLists
             unstaged={unstaged}
@@ -205,6 +306,10 @@ export function WorkingCopy({ repo }: { repo: RepoId }) {
             onStage={(rows) => stage(rows.flatMap((r) => r.paths))}
             onUnstage={(rows) => unstage(rows.flatMap((r) => r.paths))}
             onDiscard={discard}
+            sides={status.operation === null ? null : sideLabels[status.operation]}
+            onResolve={(row, side) =>
+              void git("Resolve conflict", repo, (c) => c("ResolveConflict", { repo, path: row.path, side }))
+            }
           />
         </div>
       </ResizablePanel>
@@ -218,7 +323,10 @@ export function WorkingCopy({ repo }: { repo: RepoId }) {
             description="These changes are over 4 MB, so they aren't shown together."
           />
         ) : items.length === 0 ? (
-          <Nothing title="No changes" description="The working tree matches HEAD." />
+          <EmptyDiff
+            conflicts={unstaged.some((row) => row.area === "conflicted")}
+            files={unstaged.length + staged.length}
+          />
         ) : (
           <div className="relative h-full">
             <DiffStack
@@ -334,6 +442,8 @@ function FileLists({
   onStage,
   onUnstage,
   onDiscard,
+  sides,
+  onResolve,
 }: {
   unstaged: ReadonlyArray<FileRow>
   staged: ReadonlyArray<FileRow>
@@ -341,6 +451,8 @@ function FileLists({
   onStage: (rows: ReadonlyArray<FileRow>) => void
   onUnstage: (rows: ReadonlyArray<FileRow>) => void
   onDiscard: (rows: ReadonlyArray<FileRow>) => void
+  sides: SideLabels | null
+  onResolve: (row: FileRow, side: "ours" | "theirs") => void
 }) {
   const rows = useMemo<Array<ListRow>>(
     () => [
@@ -429,13 +541,22 @@ function FileLists({
                       </Button>
                     ) : (
                       <>
-                        {row.area !== "conflicted" && (
+                        {row.area === "conflicted" && sides !== null ? (
+                          <>
+                            <Button size="xs" variant="ghost" onClick={() => onResolve(row, "ours")}>
+                              {sides.ours}
+                            </Button>
+                            <Button size="xs" variant="ghost" onClick={() => onResolve(row, "theirs")}>
+                              {sides.theirs}
+                            </Button>
+                          </>
+                        ) : (
                           <Button size="xs" variant="ghost" onClick={() => onDiscard([row])}>
                             Discard
                           </Button>
                         )}
                         <Button size="xs" variant="ghost" onClick={() => onStage([row])}>
-                          Stage
+                          {row.area === "conflicted" ? "Mark resolved" : "Stage"}
                         </Button>
                       </>
                     )}

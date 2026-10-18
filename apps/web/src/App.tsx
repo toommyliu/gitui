@@ -1,3 +1,8 @@
+import { PointerActivationConstraints } from "@dnd-kit/dom"
+import { RestrictToElement } from "@dnd-kit/dom/modifiers"
+import { arrayMove } from "@dnd-kit/helpers"
+import { DragDropProvider, PointerSensor } from "@dnd-kit/react"
+import { isSortable, useSortable } from "@dnd-kit/react/sortable"
 import { useAtomValue } from "@effect/atom-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -15,6 +20,11 @@ import { repoInfoAtom } from "@/lib/git"
 const PICKER = "\0picker"
 const tabClassName = "h-full flex-none rounded-none px-3 after:hidden"
 const tabFrameClassName = "flex h-full shrink-0 items-center border-r has-data-active:bg-background"
+
+const tabSensors = [
+  PointerSensor.configure({ activationConstraints: [new PointerActivationConstraints.Distance({ value: 5 })] }),
+]
+const tabModifiers = [RestrictToElement.configure({ element: ({ source }) => source?.element?.parentElement ?? null })]
 
 const stored = <T,>(key: string, fallback: T): T => {
   try {
@@ -56,22 +66,20 @@ export function App() {
           variant="line"
           className="h-8 w-full [scrollbar-width:none] justify-start gap-0 overflow-x-auto overflow-y-hidden rounded-none p-0"
         >
-          {tabs.map((path) => (
-            <div key={path} className={cn(tabFrameClassName, "group/repo-tab pr-1")}>
-              <TabsTrigger value={path} className={tabClassName}>
-                {basename(path)}
-              </TabsTrigger>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`Close ${basename(path)}`}
-                onClick={() => close(path)}
-                className="opacity-50 group-hover/repo-tab:opacity-100"
-              >
-                <XIcon />
-              </Button>
+          <DragDropProvider
+            sensors={tabSensors}
+            modifiers={tabModifiers}
+            onDragEnd={({ canceled, operation: { source } }) => {
+              if (canceled || !isSortable(source)) return
+              setTabs((current) => arrayMove([...current], source.initialIndex, source.index))
+            }}
+          >
+            <div className="flex h-full shrink-0">
+              {tabs.map((path, index) => (
+                <SortableRepoTab key={path} path={path} index={index} onClose={() => close(path)} />
+              ))}
             </div>
-          ))}
+          </DragDropProvider>
           <div className={tabFrameClassName}>
             <TabsTrigger value={PICKER} className={tabClassName}>
               Open…
@@ -80,6 +88,26 @@ export function App() {
         </TabsList>
       </Tabs>
       {active === null ? <RepoPicker onOpen={open} openPaths={tabs} /> : <RepoTab key={active} path={active} />}
+    </div>
+  )
+}
+
+function SortableRepoTab({ path, index, onClose }: { path: string; index: number; onClose: () => void }) {
+  const { ref, handleRef } = useSortable({ id: path, index })
+  return (
+    <div ref={ref} className={cn(tabFrameClassName, "group/repo-tab pr-1")}>
+      <TabsTrigger ref={handleRef} value={path} className={tabClassName}>
+        {basename(path)}
+      </TabsTrigger>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={`Close ${basename(path)}`}
+        onClick={onClose}
+        className="opacity-50 group-hover/repo-tab:opacity-100"
+      >
+        <XIcon />
+      </Button>
     </div>
   )
 }

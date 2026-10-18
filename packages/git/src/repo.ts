@@ -44,6 +44,7 @@ import { parseStatus, statusArgs } from "./status.ts"
 const chunks = <T>(items: ReadonlyArray<T>, size: number) =>
   Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size))
 
+const MAX_UNTRACKED_DIFFS = 50
 const MAX_PATCH_BYTES = 4 * 1024 * 1024
 const decoder = new TextDecoder()
 
@@ -229,14 +230,19 @@ export class Repo extends Context.Service<
           case "Unstaged":
             return ["diff", ...common, "--", ...paths]
           case "Untracked":
-            return ["diff", "--no-index", ...common, "--", "/dev/null", ...paths]
+            return ["diff", "--no-index", ...common, "--", "/dev/null", paths[0] ?? ""]
         }
       }
 
       const diff = Effect.fn("Repo.diff")(function* (repo: RepoId, target: DiffTarget, paths: ReadonlyArray<RepoPath>) {
-        const bytes = yield* git.run(repo, patchArgs(target, paths), {
-          okExitCodes: target._tag === "Untracked" ? [1] : [],
-        })
+        const bytes =
+          target._tag === "Untracked"
+            ? Buffer.concat(
+                yield* Effect.forEach(paths.slice(0, MAX_UNTRACKED_DIFFS), (path) =>
+                  git.run(repo, patchArgs(target, [path]), { okExitCodes: [1] }),
+                ),
+              )
+            : yield* git.run(repo, patchArgs(target, paths))
         if (bytes.length > MAX_PATCH_BYTES) return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
         const text = decoder.decode(bytes)
         const files = text.match(/^diff --git /gm)?.length ?? 0

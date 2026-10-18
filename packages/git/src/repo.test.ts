@@ -68,6 +68,17 @@ layer(Repo.layer.pipe(Layer.provide(NodeServices.layer)))("Repo", (it) => {
     }),
   )
 
+  it.effect("combines diffs for several untracked files", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.commit("base")
+      repo.write("one.txt", "first\n")
+      repo.write("dir/two.txt", "second\n")
+      const diff = yield* (yield* Repo).diff(id(repo.root), { _tag: "Untracked" }, [p("one.txt"), p("dir/two.txt")])
+      expect(diff._tag === "Patch" && diff.patch.match(/^\+\w+$/gm)).toEqual(["+first", "+second"])
+    }),
+  )
+
   it.effect("deletes a branch together with its dirty, locked worktree", () =>
     Effect.gen(function* () {
       const repo = makeRepo()

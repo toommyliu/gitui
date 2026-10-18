@@ -150,6 +150,19 @@ export class Repo extends Context.Service<
     Effect.gen(function* () {
       const git = yield* Git
       const sessions = new Map<RepoId, Map<string, LogSession>>()
+      const locks = new Map<RepoId, Semaphore.Semaphore>()
+      const lockFor = (repo: RepoId) => {
+        let lock = locks.get(repo)
+        if (lock === undefined) {
+          lock = Semaphore.makeUnsafe(1)
+          locks.set(repo, lock)
+        }
+        return lock
+      }
+      const locked =
+        <Args extends [RepoId, ...Array<unknown>], A, E>(f: (...args: Args) => Effect.Effect<A, E>) =>
+        (...args: Args) =>
+          lockFor(args[0]).withPermits(1)(f(...args))
 
       const hasHead = (repo: RepoId) =>
         git
@@ -472,7 +485,7 @@ export class Repo extends Context.Service<
         ]
       })
 
-      return Repo.of({
+      const service: Repo["Service"] = {
         open,
         status,
         refs,
@@ -514,7 +527,13 @@ export class Repo extends Context.Service<
         removeWorktree,
         pruneWorktrees: (repo) => run(repo, ["worktree", "prune"]),
         fetch: (repo) => git.progress(repo, ["fetch", "--all", "--prune", "--progress"]),
-        pull: (repo) => git.progress(repo, ["pull", "--progress"]),
+        pull: (repo) =>
+          Stream.unwrap(
+            Effect.as(
+              Effect.acquireRelease(lockFor(repo).take(1), () => lockFor(repo).release(1)),
+              git.progress(repo, ["pull", "--progress"]),
+            ),
+          ),
         push: (repo) => Stream.unwrap(pushArgs(repo).pipe(Effect.map((args) => git.progress(repo, args)))),
         forcePush: (repo, expected) =>
           Stream.unwrap(forcePushArgs(repo, expected).pipe(Effect.map((args) => git.progress(repo, args)))),
@@ -559,6 +578,36 @@ export class Repo extends Context.Service<
         stashDrop: Effect.fn("Repo.stashDrop")(function* (repo, oid) {
           yield* run(repo, ["stash", "drop", yield* stashIndex(repo, oid)])
         }),
+      }
+      return Repo.of({
+        ...service,
+        stage: locked(service.stage),
+        unstage: locked(service.unstage),
+        discard: locked(service.discard),
+        applyLines: locked(service.applyLines),
+        commitIndex: locked(service.commitIndex),
+        continueOperation: locked(service.continueOperation),
+        skipOperation: locked(service.skipOperation),
+        abortOperation: locked(service.abortOperation),
+        resolveConflict: locked(service.resolveConflict),
+        checkout: locked(service.checkout),
+        createBranch: locked(service.createBranch),
+        deleteBranch: locked(service.deleteBranch),
+        removeWorktree: locked(service.removeWorktree),
+        pruneWorktrees: locked(service.pruneWorktrees),
+        renameBranch: locked(service.renameBranch),
+        merge: locked(service.merge),
+        rebase: locked(service.rebase),
+        cherryPick: locked(service.cherryPick),
+        revert: locked(service.revert),
+        reset: locked(service.reset),
+        checkoutDetached: locked(service.checkoutDetached),
+        createTag: locked(service.createTag),
+        deleteTag: locked(service.deleteTag),
+        stashPush: locked(service.stashPush),
+        addWorktree: locked(service.addWorktree),
+        stashApply: locked(service.stashApply),
+        stashDrop: locked(service.stashDrop),
       })
     }),
   ).pipe(Layer.provide(Git.layer))

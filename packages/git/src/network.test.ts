@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
-import type { RepoId } from "@gitui/contracts"
+import type { RepoId, RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Stream from "effect/Stream"
@@ -68,6 +68,21 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
         const [entries = []] = yield* (yield* CommandLog).entries.pipe(Stream.take(1), Stream.runCollect)
         const fetch = entries.findLast((entry) => entry.cwd === repo.root && entry.args.includes("fetch"))
         expect(fetch?.outcome).toEqual({ _tag: "Cancelled" })
+      }),
+    )
+
+    it.effect("runs concurrent changes to one repository one at a time", () =>
+      Effect.gen(function* () {
+        const repo = makeRepo()
+        repo.commit("base")
+        const files = Array.from({ length: 16 }, (_, i) => `f${i}.txt`)
+        for (const file of files) repo.write(file, "x\n")
+        const r = yield* Repo
+
+        yield* Effect.forEach(files, (file) => r.stage(id(repo.root), [file as RepoPath]), {
+          concurrency: "unbounded",
+        })
+        expect(repo.git("diff", "--cached", "--name-only").split("\n").sort()).toEqual([...files].sort())
       }),
     )
   },

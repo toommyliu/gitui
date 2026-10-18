@@ -33,16 +33,3 @@ body {
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
 }
-
-/* iOS Safari zooms the page when a focused field's text is smaller than 16px. */
-@media (pointer: coarse) {
-  input,
-  textarea {
-    font-size: 16px;
-  }
-
-  input::placeholder,
-  textarea::placeholder {
-    font-size: 14px;
-  }
-}

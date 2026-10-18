@@ -12,7 +12,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@effect/atom-react": "4.0.4",
+    "@effect/platform-browser": "4.0.4",
+    "@gitui/contracts": "workspace:*",
+    "@pierre/diffs": "1.5.2",
+    "@tanstack/react-virtual": "^3.14.18",
     "@workspace/ui": "workspace:*",
+    "effect": "4.0.4",
     "lucide-react": "^1.56.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

@@ -34,6 +34,14 @@ export const makeRepo = () => {
     git("commit", "-q", "--allow-empty", "-m", message)
     return git("rev-parse", "HEAD")
   }
+  const emptyCommits = (count: number) => {
+    const stream = Array.from(
+      { length: count },
+      (_, i) =>
+        `commit refs/heads/main\ncommitter Ada <ada@example.com> ${1_700_000_000 + i * 60} +0000\ndata ${`commit ${i}`.length}\ncommit ${i}\n`,
+    ).join("")
+    execFileSync("git", ["fast-import", "--quiet"], { cwd: root, env: fixtureEnv(), input: stream })
+  }
   git("init", "-q", "-b", "main")
-  return { root, git, raw, write, commit }
+  return { root, git, raw, write, commit, emptyCommits }
 }

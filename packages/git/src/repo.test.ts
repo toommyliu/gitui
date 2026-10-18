@@ -18,7 +18,7 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
   it.effect("pages the log in order across many commits", () =>
     Effect.gen(function* () {
       const repo = makeRepo()
-      for (let i = 0; i < 300; i++) repo.commit(`commit ${i}`)
+      repo.emptyCommits(300)
       const expected = repo.git("log", "--format=%H").split("\n")
       const r = yield* Repo
 

@@ -175,4 +175,20 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       expect(whole._tag === "Patch" && whole.patch.match(/^diff --git/gm)?.length).toBe(2)
     }),
   )
+
+  it.effect("diffs a stash with untracked files against its first parent only", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.write("a.txt", "one\n")
+      repo.git("add", ".")
+      repo.commit("base")
+      repo.write("a.txt", "two\n")
+      repo.write("new.txt", "new\n")
+      repo.git("stash", "push", "-q", "--include-untracked")
+      const oid = repo.git("rev-parse", "stash@{0}") as Oid
+
+      const diff = yield* (yield* Repo).diff(id(repo.root), { _tag: "Commit", oid }, [p("a.txt")])
+      expect(diff._tag === "Patch" && diff.patch.match(/^diff --git/gm)?.length).toBe(1)
+    }),
+  )
 })

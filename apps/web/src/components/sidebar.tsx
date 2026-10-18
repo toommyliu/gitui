@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react"
-import type { Branch, Head, Oid, RemoteBranch, RepoId, Stash, Tag, Worktree } from "@gitui/contracts"
+import type { Branch, Head, Oid, Refs, RemoteBranch, RepoId, Stash, Tag, Worktree } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import {
   AlertDialog,
@@ -26,10 +26,12 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "cn"
 import { ChevronRightIcon } from "lucide-react"
 import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "react"
-import { basename, shortDate } from "@/lib/format"
+import { basename, shortDate, shortOid } from "@/lib/format"
 import { latest, refsAtom, statusAtom, useGitAction } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import { useConfirm } from "./confirm"
+import { usePrompt } from "./prompt"
+import { useStashPrompt } from "./stash-prompt"
 
 type Section = "branches" | "remotes" | "tags" | "stashes" | "worktrees"
 
@@ -176,6 +178,7 @@ export function Sidebar({ repo, onSelect }: { repo: RepoId; onSelect: (selection
               <SidebarRow
                 row={rows[item.index]!}
                 repo={repo}
+                refs={refs}
                 head={head}
                 collapsed={collapsed}
                 toggle={toggle}
@@ -238,6 +241,7 @@ const Disclosure = ({ open }: { open: boolean }) => (
 function SidebarRow({
   row,
   repo,
+  refs,
   head,
   collapsed,
   toggle,
@@ -247,6 +251,7 @@ function SidebarRow({
 }: {
   row: Row
   repo: RepoId
+  refs: Refs | undefined
   head: Head | undefined
   collapsed: ReadonlySet<string>
   toggle: (id: string) => void
@@ -256,11 +261,26 @@ function SidebarRow({
 }) {
   const git = useGitAction()
   const confirm = useConfirm()
+  const prompt = usePrompt()
   const select = (oid: Oid) => onSelect({ _tag: "Commit", oid })
+  const current = head?._tag === "Branch" ? head.name : "HEAD"
+  const integrate = (ref: string, disabled: boolean) => (
+    <>
+      <ContextMenuItem disabled={disabled} onClick={() => void git("Merge", repo, (c) => c("Merge", { repo, ref }))}>
+        Merge {ref} into {current}
+      </ContextMenuItem>
+      <ContextMenuItem
+        disabled={disabled}
+        onClick={() => void git("Rebase", repo, (c) => c("Rebase", { repo, onto: ref }))}
+      >
+        Rebase {current} onto {ref}
+      </ContextMenuItem>
+    </>
+  )
 
   switch (row.kind) {
     case "section":
-      return <SectionRow row={row} open={!collapsed.has(row.id)} toggle={toggle} repo={repo} />
+      return <SectionRow row={row} open={!collapsed.has(row.id)} toggle={toggle} repo={repo} refs={refs} />
     case "folder":
       return (
         <Line depth={row.depth} onClick={() => toggle(row.id)}>
@@ -273,6 +293,23 @@ function SidebarRow({
       const isHead = head?._tag === "Branch" && head.name === branch.name
       const worktree = worktreeByBranch.get(branch.name)
       const upstream = branch.upstream
+      const remoteOid =
+        upstream?._tag === "Tracking"
+          ? refs?.remoteBranches.find((remote) => remote.name === upstream.name)?.oid
+          : undefined
+      const forcePush = (name: string, expected: Oid) =>
+        confirm({
+          title: `Force push ${branch.name}?`,
+          body: (
+            <p>
+              This replaces {name} with your local {branch.name}. The push fails if {name} no longer points at{" "}
+              <span className="font-mono">{shortOid(expected)}</span>.
+            </p>
+          ),
+          confirmLabel: "Force push",
+          destructive: true,
+          onConfirm: () => void git("Force push", repo, (c) => c("ForcePush", { repo, expected })),
+        })
       return (
         <ContextMenu>
           <ContextMenuTrigger className="block h-full">
@@ -296,6 +333,63 @@ function SidebarRow({
             >
               Check out {branch.name}
             </ContextMenuItem>
+            <ContextMenuItem
+              disabled={isHead || worktree !== undefined}
+              onClick={() =>
+                prompt({
+                  title: `Check out ${branch.name} in a new worktree`,
+                  fields: [
+                    {
+                      key: "path",
+                      label: "Path",
+                      optional: true,
+                      placeholder: worktreePath(refs, repo, branch.name),
+                    },
+                  ],
+                  submitLabel: "Add worktree",
+                  onSubmit: ({ path }) =>
+                    git("Add worktree", repo, (c) =>
+                      c("AddWorktree", {
+                        repo,
+                        path: path || worktreePath(refs, repo, branch.name),
+                        branch: branch.name,
+                        startPoint: null,
+                      }),
+                    ),
+                })
+              }
+            >
+              Check out in new worktree…
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            {!isHead && (
+              <>
+                {integrate(branch.name, head?._tag === "Unborn")}
+                <ContextMenuSeparator />
+              </>
+            )}
+            <ContextMenuItem
+              onClick={() =>
+                prompt({
+                  title: `Rename ${branch.name}`,
+                  fields: [{ key: "name", label: "New name", initial: branch.name }],
+                  submitLabel: "Rename",
+                  onSubmit: ({ name }) =>
+                    git("Rename branch", repo, (c) => c("RenameBranch", { repo, from: branch.name, to: name })),
+                })
+              }
+            >
+              Rename…
+            </ContextMenuItem>
+            {isHead && upstream?._tag === "Tracking" && (
+              <ContextMenuItem
+                variant="destructive"
+                disabled={remoteOid === undefined}
+                onClick={() => remoteOid !== undefined && forcePush(upstream.name, remoteOid)}
+              >
+                Force push to {upstream.name}…
+              </ContextMenuItem>
+            )}
             <ContextMenuSeparator />
             <ContextMenuItem variant="destructive" disabled={isHead} onClick={() => onDelete(branch)}>
               {worktree === undefined ? "Delete branch…" : "Delete branch and worktree…"}
@@ -318,17 +412,47 @@ function SidebarRow({
             <ContextMenuItem onClick={() => git("Checkout", repo, (c) => c("Checkout", { repo, branch: local }))}>
               Check out as {local}
             </ContextMenuItem>
+            <ContextMenuSeparator />
+            {integrate(row.ref.name, head?._tag === "Unborn")}
           </ContextMenuContent>
         </ContextMenu>
       )
     }
-    case "tag":
+    case "tag": {
+      const { tag } = row
       return (
-        <Line depth={row.depth} onClick={() => select(row.tag.oid)}>
-          <span className="w-3 shrink-0" />
-          <span className="truncate">{row.label}</span>
-        </Line>
+        <ContextMenu>
+          <ContextMenuTrigger className="block h-full">
+            <Line depth={row.depth} onClick={() => select(tag.oid)}>
+              <span className="w-3 shrink-0" />
+              <span className="truncate">{row.label}</span>
+            </Line>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem
+              onClick={() => void git("Check out", repo, (c) => c("CheckoutDetached", { repo, oid: tag.oid }))}
+            >
+              Check out {tag.name} (detached)
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              variant="destructive"
+              onClick={() =>
+                confirm({
+                  title: `Delete tag ${tag.name}?`,
+                  body: <p>This deletes the local tag only. A copy pushed to a remote stays there.</p>,
+                  confirmLabel: "Delete tag",
+                  destructive: true,
+                  onConfirm: () => void git("Delete tag", repo, (c) => c("DeleteTag", { repo, name: tag.name })),
+                })
+              }
+            >
+              Delete tag…
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
       )
+    }
     case "stash": {
       const { stash } = row
       return (
@@ -427,13 +551,17 @@ function SectionRow({
   open,
   toggle,
   repo,
+  refs,
 }: {
   row: Extract<Row, { kind: "section" }>
   open: boolean
   toggle: (id: string) => void
   repo: RepoId
+  refs: Refs | undefined
 }) {
   const git = useGitAction()
+  const prompt = usePrompt()
+  const stash = useStashPrompt(repo)
   const header = (
     <button
       type="button"
@@ -445,11 +573,51 @@ function SectionRow({
       <SmallBadge>{row.count}</SmallBadge>
     </button>
   )
+  if (row.id === "stashes") {
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger className="block h-full">{header}</ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={stash}>Stash changes…</ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    )
+  }
   if (row.id !== "worktrees") return header
   return (
     <ContextMenu>
       <ContextMenuTrigger className="block h-full">{header}</ContextMenuTrigger>
       <ContextMenuContent>
+        <ContextMenuItem
+          onClick={() =>
+            prompt({
+              title: "Add worktree",
+              description: "Creates the branch from HEAD if it doesn't exist yet.",
+              fields: [
+                { key: "branch", label: "Branch" },
+                {
+                  key: "path",
+                  label: "Path",
+                  optional: true,
+                  placeholder: ({ branch }) => worktreePath(refs, repo, branch || "branch"),
+                },
+              ],
+              submitLabel: "Add worktree",
+              onSubmit: ({ branch, path }) =>
+                git("Add worktree", repo, (c) =>
+                  c("AddWorktree", {
+                    repo,
+                    path: path || worktreePath(refs, repo, branch),
+                    branch,
+                    startPoint: null,
+                  }),
+                ),
+            })
+          }
+        >
+          Add worktree…
+        </ContextMenuItem>
+        <ContextMenuSeparator />
         <ContextMenuItem onClick={() => git("Prune worktrees", repo, (c) => c("PruneWorktrees", { repo }))}>
           Prune missing worktrees
         </ContextMenuItem>
@@ -523,4 +691,9 @@ function WorktreeWarning({ worktree }: { worktree: Worktree }) {
       </AlertDescription>
     </Alert>
   )
+}
+
+const worktreePath = (refs: Refs | undefined, repo: RepoId, branch: string) => {
+  const main = refs?.worktrees.find((worktree) => worktree.isMain)?.path ?? repo
+  return `${main}-${branch.replace(/[^\w.-]+/g, "-")}`
 }

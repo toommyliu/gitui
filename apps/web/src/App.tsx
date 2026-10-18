@@ -28,6 +28,9 @@ export function App() {
 
   useEffect(() => localStorage.setItem("gitui.tabs", JSON.stringify(tabs)), [tabs])
   useEffect(() => localStorage.setItem("gitui.active", JSON.stringify(active)), [active])
+  useEffect(() => {
+    document.title = active ?? "Git"
+  }, [active])
 
   const open = (path: string) => {
     setTabs((current) => (current.includes(path) ? current : [...current, path]))

@@ -19,6 +19,7 @@ import * as Schema from "effect/Schema"
 import { APP_ORIGIN, BackendReady, SCHEME } from "./protocol.ts"
 
 const webDist = resolve(__dirname, "../../web/dist")
+const appOrigin = process.env.GITUI_DEV_URL ?? APP_ORIGIN
 
 const repoRoots =
   process.env.REPO_ROOTS?.split(":").filter((root) => root !== "") ??
@@ -50,11 +51,11 @@ const startBackend = () =>
       resolveStart({ child, port: Schema.decodeUnknownSync(BackendReady)(message).port }),
     )
     child.once("exit", (code) => rejectStart(new Error(`The git server exited with code ${code} before it started.`)))
-    child.send({ repoRoots })
+    child.send({ repoRoots, appOrigin })
   })
 
 const fromApp = (event: IpcMainEvent | IpcMainInvokeEvent) =>
-  event.senderFrame?.url.startsWith(`${APP_ORIGIN}/`) === true
+  event.senderFrame?.url.startsWith(`${appOrigin}/`) === true
 
 const createWindow = () => {
   const window = new BrowserWindow({
@@ -77,9 +78,9 @@ const createWindow = () => {
     return { action: "deny" }
   })
   window.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(`${APP_ORIGIN}/`)) event.preventDefault()
+    if (!url.startsWith(`${appOrigin}/`)) event.preventDefault()
   })
-  void window.loadURL(`${APP_ORIGIN}/`)
+  void window.loadURL(`${appOrigin}/`)
 }
 
 let backend: ChildProcess | undefined

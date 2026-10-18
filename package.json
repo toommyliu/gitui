@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "build": "turbo build",
-    "dev": "turbo dev",
+    "dev": "turbo dev --filter=@gitui/web --filter=@gitui/server",
+    "dev:desktop": "turbo dev --filter=@gitui/web --filter=@gitui/desktop",
     "typecheck": "turbo typecheck",
     "lint": "oxlint",
     "format": "oxfmt",
@@ -12,8 +13,7 @@
     "prepare": "effect-tsgo patch --typescript --oxlint && git config core.hooksPath .githooks",
     "test": "turbo test",
     "check": "oxfmt --check && oxlint --deny-warnings && turbo typecheck test",
-    "serve": "pnpm -F @gitui/web build && pnpm -F @gitui/server start",
-    "desktop": "turbo run build --filter=@gitui/desktop && pnpm -F @gitui/desktop start"
+    "serve": "pnpm -F @gitui/web build && pnpm -F @gitui/server start"
   },
   "devDependencies": {
     "@effect/tsgo": "0.51.1",

@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema"
 import * as HttpServer from "effect/http/HttpServer"
 import * as NetAddress from "effect/net/NetAddress"
 import { serverLayer } from "@gitui/server/server"
-import { APP_ORIGIN, BackendConfig } from "./protocol.ts"
+import { BackendConfig } from "./protocol.ts"
 
 // git and its hooks inherit this environment; left set, any Electron app a hook launches would start as plain Node.
 Reflect.deleteProperty(process.env, "ELECTRON_RUN_AS_NODE")
@@ -27,7 +27,7 @@ process.once("message", (message) => {
         port: 0,
         repoRoots: config.repoRoots,
         webDist: null,
-        trustedOrigins: [APP_ORIGIN],
+        trustedOrigins: [config.appOrigin],
       }),
     ),
     Layer.launch,

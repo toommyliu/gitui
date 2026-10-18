@@ -6,7 +6,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node scripts/build.ts",
-    "start": "node scripts/start.ts",
+    "dev": "node scripts/dev.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

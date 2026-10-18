@@ -115,7 +115,7 @@ const FILE_ROW = 24
 
 export function HistoryButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button size="xs" variant="ghost" onClick={onClick}>
+    <Button size="sm" variant="ghost" onClick={onClick}>
       History
     </Button>
   )

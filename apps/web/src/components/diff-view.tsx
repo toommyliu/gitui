@@ -113,7 +113,7 @@ function FileHeader({ fileDiff, actions }: { fileDiff: FileDiffMetadata; actions
     deletions += hunk.deletionLines
   }
   return (
-    <div className="flex h-11 items-center gap-2 bg-background px-3">
+    <div className="flex h-11 items-center gap-2 bg-background px-3 font-sans text-xs">
       <ChangeLetter change={changeOf[fileDiff.type]} />
       <div
         ref={scrollToEnd}

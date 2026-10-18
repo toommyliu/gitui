@@ -274,17 +274,17 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     return row.area === "staged" ? (
       <span className="flex gap-1">
         {history}
-        <Button size="xs" variant="outline" onClick={() => unstage(row.paths)}>
+        <Button size="sm" variant="outline" onClick={() => unstage(row.paths)}>
           Unstage
         </Button>
       </span>
     ) : (
       <span className="flex gap-1">
         {history}
-        <Button size="xs" variant="ghost" onClick={() => discard([row])}>
+        <Button size="sm" variant="ghost" onClick={() => discard([row])}>
           Discard
         </Button>
-        <Button size="xs" variant="outline" onClick={() => stage(row.paths)}>
+        <Button size="sm" variant="outline" onClick={() => stage(row.paths)}>
           Stage
         </Button>
       </span>

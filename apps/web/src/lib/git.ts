@@ -54,6 +54,7 @@ export const keys = {
   status: (repo: RepoId) => `status:${repo}`,
   refs: (repo: RepoId) => `refs:${repo}`,
   worktree: (repo: RepoId) => `worktree:${repo}`,
+  draft: (repo: RepoId) => `draft:${repo}`,
 }
 
 const scopeKeys = (repo: RepoId, scope: ChangeScope): ReadonlyArray<string> => {
@@ -64,6 +65,8 @@ const scopeKeys = (repo: RepoId, scope: ChangeScope): ReadonlyArray<string> => {
       return [keys.status(repo), keys.worktree(repo)]
     case "refs":
       return [keys.status(repo), keys.refs(repo), keys.worktree(repo)]
+    case "draft":
+      return [keys.draft(repo)]
   }
 }
 
@@ -87,6 +90,19 @@ export const statusAtom = Atom.family((repo: RepoId) =>
 
 export const refsAtom = Atom.family((repo: RepoId) =>
   GitClient.query("GetRefs", { repo }, { reactivityKeys: [keys.refs(repo)], timeToLive: CACHE_TTL }),
+)
+
+export const draftAtom = Atom.family((repo: RepoId) =>
+  GitClient.query("GetDraft", { repo }, { reactivityKeys: [keys.draft(repo)], timeToLive: CACHE_TTL }),
+)
+
+export const saveDraftAtom = GitClient.runtime.fn(
+  (draft: { readonly repo: RepoId; readonly message: string }) =>
+    Effect.gen(function* () {
+      const client = yield* GitClient
+      yield* client("SetDraft", draft)
+    }),
+  { concurrent: true },
 )
 
 export const logKey = (repo: RepoId, query: string) => JSON.stringify([repo, query])

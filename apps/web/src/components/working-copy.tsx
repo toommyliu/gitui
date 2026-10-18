@@ -23,7 +23,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "cn"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { basename, dirname } from "@/lib/format"
 import { diffAtom, diffKey, latest, statusAtom, useGitAction } from "@/lib/git"
 import { hunkChanges, selectedChanges } from "@/lib/lines"
@@ -32,6 +32,7 @@ import { HistoryButton } from "./commit-detail"
 import { useConfirm } from "./confirm"
 import { Loading, Nothing } from "./loading"
 import { useStashPrompt } from "./stash-prompt"
+import { useDraft } from "@/lib/draft"
 import { DiffStack, type DiffItemMeta, GutterButton, type HoveredLine, itemMeta, patchItems } from "./diff-view"
 
 type Area = "unstaged" | "untracked" | "conflicted" | "staged"
@@ -164,8 +165,6 @@ function EmptyDiff({ conflicts, files }: { conflicts: boolean; files: number }) 
     return <Nothing title="No text diff" description="These changes are binary or only change file modes." />
   return <Nothing title="No changes" description="The working tree matches HEAD." />
 }
-
-const draftKey = (repo: RepoId) => `gitui.draft:${repo}`
 
 export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (path: string) => void }) {
   const status = latest(useAtomValue(statusAtom(repo)))
@@ -381,16 +380,11 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
 }
 
 function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status; stagedCount: number }) {
-  const [message, setMessage] = useState(() => localStorage.getItem(draftKey(repo)) ?? "")
+  const { message, setMessage, onFocus, onBlur, clear } = useDraft(repo)
   const [amend, setAmend] = useState(false)
   const [busy, setBusy] = useState(false)
   const git = useGitAction()
   const stash = useStashPrompt(repo)
-
-  useEffect(() => {
-    if (message === "") localStorage.removeItem(draftKey(repo))
-    else localStorage.setItem(draftKey(repo), message)
-  }, [repo, message])
 
   const canCommit = !busy && message.trim() !== "" && (stagedCount > 0 || amend) && status.operation !== "rebase"
   const commit = async () => {
@@ -399,7 +393,7 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
     const ok = await git(amend ? "Amend" : "Commit", repo, (c) => c("Commit", { repo, message, amend }))
     setBusy(false)
     if (ok) {
-      setMessage("")
+      clear()
       setAmend(false)
     }
   }
@@ -409,6 +403,8 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
       <Textarea
         value={message}
         onChange={(event) => setMessage(event.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
         onKeyDown={(event) => {
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
             event.preventDefault()

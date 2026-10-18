@@ -2,6 +2,7 @@ import * as BrowserSocket from "@effect/platform-browser/BrowserSocket"
 import { useAtomSet } from "@effect/atom-react"
 import {
   type ChangeScope,
+  type CommandEntry,
   type CommitRow,
   type DiffTarget,
   GitError,
@@ -15,6 +16,7 @@ import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
+import * as Schedule from "effect/Schedule"
 import * as Stream from "effect/Stream"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Atom from "effect/reactivity/Atom"
@@ -114,6 +116,38 @@ export const watchAtom = Atom.family((repo: RepoId) =>
 
 export type CommitRows = ReadonlyArray<CommitRow>
 
+export const COMMAND_LOG_LIMIT = 2000
+
+export const commandLogAtom = GitClient.runtime
+  .atom(
+    Effect.gen(function* () {
+      const client = yield* GitClient
+      return client("CommandLog", undefined)
+    }).pipe(
+      Stream.unwrap,
+      Stream.scan(
+        (): ReadonlyArray<CommandEntry> => [],
+        (all, batch) => {
+          const next = all.concat(batch)
+          return next.length > COMMAND_LOG_LIMIT ? next.slice(-COMMAND_LOG_LIMIT) : next
+        },
+      ),
+      Stream.retry(Schedule.spaced("1 second")),
+    ),
+  )
+  .pipe(Atom.keepAlive)
+
+export type LogFilter = "all" | "writes" | "failures"
+
+export const isFailure = (entry: CommandEntry) =>
+  entry.outcome._tag === "SpawnFailed" || (entry.outcome._tag === "Exited" && !entry.outcome.accepted)
+
+export const logViewAtom = Atom.make<{ readonly open: boolean; readonly filter: LogFilter; readonly seenId: number }>({
+  open: false,
+  filter: "all",
+  seenId: 0,
+}).pipe(Atom.keepAlive)
+
 type Client = GitClient["Service"]
 type ActionError = GitError | RpcClientError
 type Action = (client: Client) => Effect.Effect<unknown, ActionError>
@@ -136,10 +170,14 @@ const actionAtom = GitClient.runtime.fn(
 
 export const useGitAction = () => {
   const run = useAtomSet(actionAtom, { mode: "promiseExit" })
+  const setLogView = useAtomSet(logViewAtom)
   return async (label: string, repo: RepoId, action: Action) => {
     const exit = await run({ repo, run: action })
     if (Exit.isSuccess(exit)) return true
-    toast.error(`${label} failed`, { description: describeFailure(exit.cause) })
+    toast.error(`${label} failed`, {
+      description: describeFailure(exit.cause),
+      action: { label: "Show log", onClick: () => setLogView((view) => ({ ...view, open: true, filter: "failures" })) },
+    })
     return false
   }
 }

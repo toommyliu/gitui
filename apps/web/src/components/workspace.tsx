@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/componen
 import { useState, useSyncExternalStore } from "react"
 import { watchAtom } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
+import { CommandLogSheet } from "./command-log"
 import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
 import { Sidebar } from "./sidebar"
@@ -47,6 +48,7 @@ export function Workspace({ repo }: { repo: RepoId }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <Toolbar repo={repo} />
+      <CommandLogSheet repo={repo} />
       {narrow ? (
         <Tabs value={pane} onValueChange={(value: Pane) => setPane(value)} className="min-h-0 flex-1 gap-0">
           <TabsList variant="line" className="h-9 w-full shrink-0 rounded-none border-b p-0">

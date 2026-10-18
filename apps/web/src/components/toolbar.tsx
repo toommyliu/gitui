@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react"
+import { useAtom, useAtomValue } from "@effect/atom-react"
 import type { RepoId } from "@gitui/contracts"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
@@ -7,10 +7,26 @@ import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
 import { useState } from "react"
 import { shortOid } from "@/lib/format"
-import { latest, statusAtom, useGitAction } from "@/lib/git"
+import { commandLogAtom, isFailure, latest, logViewAtom, statusAtom, useGitAction } from "@/lib/git"
 import { SettingsDialog } from "./settings-dialog"
 
 type NetworkAction = "Fetch" | "Pull" | "Push"
+
+function LogButton() {
+  const entries = latest(useAtomValue(commandLogAtom)) ?? []
+  const [view, setView] = useAtom(logViewAtom)
+  const unseen = entries.filter((entry) => entry.id > view.seenId && isFailure(entry)).length
+  return (
+    <Button size="sm" variant="ghost" onClick={() => setView((current) => ({ ...current, open: true }))}>
+      Log
+      {unseen > 0 && (
+        <Badge variant="destructive" className="h-4 rounded-sm px-1 tabular-nums">
+          {unseen}
+        </Badge>
+      )}
+    </Button>
+  )
+}
 
 export function Toolbar({ repo }: { repo: RepoId }) {
   const status = latest(useAtomValue(statusAtom(repo)))
@@ -58,6 +74,7 @@ export function Toolbar({ repo }: { repo: RepoId }) {
             </Button>
           ))}
         </ButtonGroup>
+        <LogButton />
         <SettingsDialog />
       </div>
     </div>

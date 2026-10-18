@@ -88,7 +88,7 @@ layer(Repo.layer.pipe(Layer.provide(NodeServices.layer)))("Repo", (it) => {
       repo.git("worktree", "lock", linked)
       repo.write(`../${linked.split("/").pop()}/dirty.txt`, "uncommitted\n")
 
-      yield* (yield* Repo).deleteBranch(id(repo.root), "agent", true, true)
+      yield* (yield* Repo).deleteBranch(id(repo.root), "agent", false, true)
       expect(existsSync(linked)).toBe(false)
       expect(repo.git("branch", "--list", "agent")).toBe("")
     }),

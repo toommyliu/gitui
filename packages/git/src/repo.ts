@@ -321,7 +321,7 @@ export class Repo extends Context.Service<
             const worktrees = parseWorktrees(yield* git.run(repo, worktreeArgs))
             for (const worktree of worktrees) {
               if (worktree.isMain || worktree.head._tag !== "Branch" || worktree.head.name !== name) continue
-              yield* removeWorktree(repo, worktree.path, force)
+              yield* removeWorktree(repo, worktree.path, true)
             }
           }
           yield* run(repo, ["branch", force ? "-D" : "-d", name])

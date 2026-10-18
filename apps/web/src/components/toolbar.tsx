@@ -7,7 +7,7 @@ import { Skeleton } from "@workspace/ui/components/skeleton"
 import { Spinner } from "@workspace/ui/components/spinner"
 import { useState } from "react"
 import { shortOid } from "@/lib/format"
-import { commandLogAtom, isFailure, latest, logViewAtom, statusAtom, useGitAction } from "@/lib/git"
+import { commandLogAtom, connectionAtom, isFailure, latest, logViewAtom, statusAtom, useGitAction } from "@/lib/git"
 import { SettingsDialog } from "./settings-dialog"
 
 type NetworkAction = "Fetch" | "Pull" | "Push"
@@ -32,6 +32,7 @@ export function Toolbar({ repo }: { repo: RepoId }) {
   const status = latest(useAtomValue(statusAtom(repo)))
   const git = useGitAction()
   const [running, setRunning] = useState<NetworkAction | null>(null)
+  const connection = useAtomValue(connectionAtom)
 
   const run = async (action: NetworkAction) => {
     setRunning(action)
@@ -57,6 +58,12 @@ export function Toolbar({ repo }: { repo: RepoId }) {
         {head?._tag === "Unborn" && <span className="text-muted-foreground">no commits yet</span>}
         {upstream != null && <span className="truncate text-muted-foreground max-sm:hidden">{upstream.name}</span>}
         {status?.operation != null && <Badge variant="destructive">{status.operation} in progress</Badge>}
+        {connection === "disconnected" && (
+          <Badge variant="destructive">
+            <Spinner data-icon="inline-start" />
+            Reconnecting to server
+          </Badge>
+        )}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <ButtonGroup>

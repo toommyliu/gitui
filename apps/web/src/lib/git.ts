@@ -29,11 +29,23 @@ import { toast } from "sonner"
 
 const socketUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/rpc`
 
+export type Connection = "connecting" | "connected" | "disconnected"
+
+export const connectionAtom = Atom.make<Connection>("connecting").pipe(Atom.keepAlive)
+
 export class GitClient extends AtomRpc.Service<GitClient>()("GitClient", {
   group: GitRpcs,
-  protocol: RpcClient.layerProtocolSocket({ retryTransientErrors: true }).pipe(
-    Layer.provide([BrowserSocket.layerWebSocket(socketUrl), RpcSerialization.layerJson]),
-  ),
+  protocol: (get) =>
+    RpcClient.layerProtocolSocket({ retryTransientErrors: true }).pipe(
+      Layer.provide([
+        BrowserSocket.layerWebSocket(socketUrl),
+        RpcSerialization.layerJson,
+        Layer.succeed(RpcClient.ConnectionHooks)({
+          onConnect: Effect.sync(() => get.set(connectionAtom, "connected")),
+          onDisconnect: Effect.sync(() => get.set(connectionAtom, "disconnected")),
+        }),
+      ]),
+    ),
 }) {}
 
 export const keys = {
@@ -110,7 +122,7 @@ export const watchAtom = Atom.family((repo: RepoId) =>
       yield* client("WatchRepo", { repo }).pipe(
         Stream.runForEach((event) => Reactivity.invalidate(event.scopes.flatMap((scope) => scopeKeys(repo, scope)))),
       )
-    }),
+    }).pipe(Effect.retry(Schedule.spaced("1 second"))),
   ),
 )
 

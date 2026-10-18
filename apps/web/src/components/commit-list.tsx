@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/input-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
-import { SearchIcon } from "lucide-react"
+import { CloudIcon, SearchIcon } from "lucide-react"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { shortDate, shortOid } from "@/lib/format"
@@ -23,7 +24,11 @@ import { CommitMenuItems } from "./commit-menu"
 import { Nothing } from "./loading"
 import { GraphCell, LANE_WIDTH, ROW_HEIGHT, VISIBLE_LANES, lanesUsed } from "./graph"
 
-export type RefLabel = { readonly kind: "head" | "branch" | "remote" | "tag"; readonly name: string }
+export type RefLabel = {
+  readonly kind: "head" | "branch" | "remote" | "tag"
+  readonly name: string
+  readonly upstream?: string | undefined
+}
 
 export const refLabels = (refs: Refs | undefined, head: Head | undefined) => {
   const labels = new Map<string, Array<RefLabel>>()
@@ -33,11 +38,20 @@ export const refLabels = (refs: Refs | undefined, head: Head | undefined) => {
     else list.push(label)
   }
   if (head?._tag === "Detached") add(head.oid, { kind: "head", name: "HEAD" })
+  const remoteOids = new Map(refs?.remoteBranches.map((remote) => [remote.name, remote.oid]))
+  const merged = new Set<string>()
   for (const branch of refs?.branches ?? []) {
     const isHead = head?._tag === "Branch" && head.name === branch.name
-    add(branch.oid, { kind: isHead ? "head" : "branch", name: branch.name })
+    const upstream =
+      branch.upstream?._tag === "Tracking" && remoteOids.get(branch.upstream.name) === branch.oid
+        ? branch.upstream.name
+        : undefined
+    if (upstream !== undefined) merged.add(upstream)
+    add(branch.oid, { kind: isHead ? "head" : "branch", name: branch.name, upstream })
   }
-  for (const remote of refs?.remoteBranches ?? []) add(remote.oid, { kind: "remote", name: remote.name })
+  for (const remote of refs?.remoteBranches ?? []) {
+    if (!merged.has(remote.name)) add(remote.oid, { kind: "remote", name: remote.name })
+  }
   for (const tag of refs?.tags ?? []) add(tag.oid, { kind: "tag", name: tag.name })
   for (const list of labels.values()) list.sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind])
   return labels
@@ -45,16 +59,45 @@ export const refLabels = (refs: Refs | undefined, head: Head | undefined) => {
 
 const kindOrder: Record<RefLabel["kind"], number> = { head: 0, branch: 1, remote: 2, tag: 3 }
 
-const badgeVariant = { head: "default", branch: "secondary", remote: "outline", tag: "ghost" } as const
-
-export function RefBadge({ label }: { label: RefLabel }) {
+export function RefBadge({ label, className }: { label: RefLabel; className?: string }) {
   return (
     <Badge
-      variant={badgeVariant[label.kind]}
-      className={cn("h-4 rounded-sm px-1 text-[11px]", label.kind === "tag" && "bg-muted italic")}
+      variant={label.kind === "head" ? "default" : "secondary"}
+      className={cn(
+        "h-4 rounded-sm px-1 text-[11px] [&>svg]:size-3!",
+        label.kind === "remote" && "text-muted-foreground",
+        label.kind === "tag" && "italic",
+        className,
+      )}
     >
-      {label.name}
+      <span className="truncate">{label.name}</span>
+      {label.upstream !== undefined && <CloudIcon strokeWidth={2.5} aria-label={`in sync with ${label.upstream}`} />}
     </Badge>
+  )
+}
+
+function RefLabels({ labels }: { labels: ReadonlyArray<RefLabel> }) {
+  const [first, ...rest] = labels
+  if (first === undefined) return null
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="flex max-w-[40%] min-w-0 shrink-0 items-center gap-1" />}>
+        <RefBadge label={first} className="min-w-0 shrink" />
+        {rest.length > 0 && (
+          <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[11px] tabular-nums">
+            +{rest.length}
+          </Badge>
+        )}
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="start" className="flex-col items-start gap-0.5">
+        {labels.map((label) => (
+          <span key={`${label.kind}:${label.name}`}>
+            {label.name}
+            {label.upstream !== undefined && <span className="opacity-60"> · {label.upstream}</span>}
+          </span>
+        ))}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -312,9 +355,7 @@ const CommitRowView = memo(function CommitRowView({
             <GraphCell row={row.graph} width={graphWidth} merge={row.parents.length > 1} head={row.oid === headOid} />
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-1.5">
-            {labels.get(row.oid)?.map((label) => (
-              <RefBadge key={`${label.kind}:${label.name}`} label={label} />
-            ))}
+            <RefLabels labels={labels.get(row.oid) ?? []} />
             <span className={cn("truncate", row.parents.length > 1 && "text-muted-foreground")}>{row.subject}</span>
           </span>
           <span className="hidden w-28 shrink-0 truncate text-muted-foreground @xl:block">{row.author}</span>

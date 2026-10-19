@@ -30,7 +30,7 @@ describe("GraphLayout", () => {
     ])
   })
 
-  it("opens a lane for a merge's second parent and closes it at the fork point", () => {
+  it("opens a lane for a merge's second parent and joins it into the lane that already leads to its parent", () => {
     expect(
       layout([
         ["m", ["a", "b"]],
@@ -41,8 +41,8 @@ describe("GraphLayout", () => {
     ).toEqual([
       { oid: "m", lane: 0, color: 0, up: [], down: ["0->0 c0", "0->1 c1"] },
       { oid: "a", lane: 0, color: 0, up: ["0->0 c0", "1->1 c1"], down: ["0->0 c0", "1->1 c1"] },
-      { oid: "b", lane: 1, color: 1, up: ["0->0 c0", "1->1 c1"], down: ["0->0 c0", "1->1 c1"] },
-      { oid: "base", lane: 0, color: 0, up: ["0->0 c0", "1->0 c1"], down: [] },
+      { oid: "b", lane: 1, color: 1, up: ["0->0 c0", "1->1 c1"], down: ["0->0 c0", "1->0 c1"] },
+      { oid: "base", lane: 0, color: 0, up: ["0->0 c0"], down: [] },
     ])
   })
 
@@ -56,9 +56,16 @@ describe("GraphLayout", () => {
       ]),
     ).toEqual([
       { oid: "x", lane: 0, color: 0, up: [], down: ["0->0 c0"] },
-      { oid: "y", lane: 1, color: 1, up: ["0->0 c0"], down: ["0->0 c0", "1->1 c1"] },
-      { oid: "base", lane: 0, color: 0, up: ["0->0 c0", "1->0 c1"], down: [] },
+      { oid: "y", lane: 1, color: 1, up: ["0->0 c0"], down: ["0->0 c0", "1->0 c1"] },
+      { oid: "base", lane: 0, color: 0, up: ["0->0 c0"], down: [] },
       { oid: "z", lane: 0, color: 2, up: [], down: [] },
     ])
+  })
+
+  it("draws at most 25 lanes, folding commits beyond lane 24 into the last one", () => {
+    const tips = Array.from({ length: 30 }, (_, i): [string, ReadonlyArray<string>] => [`t${i}`, [`root${i}`]])
+    const last = layout(tips).at(-1)!
+    expect(last.lane).toBe(24)
+    expect(last.up).toEqual(Array.from({ length: 24 }, (_, j) => `${j}->${j} c${j}`).sort())
   })
 })

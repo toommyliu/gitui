@@ -3,7 +3,6 @@ import { memo } from "react"
 
 export const ROW_HEIGHT = 26
 export const LANE_WIDTH = 14
-export const MAX_LANES = 24
 export const VISIBLE_LANES = 10
 
 const MID = ROW_HEIGHT / 2
@@ -27,16 +26,7 @@ const segment = (from: number, to: number, y1: number, y2: number) => {
 const edges = (flat: ReadonlyArray<number>, y1: number, y2: number) => {
   const paths = []
   for (let i = 0; i < flat.length; i += 3) {
-    const from = flat[i]!
-    const to = flat[i + 1]!
-    if (from >= MAX_LANES && to >= MAX_LANES) continue
-    paths.push(
-      <path
-        key={`${y1}-${i}`}
-        d={segment(Math.min(from, MAX_LANES), Math.min(to, MAX_LANES), y1, y2)}
-        stroke={laneColor(flat[i + 2]!)}
-      />,
-    )
+    paths.push(<path key={`${y1}-${i}`} d={segment(flat[i]!, flat[i + 1]!, y1, y2)} stroke={laneColor(flat[i + 2]!)} />)
   }
   return paths
 }
@@ -53,7 +43,7 @@ export const GraphCell = memo(function GraphCell({
   head: boolean
 }) {
   const color = laneColor(row.color)
-  const cx = x(Math.min(row.lane, MAX_LANES))
+  const cx = x(row.lane)
   return (
     <svg width={width} height={ROW_HEIGHT} className="shrink-0 overflow-visible" aria-hidden>
       <g fill="none" strokeWidth={2}>

@@ -1,9 +1,38 @@
 import type { GraphRow } from "@gitui/contracts"
 
+export const MAX_GRAPH_LANES = 24
+
+export interface GraphState {
+  readonly lanes: ReadonlyArray<string | null>
+  readonly colors: ReadonlyArray<number>
+  readonly nextColor: number
+}
+
+const clip = (edges: Array<number>) => {
+  const out: Array<number> = []
+  for (let i = 0; i < edges.length; i += 3) {
+    const from = edges[i]!
+    const to = edges[i + 1]!
+    if (from >= MAX_GRAPH_LANES && to >= MAX_GRAPH_LANES) continue
+    out.push(Math.min(from, MAX_GRAPH_LANES), Math.min(to, MAX_GRAPH_LANES), edges[i + 2]!)
+  }
+  return out
+}
+
 export class GraphLayout {
-  private readonly lanes: Array<string | null> = []
-  private readonly colors: Array<number> = []
-  private nextColor = 0
+  private readonly lanes: Array<string | null>
+  private readonly colors: Array<number>
+  private nextColor: number
+
+  constructor(state: GraphState = { lanes: [], colors: [], nextColor: 0 }) {
+    this.lanes = [...state.lanes]
+    this.colors = [...state.colors]
+    this.nextColor = state.nextColor
+  }
+
+  state(): GraphState {
+    return { lanes: [...this.lanes], colors: [...this.colors], nextColor: this.nextColor }
+  }
 
   push(oid: string, parents: ReadonlyArray<string>): GraphRow {
     const up: Array<number> = []
@@ -28,7 +57,13 @@ export class GraphLayout {
 
     const color = this.colors[lane]!
     const [first, ...rest] = parents
-    this.lanes[lane] = first ?? null
+    const joined = first === undefined ? -1 : this.lanes.indexOf(first)
+    if (joined === -1) {
+      this.lanes[lane] = first ?? null
+    } else {
+      this.lanes[lane] = null
+      down.push(lane, joined, color)
+    }
     const opened = new Set<number>()
     for (const parent of rest) {
       let target = this.lanes.indexOf(parent)
@@ -50,7 +85,7 @@ export class GraphLayout {
       this.lanes.pop()
       this.colors.pop()
     }
-    return { lane, color, up, down }
+    return { lane: Math.min(lane, MAX_GRAPH_LANES), color, up: clip(up), down: clip(down) }
   }
 
   private claim(): number {

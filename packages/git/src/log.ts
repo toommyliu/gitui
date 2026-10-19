@@ -1,7 +1,3 @@
-import type { CommitRow, Oid } from "@gitui/contracts"
-import { GraphLayout } from "./graph.ts"
-import { NulSplitter } from "./nul.ts"
-
 export const logRevArgs = (hasHead: boolean) => [...(hasHead ? ["HEAD"] : []), "--branches", "--remotes"]
 
 export interface LogQuery {
@@ -55,47 +51,3 @@ export const logArgs = (revs: ReadonlyArray<string>, query: LogQuery) => [
   "--",
   ...query.paths,
 ]
-
-const flat = { lane: 0, color: 0, up: [], down: [] }
-
-const FIELDS = 5
-
-export class LogParser {
-  private readonly splitter = new NulSplitter()
-  private readonly layout = new GraphLayout()
-  private pending: Array<string> = []
-
-  private readonly graph: boolean
-
-  constructor(graph = true) {
-    this.graph = graph
-  }
-
-  push(chunk: Uint8Array): Array<CommitRow> {
-    return this.take(this.splitter.push(chunk))
-  }
-
-  flush(): Array<CommitRow> {
-    return this.take(this.splitter.flush())
-  }
-
-  private take(tokens: Array<string>): Array<CommitRow> {
-    const all = this.pending.length === 0 ? tokens : [...this.pending, ...tokens]
-    const rows: Array<CommitRow> = []
-    let i = 0
-    for (; i + FIELDS <= all.length; i += FIELDS) {
-      const oid = all[i]!.replace(/^\n/, "") as Oid
-      const parents = all[i + 1] === "" ? [] : (all[i + 1]!.split(" ") as Array<Oid>)
-      rows.push({
-        oid,
-        parents,
-        author: all[i + 2]!,
-        time: Number(all[i + 3]),
-        subject: all[i + 4]!,
-        graph: this.graph ? this.layout.push(oid, parents) : flat,
-      })
-    }
-    this.pending = all.slice(i)
-    return rows
-  }
-}

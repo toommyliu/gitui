@@ -33,7 +33,8 @@ import * as Semaphore from "effect/Semaphore"
 import * as Stream from "effect/Stream"
 import { diffTreeArgs, parseCommit, parseFileChanges, showArgs } from "./commit.ts"
 import { Git, nulList } from "./git.ts"
-import { filterArgs, hasGraph, LogParser, logArgs, logRevArgs, parseLogQuery, shaCandidate } from "./log.ts"
+import { filterArgs, hasGraph, logArgs, logRevArgs, parseLogQuery, shaCandidate } from "./log.ts"
+import { LogStore } from "./log-store.ts"
 import {
   forEachRefArgs,
   parseRefs,
@@ -69,8 +70,7 @@ export const DRAFT_FILE = "GITUI_MSG"
 
 interface LogSession {
   readonly total: number
-  readonly rows: Array<CommitRow>
-  readonly parser: LogParser
+  readonly store: LogStore
   readonly pull: Pull.Pull<ReadonlyArray<Uint8Array>, GitError>
   readonly scope: Scope.Closeable
   readonly lock: Semaphore.Semaphore
@@ -284,8 +284,7 @@ export class Repo extends Context.Service<
         const pull = yield* Stream.toPull(git.stream(repo, logArgs(revs, query))).pipe(Scope.provide(scope))
         const session: LogSession = {
           total,
-          rows: [],
-          parser: new LogParser(hasGraph(query)),
+          store: new LogStore(hasGraph(query)),
           pull,
           scope,
           lock: Semaphore.makeUnsafe(1),
@@ -311,19 +310,19 @@ export class Repo extends Context.Service<
         const end = start + count
         yield* session.lock.withPermits(1)(
           Effect.gen(function* () {
-            while (!session.done && session.rows.length < end) {
+            while (!session.done && session.store.length < end) {
               const chunks = yield* session.pull.pipe(
                 Pull.catchDone(() => {
                   session.done = true
                   return Effect.succeed([] as ReadonlyArray<Uint8Array>)
                 }),
               )
-              for (const chunk of chunks) session.rows.push(...session.parser.push(chunk))
-              if (session.done) session.rows.push(...session.parser.flush())
+              for (const chunk of chunks) session.store.push(chunk)
+              if (session.done) session.store.flush()
             }
           }),
         )
-        return session.rows.slice(start, end)
+        return session.store.page(start, count)
       })
 
       const commit = Effect.fn("Repo.commit")(function* (repo: RepoId, oid: Oid) {

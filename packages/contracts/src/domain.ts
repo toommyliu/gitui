@@ -157,7 +157,8 @@ export type CommitRow = typeof CommitRow.Type
 
 export const LogHandle = Schema.Struct({
   logId: Schema.String,
-  total: Schema.Int,
+  loaded: Schema.Int,
+  done: Schema.Boolean,
 })
 export type LogHandle = typeof LogHandle.Type
 

@@ -3,6 +3,7 @@ import { GitRpcs } from "@gitui/contracts"
 import * as Console from "effect/Console"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Option from "effect/Option"
 import * as Stream from "effect/Stream"
 import * as RpcClient from "effect/rpc/RpcClient"
 import * as RpcSerialization from "effect/rpc/RpcSerialization"
@@ -30,11 +31,11 @@ const program = Effect.gen(function* () {
     "worktrees:",
     refs.worktrees.length,
   )
-  const log = yield* client.OpenLog({ repo: info.id, query: "" })
+  const log = Option.getOrThrow(yield* Stream.runLast(client.OpenLog({ repo: info.id, query: "" })))
   const rows = yield* client.GetLogPage({ repo: info.id, logId: log.logId, start: 0, count: 3 })
   yield* Console.log(
     "log total:",
-    log.total,
+    log.loaded,
     rows.map((r) => r.subject),
   )
   const detail = yield* client.GetCommit({ repo: info.id, oid: rows[0]!.oid })

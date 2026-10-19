@@ -3,6 +3,8 @@ import { GitRpcs } from "@gitui/contracts"
 import * as Console from "effect/Console"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Option from "effect/Option"
+import * as Stream from "effect/Stream"
 import * as RpcClient from "effect/rpc/RpcClient"
 import * as RpcSerialization from "effect/rpc/RpcSerialization"
 
@@ -21,15 +23,17 @@ const program = Effect.gen(function* () {
   const info = yield* client.OpenRepo({ path })
   yield* timed("status", client.GetStatus({ repo: info.id }))
   yield* timed("refs", client.GetRefs({ repo: info.id }))
-  const log = yield* timed("open log", client.OpenLog({ repo: info.id, query: "" }))
-  yield* timed("first page (200)", client.GetLogPage({ repo: info.id, logId: log.logId, start: 0, count: 200 }))
+  const opened = client.OpenLog({ repo: info.id, query: "" })
+  const { logId } = Option.getOrThrow(yield* timed("open log", Stream.runHead(opened)))
+  yield* timed("first page (200)", client.GetLogPage({ repo: info.id, logId, start: 0, count: 200 }))
+  const log = Option.getOrThrow(yield* timed("load the whole log", Stream.runLast(opened)))
   const last = yield* timed(
-    `last page of ${log.total}`,
-    client.GetLogPage({ repo: info.id, logId: log.logId, start: Math.max(0, log.total - 200), count: 200 }),
+    `last page of ${log.loaded}`,
+    client.GetLogPage({ repo: info.id, logId, start: Math.max(0, log.loaded - 200), count: 200 }),
   )
   yield* timed(
-    "last page again (cached)",
-    client.GetLogPage({ repo: info.id, logId: log.logId, start: Math.max(0, log.total - 200), count: 200 }),
+    "last page again",
+    client.GetLogPage({ repo: info.id, logId, start: Math.max(0, log.loaded - 200), count: 200 }),
   )
   const widest = Math.max(...last.map((row) => row.graph.up.length / 3))
   yield* Console.log(`rows returned: ${last.length}, widest lane count on last page: ${widest}`)

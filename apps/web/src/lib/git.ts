@@ -111,7 +111,14 @@ export const logKey = (repo: RepoId, query: string) => JSON.stringify([repo, que
 
 export const logAtom = Atom.family((key: string) => {
   const [repo, query] = JSON.parse(key) as [RepoId, string]
-  return GitClient.query("OpenLog", { repo, query }, { reactivityKeys: [keys.refs(repo)], timeToLive: CACHE_TTL })
+  return GitClient.runtime
+    .atom(
+      Effect.gen(function* () {
+        const client = yield* GitClient
+        return client("OpenLog", { repo, query })
+      }).pipe(Stream.unwrap, Stream.retry(Schedule.spaced("1 second"))),
+    )
+    .pipe(GitClient.runtime.factory.withReactivity([keys.refs(repo)]))
 })
 
 export const pathQuery = (path: string) => `path:${/[\s"]/.test(path) ? `"${path}"` : path}`

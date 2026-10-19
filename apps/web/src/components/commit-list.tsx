@@ -153,7 +153,8 @@ export function CommitList({
   const headOid = status?.head._tag === "Unborn" ? undefined : status?.head.oid
   const hasChanges = !filtering && (status?.entries.length ?? 0) > 0
   const offset = hasChanges ? 1 : 0
-  const count = (log?.total ?? 0) + offset
+  const loaded = log?.loaded ?? 0
+  const count = loaded + offset
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
@@ -209,9 +210,9 @@ export function CommitList({
       ? null
       : result._tag === "Failure" && current === undefined
         ? "Search failed"
-        : pending
+        : pending || (log?.done !== true && loaded === 0)
           ? "Searching…"
-          : `${log?.total ?? 0} ${log?.total === 1 ? "commit" : "commits"}`
+          : `${loaded} ${loaded === 1 ? "commit" : "commits"}${log?.done === true ? "" : " so far"}`
 
   return (
     <div className="flex h-full flex-col">
@@ -243,7 +244,7 @@ export function CommitList({
           </InputGroupAddon>
         )}
       </InputGroup>
-      {filtering && log?.total === 0 && !pending ? (
+      {filtering && log?.done === true && loaded === 0 && !pending ? (
         <Nothing title="No matching commits" description="Search looks at branches, remotes and HEAD." />
       ) : (
         <ScrollArea

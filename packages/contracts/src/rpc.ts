@@ -65,7 +65,12 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("WatchRepo", { payload: repo, success: RepoEvent, error: GitError, stream: true }),
   Rpc.make("GetStatus", { payload: repo, success: Status, error: GitError }),
   Rpc.make("GetRefs", { payload: repo, success: Refs, error: GitError }),
-  Rpc.make("OpenLog", { payload: { repo: RepoId, query: Schema.String }, success: LogHandle, error: GitError }),
+  Rpc.make("OpenLog", {
+    payload: { repo: RepoId, query: Schema.String },
+    success: LogHandle,
+    error: Schema.Union([GitError, LogExpired]),
+    stream: true,
+  }),
   Rpc.make("GetLogPage", {
     payload: { repo: RepoId, logId: Schema.String, start: Schema.Int, count: Schema.Int },
     success: Schema.Array(CommitRow),

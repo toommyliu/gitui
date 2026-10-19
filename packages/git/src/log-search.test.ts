@@ -3,6 +3,8 @@ import { expect, layer } from "@effect/vitest"
 import type { RepoId } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Option from "effect/Option"
+import * as Stream from "effect/Stream"
 import { CommandLog } from "./command-log.ts"
 import { Repo } from "./repo.ts"
 import { makeRepo } from "./testRepo.ts"
@@ -10,9 +12,9 @@ import { makeRepo } from "./testRepo.ts"
 const search = (root: string, query: string) =>
   Effect.gen(function* () {
     const r = yield* Repo
-    const handle = yield* r.openLog(root as RepoId, query)
+    const handle = Option.getOrThrow(yield* Stream.runLast(r.openLog(root as RepoId, query)))
     const rows = yield* r.logPage(root as RepoId, handle.logId, 0, 100)
-    return { total: handle.total, rows }
+    return { total: handle.loaded, rows }
   })
 
 const subjects = (result: { rows: ReadonlyArray<{ subject: string }> }) => result.rows.map((row) => row.subject)
@@ -72,8 +74,8 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
       repo.commit("alpha")
       repo.commit("beta")
       const r = yield* Repo
-      const all = yield* r.openLog(repo.root as RepoId, "")
-      const beta = yield* r.openLog(repo.root as RepoId, "beta")
+      const all = Option.getOrThrow(yield* Stream.runHead(r.openLog(repo.root as RepoId, "")))
+      const beta = Option.getOrThrow(yield* Stream.runHead(r.openLog(repo.root as RepoId, "beta")))
 
       const allRows = yield* r.logPage(repo.root as RepoId, all.logId, 0, 10)
       const betaRows = yield* r.logPage(repo.root as RepoId, beta.logId, 0, 10)

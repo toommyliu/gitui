@@ -6,6 +6,7 @@ import { expect, layer } from "@effect/vitest"
 import type { Oid, RepoId, RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Option from "effect/Option"
 import * as Stream from "effect/Stream"
 import { CommandLog } from "./command-log.ts"
 import { Repo } from "./repo.ts"
@@ -15,19 +16,38 @@ const id = (root: string) => root as RepoId
 const p = (path: string) => path as RepoPath
 
 layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeServices.layer)))("Repo", (it) => {
-  it.effect("pages the log in order across many commits", () =>
+  it.effect("pages the log in order on demand and reports the full count once loaded", () =>
     Effect.gen(function* () {
       const repo = makeRepo()
       repo.emptyCommits(300)
       const expected = repo.git("log", "--format=%H").split("\n")
       const r = yield* Repo
 
-      const handle = yield* r.openLog(id(repo.root), "")
-      const first = yield* r.logPage(id(repo.root), handle.logId, 0, 100)
-      const last = yield* r.logPage(id(repo.root), handle.logId, 250, 100)
-      expect(handle.total).toBe(300)
+      const opened = r.openLog(id(repo.root), "")
+      const { logId } = Option.getOrThrow(yield* Stream.runHead(opened))
+      const first = yield* r.logPage(id(repo.root), logId, 0, 100)
+      const last = yield* r.logPage(id(repo.root), logId, 250, 100)
       expect(first.map((row) => row.oid)).toEqual(expected.slice(0, 100))
       expect(last.map((row) => row.oid)).toEqual(expected.slice(250))
+      expect(Option.getOrThrow(yield* Stream.runLast(opened))).toEqual({ logId, loaded: 300, done: true })
+    }),
+  )
+
+  it.effect("stops reading a log once nothing is waiting on it, and reads on when a page is asked for", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.emptyCommits(20_000)
+      const r = yield* Repo
+
+      const opened = r.openLog(id(repo.root), "")
+      const { logId } = Option.getOrThrow(yield* Stream.runHead(opened))
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 500)))
+      const idle = Option.getOrThrow(yield* Stream.runHead(opened))
+      expect(idle.done).toBe(false)
+      expect(idle.loaded).toBeLessThan(20_000)
+
+      const last = yield* r.logPage(id(repo.root), logId, 19_900, 100)
+      expect(last.map((row) => row.subject)).toEqual(Array.from({ length: 100 }, (_, i) => `commit ${99 - i}`))
     }),
   )
 

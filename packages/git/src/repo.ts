@@ -23,17 +23,20 @@ import {
 } from "@gitui/contracts"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
+import * as Deferred from "effect/Deferred"
 import * as Exit from "effect/Exit"
 import * as FileSystem from "effect/FileSystem"
+import * as Latch from "effect/Latch"
 import * as Layer from "effect/Layer"
 import type { PlatformError } from "effect/PlatformError"
 import * as Pull from "effect/Pull"
+import * as Schedule from "effect/Schedule"
 import * as Scope from "effect/Scope"
 import * as Semaphore from "effect/Semaphore"
 import * as Stream from "effect/Stream"
 import { diffTreeArgs, parseCommit, parseFileChanges, showArgs } from "./commit.ts"
 import { Git, nulList } from "./git.ts"
-import { filterArgs, hasGraph, logArgs, logRevArgs, parseLogQuery, shaCandidate } from "./log.ts"
+import { hasGraph, logArgs, logRevArgs, parseLogQuery, shaCandidate } from "./log.ts"
 import { LogStore } from "./log-store.ts"
 import {
   forEachRefArgs,
@@ -68,14 +71,79 @@ const MAX_LOG_SESSIONS = 4
 
 export const DRAFT_FILE = "GITUI_MSG"
 
+const LOG_PROGRESS_INTERVAL = "100 millis"
+
+type LogStatus =
+  | { readonly _tag: "Loading" }
+  | { readonly _tag: "Done" }
+  | { readonly _tag: "Failed"; readonly error: GitError }
+  | { readonly _tag: "Closed" }
+
 interface LogSession {
-  readonly total: number
   readonly store: LogStore
-  readonly pull: Pull.Pull<ReadonlyArray<Uint8Array>, GitError>
   readonly scope: Scope.Closeable
-  readonly lock: Semaphore.Semaphore
-  done: boolean
+  readonly wanted: Latch.Latch
+  readers: number
+  status: LogStatus
+  progressed: Deferred.Deferred<void>
 }
+
+const want = (session: LogSession) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      if (session.readers++ === 0) Latch.openUnsafe(session.wanted)
+    }),
+    () =>
+      Effect.sync(() => {
+        if (--session.readers === 0) Latch.closeUnsafe(session.wanted)
+      }),
+  )
+
+const wake = (session: LogSession) => {
+  const progressed = session.progressed
+  session.progressed = Deferred.makeUnsafe()
+  Deferred.doneUnsafe(progressed, Exit.void)
+}
+
+const load = (session: LogSession, pull: Pull.Pull<ReadonlyArray<Uint8Array>, GitError>) =>
+  Effect.whileLoop({
+    while: () => session.status._tag === "Loading",
+    body: () =>
+      Effect.andThen(session.wanted.await, pull).pipe(
+        Effect.map((chunks) => {
+          for (const chunk of chunks) session.store.push(chunk)
+        }),
+        Pull.catchDone(() =>
+          Effect.sync(() => {
+            session.store.flush()
+            session.status = { _tag: "Done" }
+          }),
+        ),
+        Effect.catch((error) =>
+          Effect.sync(() => {
+            session.status = { _tag: "Failed", error }
+          }),
+        ),
+        Effect.ensuring(Effect.sync(() => wake(session))),
+      ),
+    step: () => {},
+  })
+
+const waitFor = (session: LogSession, end: number): Effect.Effect<void, GitError | LogExpired> =>
+  Effect.suspend(() => {
+    switch (session.status._tag) {
+      case "Closed":
+        return Effect.fail(new LogExpired())
+      case "Failed":
+        return Effect.fail(session.status.error)
+      case "Done":
+        return Effect.void
+      case "Loading":
+        return session.store.length >= end
+          ? Effect.void
+          : Effect.andThen(Deferred.await(session.progressed), waitFor(session, end))
+    }
+  })
 
 export class Repo extends Context.Service<
   Repo,
@@ -83,7 +151,7 @@ export class Repo extends Context.Service<
     readonly open: (path: string) => Effect.Effect<RepoInfo, RepoNotFound>
     readonly status: (repo: RepoId) => Effect.Effect<Status, GitError>
     readonly refs: (repo: RepoId) => Effect.Effect<Refs, GitError>
-    readonly openLog: (repo: RepoId, query: string) => Effect.Effect<LogHandle, GitError>
+    readonly openLog: (repo: RepoId, query: string) => Stream.Stream<LogHandle, GitError | LogExpired>
     readonly logPage: (
       repo: RepoId,
       logId: string,
@@ -246,9 +314,14 @@ export class Repo extends Context.Service<
         }
       })
 
-      const closeSession = (session: LogSession) => Scope.close(session.scope, Exit.void)
+      const closeSession = (session: LogSession) =>
+        Effect.suspend(() => {
+          session.status = { _tag: "Closed" }
+          wake(session)
+          return Scope.close(session.scope, Exit.void)
+        })
 
-      const openLog = Effect.fn("Repo.openLog")(function* (repo: RepoId, search: string) {
+      const logSession = Effect.fn("Repo.logSession")(function* (repo: RepoId, search: string) {
         const parsed = parseLogQuery(search)
         const head = yield* hasHead(repo)
         const sha = shaCandidate(parsed)
@@ -270,25 +343,20 @@ export class Repo extends Context.Service<
         const reuse = (session: LogSession) => {
           open.delete(logId)
           open.set(logId, session)
-          return { logId, total: session.total }
+          return { logId, session }
         }
         const existing = open.get(logId)
         if (existing !== undefined) return reuse(existing)
 
-        const total = Number(
-          (yield* git.text(repo, ["rev-list", "--count", ...filterArgs(query), ...revs, "--", ...query.paths], {
-            okExitCodes: [128],
-          })).trim() || 0,
-        )
         const scope = yield* Scope.make()
         const pull = yield* Stream.toPull(git.stream(repo, logArgs(revs, query))).pipe(Scope.provide(scope))
         const session: LogSession = {
-          total,
           store: new LogStore(hasGraph(query)),
-          pull,
           scope,
-          lock: Semaphore.makeUnsafe(1),
-          done: total === 0,
+          wanted: Latch.makeUnsafe(false),
+          readers: 0,
+          status: { _tag: "Loading" },
+          progressed: Deferred.makeUnsafe(),
         }
         const raced = open.get(logId)
         if (raced !== undefined) {
@@ -296,32 +364,38 @@ export class Repo extends Context.Service<
           return reuse(raced)
         }
         open.set(logId, session)
+        yield* Effect.forkIn(load(session, pull), scope)
         for (const [id, old] of open) {
           if (open.size <= MAX_LOG_SESSIONS) break
           open.delete(id)
           yield* closeSession(old)
         }
-        return { logId, total }
+        return { logId, session }
       })
+
+      const openLog = (repo: RepoId, search: string) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const { logId, session } = yield* logSession(repo, search)
+            yield* want(session)
+            const handle = (): LogHandle => ({
+              logId,
+              loaded: session.store.length,
+              done: session.status._tag === "Done",
+            })
+            return Stream.fromEffectSchedule(Effect.sync(handle), Schedule.spaced(LOG_PROGRESS_INTERVAL)).pipe(
+              Stream.merge(Stream.fromEffect(Effect.map(waitFor(session, Infinity), handle)), {
+                haltStrategy: "right",
+              }),
+              Stream.changesWith((a, b) => a.loaded === b.loaded && a.done === b.done),
+            )
+          }),
+        )
 
       const logPage = Effect.fn("Repo.logPage")(function* (repo: RepoId, logId: string, start: number, count: number) {
         const session = sessions.get(repo)?.get(logId)
         if (session === undefined) return yield* new LogExpired()
-        const end = start + count
-        yield* session.lock.withPermits(1)(
-          Effect.gen(function* () {
-            while (!session.done && session.store.length < end) {
-              const chunks = yield* session.pull.pipe(
-                Pull.catchDone(() => {
-                  session.done = true
-                  return Effect.succeed([] as ReadonlyArray<Uint8Array>)
-                }),
-              )
-              for (const chunk of chunks) session.store.push(chunk)
-              if (session.done) session.store.flush()
-            }
-          }),
-        )
+        yield* Effect.scoped(Effect.andThen(want(session), waitFor(session, start + count)))
         return session.store.page(start, count)
       })
 

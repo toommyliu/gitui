@@ -33,7 +33,7 @@ export const shaCandidate = (query: LogQuery) =>
 
 export const hasGraph = (query: LogQuery) => query.words.length === 0 && query.authors.length === 0
 
-export const filterArgs = (query: LogQuery) => [
+const filterArgs = (query: LogQuery) => [
   ...(query.paths.length > 0 && hasGraph(query) ? ["--parents"] : []),
   ...(query.words.length + query.authors.length > 0 ? ["--regexp-ignore-case", "--fixed-strings"] : []),
   ...(query.words.length > 1 ? ["--all-match"] : []),

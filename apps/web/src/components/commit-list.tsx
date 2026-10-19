@@ -249,7 +249,7 @@ export function CommitList({
             onKeyDown,
             role: "listbox",
             "aria-label": "Commits",
-            className: "[contain:strict] data-has-overflow-y:pr-2.5",
+            className: "[contain:strict] focus-visible:ring-0 focus-visible:outline-none data-has-overflow-y:pr-2.5",
           }}
         >
           <div className="relative w-full" style={{ height: list.height }}>
@@ -260,8 +260,7 @@ export function CommitList({
                 style={{ height: ROW_HEIGHT, transform: `translateY(${row.top}px)` }}
               >
                 {row.index < offset && status !== undefined ? (
-                  <button
-                    type="button"
+                  <div
                     role="option"
                     aria-selected={selection._tag === "WorkingCopy"}
                     onClick={() => onSelect({ _tag: "WorkingCopy" })}
@@ -275,7 +274,7 @@ export function CommitList({
                     </span>
                     <span className="font-medium">Uncommitted changes</span>
                     <span className="truncate text-muted-foreground">{changeSummary(status)}</span>
-                  </button>
+                  </div>
                 ) : log !== undefined ? (
                   <CommitRowView
                     repo={repo}
@@ -337,8 +336,7 @@ const CommitRowView = memo(function CommitRowView({
   return (
     <ContextMenu>
       <ContextMenuTrigger className="block h-full">
-        <button
-          type="button"
+        <div
           role="option"
           aria-selected={selected}
           onClick={() => onSelect({ _tag: "Commit", oid: row.oid })}
@@ -361,7 +359,7 @@ const CommitRowView = memo(function CommitRowView({
           <span className="hidden w-14 shrink-0 font-mono text-[11px] text-muted-foreground @3xl:block">
             {shortOid(row.oid)}
           </span>
-        </button>
+        </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
         <CommitMenuItems repo={repo} row={row} />

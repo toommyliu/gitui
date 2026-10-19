@@ -1,13 +1,14 @@
 import { resolve } from "node:path"
 import tailwindcss from "@tailwindcss/vite"
-import react from "@vitejs/plugin-react"
+import babel from "@rolldown/plugin-babel"
+import react, { reactCompilerPreset } from "@vitejs/plugin-react"
 import { defineConfig } from "vite-plus"
 
 const serverHost = process.env.SERVER_HOST ?? "127.0.0.1"
 const serverPort = process.env.SERVER_PORT ?? "4600"
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
   resolve: {
     alias: {
       "@": resolve(import.meta.dirname, "./src"),

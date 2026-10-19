@@ -67,11 +67,11 @@ export function RefBadge({ label, className }: { label: RefLabel; className?: st
         "h-4 rounded-sm px-1 text-[11px] [&>svg]:size-3!",
         label.kind !== "head" && "bg-foreground/8",
         label.kind === "remote" && "text-muted-foreground",
-        label.kind === "tag" && "italic",
+        label.kind === "tag" && "pr-0.5 italic",
         className,
       )}
     >
-      <span className="truncate">{label.name}</span>
+      <span className={cn("truncate", label.kind === "tag" && "pr-0.5")}>{label.name}</span>
       {label.upstream !== undefined && <CloudIcon strokeWidth={2.5} aria-label={`in sync with ${label.upstream}`} />}
     </Badge>
   )

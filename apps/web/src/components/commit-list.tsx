@@ -1,6 +1,5 @@
 import { RegistryContext, useAtomValue } from "@effect/atom-react"
 import type { CommitRow, Head, Oid, Refs, RepoId, Status } from "@gitui/contracts"
-import { useVirtualizer } from "@tanstack/react-virtual"
 import { Badge } from "@/components/ui/badge"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
 import {
@@ -16,10 +15,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "cn"
 import { CloudIcon, SearchIcon } from "lucide-react"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { shortDate, shortOid } from "@/lib/format"
 import { LOG_PAGE_SIZE, latest, logAtom, logKey, logPageAtom, logPageKey, refsAtom, statusAtom } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
+import { useTallList } from "@/lib/tall-list"
 import { CommitMenuItems } from "./commit-menu"
 import { Nothing } from "./loading"
 import { GraphCell, LANE_WIDTH, ROW_HEIGHT, VISIBLE_LANES, lanesUsed } from "./graph"
@@ -142,9 +142,7 @@ export function CommitList({
   const result = useAtomValue(logAtom(logKey(repo, search)))
   const current = latest(result)
   const [shown, setShown] = useState(current)
-  useEffect(() => {
-    if (current !== undefined) setShown(current)
-  }, [current])
+  if (current !== undefined && current !== shown) setShown(current)
   const log = current ?? shown
   const filtering = search !== ""
   const status = latest(useAtomValue(statusAtom(repo)))
@@ -156,18 +154,14 @@ export function CommitList({
   const loaded = log?.loaded ?? 0
   const count = loaded + offset
 
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const virtualizer = useVirtualizer({
-    count,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: 30,
-  })
-
-  useEffect(() => virtualizer.scrollToOffset(0), [search, virtualizer])
+  const list = useTallList({ count, rowHeight: ROW_HEIGHT, overscan: 30, resetKey: search })
 
   const [lanes, setLanes] = useState(1)
-  useEffect(() => setLanes(1), [log?.logId])
+  const [lanesLog, setLanesLog] = useState(log?.logId)
+  if (lanesLog !== log?.logId) {
+    setLanesLog(log?.logId)
+    setLanes(1)
+  }
   const report = useCallback((n: number) => setLanes((m) => (n > m ? Math.min(n, VISIBLE_LANES) : m)), [])
   const graphWidth = lanes * LANE_WIDTH + 4
 
@@ -180,8 +174,8 @@ export function CommitList({
 
   const selectedIndex = (() => {
     if (selection._tag === "WorkingCopy") return hasChanges ? 0 : -1
-    for (const item of virtualizer.getVirtualItems()) {
-      if (item.index >= offset && oidAt(item.index - offset) === selection.oid) return item.index
+    for (const row of list.rows) {
+      if (row.index >= offset && oidAt(row.index - offset) === selection.oid) return row.index
     }
     return -1
   })()
@@ -193,7 +187,7 @@ export function CommitList({
       const oid = oidAt(index - offset)
       if (oid !== undefined) onSelect({ _tag: "Commit", oid })
     }
-    virtualizer.scrollToIndex(index, { align: "auto" })
+    list.scrollToIndex(index)
   }
 
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -249,7 +243,7 @@ export function CommitList({
       ) : (
         <ScrollArea
           className="@container min-h-0 flex-1"
-          viewportRef={scrollRef}
+          viewportRef={list.ref}
           viewportProps={{
             tabIndex: 0,
             onKeyDown,
@@ -258,14 +252,14 @@ export function CommitList({
             className: "[contain:strict] data-has-overflow-y:pr-2.5",
           }}
         >
-          <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-            {virtualizer.getVirtualItems().map((item) => (
+          <div className="relative w-full" style={{ height: list.height }}>
+            {list.rows.map((row) => (
               <div
-                key={item.key}
+                key={row.index}
                 className="absolute top-0 left-0 w-full"
-                style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
+                style={{ height: ROW_HEIGHT, transform: `translateY(${row.top}px)` }}
               >
-                {item.index < offset && status !== undefined ? (
+                {row.index < offset && status !== undefined ? (
                   <button
                     type="button"
                     role="option"
@@ -286,7 +280,7 @@ export function CommitList({
                   <CommitRowView
                     repo={repo}
                     logId={log.logId}
-                    index={item.index - offset}
+                    index={row.index - offset}
                     graphWidth={graphWidth}
                     labels={labels}
                     headOid={headOid}

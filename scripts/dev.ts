@@ -41,19 +41,26 @@ const env: NodeJS.ProcessEnv = {
 }
 if (linkedWorktree) env["GITUI_USER_DATA_DIR"] = join(root, ".dev", "electron")
 
-const args = [
-  join(root, "node_modules", "vite-plus", "bin", "vp"),
-  "run",
-  "--parallel",
-  ...process.argv.slice(2),
-  "dev",
-]
-if (process.stdin.isTTY && process.execve !== undefined) {
-  process.execve(process.execPath, [process.execPath, ...args], env)
+const vp = join(root, "node_modules", "vite-plus", "bin", "vp")
+// `vp run` SIGKILLs its other tasks once one exits non-zero, and Vite exits 130 on Ctrl+C, so each package gets its own `vp run`.
+// In a terminal they share its foreground process group, so Ctrl+C reaches every task and Vite can read stdin.
+// Otherwise each gets a process group to signal. vp waits for its task on SIGINT but abandons it on SIGTERM, so send SIGINT.
+const interactive = process.stdin.isTTY
+const children = process.argv
+  .slice(2)
+  .map((filter) =>
+    spawn(process.execPath, [vp, "run", filter, "dev"], { stdio: "inherit", env, detached: !interactive }),
+  )
+const interrupt = () => {
+  for (const child of children) {
+    try {
+      process.kill(-child.pid!, "SIGINT")
+    } catch {}
+  }
 }
-// vp exits on SIGTERM without stopping its tasks, so give it a process group and signal the whole group.
-const child = spawn(process.execPath, args, { stdio: "inherit", env, detached: true })
-for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-  process.on(signal, () => process.kill(-child.pid!, signal))
-}
-child.on("exit", (code) => process.exit(code ?? 1))
+if (interactive) process.on("SIGINT", () => {})
+else for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, interrupt)
+const codes = await Promise.all(
+  children.map((child) => new Promise<number>((resolve) => child.on("exit", (code) => resolve(code ?? 1)))),
+)
+process.exit(codes.find((code) => code !== 0) ?? 0)

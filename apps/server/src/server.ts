@@ -55,7 +55,9 @@ export const serverLayer = (options: ServerOptions) => {
       ? HttpStaticServer.layer({ root: options.webDist, spa: true, cacheControl: "no-cache" })
       : Layer.empty
   const compression = HttpRouter.middleware(HttpMiddleware.compression(), { global: true })
-  return HttpRouter.serve(Layer.mergeAll(rpc, assets, compression, rejectForeignOrigins(options.trustedOrigins))).pipe(
+  return HttpRouter.serve(Layer.mergeAll(rpc, assets, compression, rejectForeignOrigins(options.trustedOrigins)), {
+    disableLogger: true,
+  }).pipe(
     Layer.provideMerge(
       NodeHttpServer.layer(createServer, {
         port: options.port,

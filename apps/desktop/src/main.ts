@@ -40,6 +40,8 @@ const startBackend = () =>
     const child = spawn(process.execPath, [join(__dirname, "backend.mjs")], {
       stdio: ["ignore", "inherit", "inherit", "ipc"],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      // Keeps a terminal's Ctrl+C away from the server. Electron stops it on quit.
+      detached: true,
     })
     child.once("message", (message) =>
       resolveStart({ child, port: Schema.decodeUnknownSync(BackendReady)(message).port }),
@@ -93,7 +95,12 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", () => {
     quitting = true
   })
-  app.on("will-quit", () => backend?.kill())
+  app.on("will-quit", (event) => {
+    if (backend === undefined || backend.exitCode !== null || backend.signalCode !== null) return
+    event.preventDefault()
+    backend.once("exit", () => app.quit())
+    backend.kill()
+  })
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit()
   })

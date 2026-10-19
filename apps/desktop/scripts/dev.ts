@@ -1,12 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process"
-import { createRequire } from "node:module"
 import { connect } from "node:net"
 import { setTimeout as sleep } from "node:timers/promises"
 import { context, type Plugin } from "esbuild"
 import { bundles } from "./bundles.ts"
+import { electronBinary } from "./electron.ts"
 
 const devUrl = new URL(`http://127.0.0.1:${process.env.WEB_PORT ?? 5173}`)
-const electron = createRequire(import.meta.url)("electron") as string
+const electron = electronBinary(true)
 const env: NodeJS.ProcessEnv = { ...process.env, GITUI_DEV_URL: devUrl.origin }
 delete env["ELECTRON_RUN_AS_NODE"]
 

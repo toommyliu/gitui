@@ -13,7 +13,8 @@
     "prepare": "effect-tsgo patch --typescript --oxlint && git config core.hooksPath .githooks",
     "test": "vp run -r test",
     "check": "vp fmt --check && vp lint --deny-warnings && vp run -r typecheck && vp run -r test",
-    "serve": "pnpm -F @gitui/web build && pnpm -F @gitui/server start"
+    "serve": "pnpm -F @gitui/web build && pnpm -F @gitui/server start",
+    "serve:desktop": "pnpm -F @gitui/web build && pnpm -F @gitui/desktop build && pnpm -F @gitui/desktop start"
   },
   "devDependencies": {
     "@effect/tsgo": "0.51.1",

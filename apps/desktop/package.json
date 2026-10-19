@@ -7,6 +7,7 @@
   "scripts": {
     "build": "node scripts/build.ts",
     "dev": "node scripts/dev.ts",
+    "start": "node scripts/start.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

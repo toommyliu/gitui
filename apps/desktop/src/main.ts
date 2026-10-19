@@ -18,7 +18,9 @@ import * as Schema from "effect/Schema"
 import { APP_ORIGIN, BackendReady, SCHEME } from "./protocol.ts"
 
 const webDist = resolve(__dirname, "../../web/dist")
-const appOrigin = process.env.GITUI_DEV_URL ?? APP_ORIGIN
+const devUrl = process.env.GITUI_DEV_URL
+const appOrigin = devUrl ?? APP_ORIGIN
+const icon = resolve(__dirname, "../resources", devUrl === undefined ? "icon.png" : "icon-dev.png")
 
 app.setName("gitui")
 if (process.env.GITUI_USER_DATA_DIR !== undefined) app.setPath("userData", process.env.GITUI_USER_DATA_DIR)
@@ -61,6 +63,7 @@ const createWindow = () => {
     minHeight: 480,
     show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#181818" : "#fcfcfc",
+    icon,
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,

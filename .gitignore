@@ -31,3 +31,4 @@ dist-ssr
 
 # dev
 .dev
+.electron-runtime

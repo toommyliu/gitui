@@ -8,7 +8,16 @@ const serverHost = process.env.SERVER_HOST ?? "127.0.0.1"
 const serverPort = process.env.SERVER_PORT ?? "4600"
 
 export default defineConfig({
-  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
+  plugins: [
+    react(),
+    babel({ presets: [reactCompilerPreset()] }),
+    tailwindcss(),
+    {
+      name: "dev-favicon",
+      apply: "serve",
+      transformIndexHtml: (html) => html.replace("/favicon.svg", "/favicon-dev.svg"),
+    },
+  ],
   resolve: {
     alias: {
       "@": resolve(import.meta.dirname, "./src"),

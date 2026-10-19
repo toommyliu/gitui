@@ -38,7 +38,9 @@ export const connectionAtom = Atom.make<Connection>("connecting").pipe(Atom.keep
 export class GitClient extends AtomRpc.Service<GitClient>()("GitClient", {
   group: GitRpcs,
   protocol: (get) =>
-    RpcClient.layerProtocolSocket({ retryTransientErrors: true }).pipe(
+    // The client checks the timeout only when a ping is due, so a timeout equal to the 5s ping
+    // interval drops a healthy idle socket whenever that timer fires a few ms late.
+    RpcClient.layerProtocolSocket({ retryTransientErrors: true, pingTimeout: "15 seconds" }).pipe(
       Layer.provide([
         BrowserSocket.layerWebSocket(socketUrl),
         RpcSerialization.layerJson,
@@ -118,7 +120,12 @@ export const LOG_PAGE_SIZE = 200
 
 export const logPageAtom = Atom.family((key: string) => {
   const [repo, logId, page] = key.split("\n") as [RepoId, string, string]
-  return GitClient.query("GetLogPage", { repo, logId, start: Number(page) * LOG_PAGE_SIZE, count: LOG_PAGE_SIZE })
+  return GitClient.runtime.atom(
+    Effect.gen(function* () {
+      const client = yield* GitClient
+      return yield* client("GetLogPage", { repo, logId, start: Number(page) * LOG_PAGE_SIZE, count: LOG_PAGE_SIZE })
+    }).pipe(Effect.retry({ while: (error) => error._tag === "RpcClientError", schedule: Schedule.spaced("1 second") })),
+  )
 })
 
 export const logPageKey = (repo: RepoId, logId: string, page: number) => `${repo}\n${logId}\n${page}`

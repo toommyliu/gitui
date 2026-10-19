@@ -170,6 +170,18 @@ const separator = ':is([data-separator="line-info"], [data-separator="line-info-
 const quiet = "color-mix(in srgb, var(--diffs-fg) 50%, var(--diffs-bg))"
 
 const UNSAFE_CSS = `
+:host {
+  --diffs-light: var(--foreground);
+  --diffs-dark: var(--foreground);
+  --diffs-light-bg: var(--background);
+  --diffs-dark-bg: var(--background);
+  --diffs-addition-color-override: var(--diff-addition);
+  --diffs-deletion-color-override: var(--diff-deletion);
+  --diffs-bg-addition-emphasis-override: var(--diff-addition-emphasis);
+  --diffs-bg-deletion-emphasis-override: var(--diff-deletion-emphasis);
+  --diffs-fg-number-addition-override: var(--change-added);
+  --diffs-fg-number-deletion-override: var(--change-deleted);
+}
 [data-diffs-header][data-sticky] {
   top: -1px;
 }
@@ -305,8 +317,8 @@ function FileHeader({
         <CopyPathButton path={fileDiff.name} />
         {note === null ? (
           <span className="ml-auto shrink-0 tabular-nums">
-            {deletions > 0 && <span className="text-destructive">-{deletions} </span>}
-            {additions > 0 && <span className="text-[var(--lane-1)]">+{additions}</span>}
+            {deletions > 0 && <span className="text-change-deleted">-{deletions} </span>}
+            {additions > 0 && <span className="text-change-added">+{additions}</span>}
           </span>
         ) : (
           <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{note}</span>

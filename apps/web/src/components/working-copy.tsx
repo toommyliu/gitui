@@ -791,7 +791,7 @@ function FileRowView({
   onClick: (row: FileRow, mode: ClickMode) => void
 }) {
   return (
-    <div className={cn("group flex h-full items-center gap-2 px-2", selected ? "bg-accent" : "hover:bg-muted/60")}>
+    <div className={cn("group flex h-full items-center gap-2 px-2", selected ? "bg-selection" : "hover:bg-muted/60")}>
       <button
         type="button"
         role="option"

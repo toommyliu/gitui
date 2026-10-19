@@ -35,8 +35,8 @@ function ChangeTotals({ files }: { files: Detail["files"] }) {
         {files.length.toLocaleString()}
       </Badge>
       <span className="tabular-nums">
-        <span className="text-[var(--lane-1)]">+{additions}</span>{" "}
-        <span className="text-destructive">−{deletions}</span>
+        <span className="text-change-added">+{additions}</span>{" "}
+        <span className="text-change-deleted">−{deletions}</span>
       </span>
     </>
   )
@@ -270,7 +270,7 @@ function LargeCommit({
                     }}
                     className={cn(
                       "absolute top-0 left-0 flex w-full items-center gap-2 px-3 text-left hover:bg-muted/60",
-                      open?.path === file.path && "bg-accent",
+                      open?.path === file.path && "bg-selection",
                     )}
                     style={{ height: FILE_ROW, transform: `translateY(${item.start}px)` }}
                   >

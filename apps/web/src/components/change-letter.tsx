@@ -11,12 +11,12 @@ const changeLetter: Record<FileChange["change"], string> = {
 }
 
 export const changeColor: Record<FileChange["change"], string> = {
-  added: "text-[var(--lane-1)]",
-  deleted: "text-destructive",
-  modified: "text-[var(--lane-2)]",
-  renamed: "text-[var(--lane-0)]",
-  copied: "text-[var(--lane-0)]",
-  typechange: "text-[var(--lane-6)]",
+  added: "text-change-added",
+  deleted: "text-change-deleted",
+  modified: "text-change-modified",
+  renamed: "text-change-renamed",
+  copied: "text-change-renamed",
+  typechange: "text-change-renamed",
 }
 
 export function ChangeLetter({ change }: { change: FileChange["change"] }) {

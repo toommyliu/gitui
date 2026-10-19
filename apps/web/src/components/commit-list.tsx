@@ -266,7 +266,7 @@ export function CommitList({
                     onClick={() => onSelect({ _tag: "WorkingCopy" })}
                     className={cn(
                       "flex h-full w-full items-center gap-2 px-2 text-left whitespace-nowrap",
-                      selection._tag === "WorkingCopy" ? "bg-accent" : "hover:bg-muted/60",
+                      selection._tag === "WorkingCopy" ? "bg-selection" : "hover:bg-muted/60",
                     )}
                   >
                     <span style={{ width: graphWidth }} className="flex shrink-0 justify-start">
@@ -342,7 +342,7 @@ const CommitRowView = memo(function CommitRowView({
           onClick={() => onSelect({ _tag: "Commit", oid: row.oid })}
           className={cn(
             "flex h-full w-full items-center gap-2 overflow-hidden px-2 text-left",
-            selected ? "bg-accent" : "hover:bg-muted/60",
+            selected ? "bg-selection" : "hover:bg-muted/60",
           )}
         >
           <span className="-my-px flex shrink-0 overflow-hidden" style={{ width: graphWidth }}>

@@ -356,9 +356,58 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
   const additions = [...counts.values()].reduce((sum, count) => sum + count.additions, 0)
   const deletions = [...counts.values()].reduce((sum, count) => sum + count.deletions, 0)
 
-  const overview = (
+  const fileList = (
     <ScrollArea className="h-full" viewportProps={{ className: "data-has-overflow-y:pr-2.5" }}>
-      <div className="px-3 pt-3 pb-3">
+      <ul className="py-1">
+        {rows.slice(0, MAX_ROWS).map((row) => {
+          const count = counts.get(row.path)
+          const others = overlaps.get(row.path) ?? []
+          return (
+            <li key={row.path}>
+              <button
+                type="button"
+                onClick={() => reveal(row.path)}
+                className="flex h-6 w-full items-center gap-2 px-3 text-left whitespace-nowrap hover:bg-muted/60"
+              >
+                <ChangeLetter change={row.change} />
+                <span className="min-w-0 truncate">
+                  <span className="text-muted-foreground">{dirname(row.path)}</span>
+                  {basename(row.path)}
+                </span>
+                {others.length > 0 && (
+                  <Badge
+                    variant="outline"
+                    title={`Also changed in ${others.join(", ")}`}
+                    className="h-4 max-w-40 min-w-0 shrink rounded-sm border-change-modified/60 px-1 text-[10px] text-change-modified"
+                  >
+                    <span className="truncate">
+                      also {others[0]}
+                      {others.length > 1 && ` +${others.length - 1}`}
+                    </span>
+                  </Badge>
+                )}
+                <span className="ml-auto shrink-0 tabular-nums">
+                  {count !== undefined && count.deletions > 0 && (
+                    <span className="text-change-deleted">-{count.deletions} </span>
+                  )}
+                  {count !== undefined && count.additions > 0 && (
+                    <span className="text-change-added">+{count.additions}</span>
+                  )}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+        {rows.length > MAX_ROWS && (
+          <li className="px-3 py-1 text-muted-foreground">and {plural(rows.length - MAX_ROWS, "more file")}</li>
+        )}
+      </ul>
+    </ScrollArea>
+  )
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="max-h-[40%] shrink-0 overflow-auto p-3">
         <div className="flex items-center gap-2">
           <h2 className="min-w-0 truncate text-sm font-semibold">{title}</h2>
           <Button size="sm" variant="outline" className="ml-auto" onClick={open}>
@@ -390,85 +439,39 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
       {rows.length === 0 ? (
         <p className="px-3 py-2 text-muted-foreground">No uncommitted changes</p>
       ) : (
-        <ul className="py-1">
-          {rows.slice(0, MAX_ROWS).map((row) => {
-            const count = counts.get(row.path)
-            const others = overlaps.get(row.path) ?? []
-            return (
-              <li key={row.path}>
-                <button
-                  type="button"
-                  onClick={() => reveal(row.path)}
-                  className="flex h-6 w-full items-center gap-2 px-3 text-left whitespace-nowrap hover:bg-muted/60"
-                >
-                  <ChangeLetter change={row.change} />
-                  <span className="min-w-0 truncate">
-                    <span className="text-muted-foreground">{dirname(row.path)}</span>
-                    {basename(row.path)}
-                  </span>
-                  {others.length > 0 && (
-                    <Badge
-                      variant="outline"
-                      title={`Also changed in ${others.join(", ")}`}
-                      className="h-4 max-w-40 min-w-0 shrink rounded-sm border-change-modified/60 px-1 text-[10px] text-change-modified"
-                    >
-                      <span className="truncate">
-                        also {others[0]}
-                        {others.length > 1 && ` +${others.length - 1}`}
-                      </span>
-                    </Badge>
-                  )}
-                  <span className="ml-auto shrink-0 tabular-nums">
-                    {count !== undefined && count.deletions > 0 && (
-                      <span className="text-change-deleted">-{count.deletions} </span>
-                    )}
-                    {count !== undefined && count.additions > 0 && (
-                      <span className="text-change-added">+{count.additions}</span>
-                    )}
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-          {rows.length > MAX_ROWS && (
-            <li className="px-3 py-1 text-muted-foreground">and {plural(rows.length - MAX_ROWS, "more file")}</li>
-          )}
-        </ul>
+        <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
+          <ResizablePanel defaultSize="35%" minSize="10%">
+            {fileList}
+          </ResizablePanel>
+          <ResizableHandle />
+          <ResizablePanel minSize="20%">
+            {diff === undefined ? (
+              diffResult._tag === "Failure" ? (
+                <Nothing title="Couldn't load the diff" description={describeFailure(diffResult.cause)} />
+              ) : (
+                <Loading label="Loading diff" />
+              )
+            ) : diff._tag === "TooLarge" ? (
+              <Nothing
+                title="Too large to diff"
+                description="These changes are over 4 MB, so they aren't shown together."
+              />
+            ) : items.length === 0 ? (
+              <Nothing title="Nothing to diff" />
+            ) : (
+              <DiffStack
+                repo={worktree}
+                items={items}
+                collapse={collapse}
+                viewRef={viewRef}
+                actions={(meta) =>
+                  tracked.has(meta.path) ? <HistoryButton onClick={() => onHistory(meta.path)} /> : null
+                }
+              />
+            )}
+          </ResizablePanel>
+        </ResizablePanelGroup>
       )}
-    </ScrollArea>
-  )
-  if (rows.length === 0) return overview
-
-  return (
-    <ResizablePanelGroup orientation="vertical">
-      <ResizablePanel defaultSize="55%" minSize="15%">
-        {overview}
-      </ResizablePanel>
-      <ResizableHandle />
-      <ResizablePanel minSize="20%">
-        {diff === undefined ? (
-          diffResult._tag === "Failure" ? (
-            <Nothing title="Couldn't load the diff" description={describeFailure(diffResult.cause)} />
-          ) : (
-            <Loading label="Loading diff" />
-          )
-        ) : diff._tag === "TooLarge" ? (
-          <Nothing
-            title="Too large to diff"
-            description="These changes are over 4 MB, so they aren't shown together."
-          />
-        ) : items.length === 0 ? (
-          <Nothing title="Nothing to diff" />
-        ) : (
-          <DiffStack
-            repo={worktree}
-            items={items}
-            collapse={collapse}
-            viewRef={viewRef}
-            actions={(meta) => (tracked.has(meta.path) ? <HistoryButton onClick={() => onHistory(meta.path)} /> : null)}
-          />
-        )}
-      </ResizablePanel>
-    </ResizablePanelGroup>
+    </div>
   )
 }

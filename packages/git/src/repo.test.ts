@@ -84,6 +84,25 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
     }),
   )
 
+  it.effect("keeps the draft for the next commit when amending", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.write("a.txt", "base\n")
+      repo.git("add", ".")
+      repo.commit("feat: add a")
+      const r = yield* Repo
+
+      yield* r.writeDraft(id(repo.root), "wip: next thing")
+      repo.write("a.txt", "fixed\n")
+      repo.git("add", "a.txt")
+      yield* r.commitIndex(id(repo.root), "feat: add a\n\nwith a body", true)
+
+      expect(repo.git("log", "--format=%B")).toBe("feat: add a\n\nwith a body")
+      expect(repo.git("show", "HEAD:a.txt")).toBe("fixed")
+      expect(yield* r.readDraft(id(repo.root))).toBe("wip: next thing")
+    }),
+  )
+
   it.effect("finds the shared git dir when a repo is opened from a subdirectory", () =>
     Effect.gen(function* () {
       const repo = makeRepo()

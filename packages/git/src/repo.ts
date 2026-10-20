@@ -720,7 +720,7 @@ export class Repo extends Context.Service<
             ["commit", "--cleanup=strip", "-F", "-", ...(amend ? ["--amend"] : [])],
             new TextEncoder().encode(message),
           )
-          yield* fs.remove(yield* draftPath(repo), { force: true }).pipe(Effect.ignore)
+          if (!amend) yield* fs.remove(yield* draftPath(repo), { force: true }).pipe(Effect.ignore)
         }),
         continueOperation: stepOperation("continue"),
         skipOperation: stepOperation("skip"),

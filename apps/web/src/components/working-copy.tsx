@@ -1,6 +1,7 @@
 import { useAtomValue } from "@effect/atom-react"
 import type {
   Change,
+  CommitDetail,
   LineAction,
   LineSelection,
   Operation,
@@ -35,7 +36,7 @@ import {
   type Side,
 } from "@/lib/file-selection"
 import { useAppHotkeys } from "@tanstack/react-hotkeys"
-import { diffAtom, diffKey, latest, statusAtom, useGitAction } from "@/lib/git"
+import { commitAtom, diffAtom, diffKey, latest, statusAtom, useGitAction } from "@/lib/git"
 import { settingsAtom } from "@/lib/settings"
 import { hunkChanges, selectedChanges } from "@/lib/lines"
 import { type CommandId, type KeyBinding, useCommand, useCommandKeys } from "@/lib/commands"
@@ -46,6 +47,8 @@ import { Loading, Nothing } from "./loading"
 import { Shortcut } from "./shortcut"
 import { useStashPrompt } from "./stash-prompt"
 import { useDraft } from "@/lib/draft"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
+import * as Atom from "effect/reactivity/Atom"
 import { ChevronDownIcon, ChevronRightIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from "lucide-react"
 import {
   type Collapse,
@@ -466,23 +469,38 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
   )
 }
 
+const noCommit = Atom.make(AsyncResult.initial<CommitDetail, never>())
+
 function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status; stagedCount: number }) {
-  const { message, setMessage, onFocus, onBlur, clear } = useDraft(repo)
+  const draft = useDraft(repo)
   const [amend, setAmend] = useState(false)
+  const [amendEdit, setAmendEdit] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const git = useGitAction()
   const stash = useStashPrompt(repo)
 
-  const canCommit = !busy && message.trim() !== "" && (stagedCount > 0 || amend) && status.operation !== "rebase"
+  const amendOid =
+    status.head._tag === "Unborn" || (status.operation !== null && status.operation !== "bisect")
+      ? null
+      : status.head.oid
+  const amending = amend && amendOid !== null
+  const head = latest(useAtomValue(amending ? commitAtom(`${repo}\n${amendOid}`) : noCommit))
+  const message = amending ? (amendEdit ?? head?.message ?? "") : draft.message
+  const setMessage = amending ? setAmendEdit : draft.setMessage
+  const toggleAmend = (checked: boolean) => {
+    setAmend(checked)
+    setAmendEdit(null)
+  }
+
+  const canCommit = !busy && message.trim() !== "" && (stagedCount > 0 || amending) && status.operation !== "rebase"
   const commit = async () => {
     if (!canCommit) return
     setBusy(true)
-    const ok = await git(amend ? "Amend" : "Commit", repo, (c) => c("Commit", { repo, message, amend }))
+    const ok = await git(amending ? "Amend" : "Commit", repo, (c) => c("Commit", { repo, message, amend: amending }))
     setBusy(false)
-    if (ok) {
-      clear()
-      setAmend(false)
-    }
+    if (!ok) return
+    if (amending) toggleAmend(false)
+    else draft.clear()
   }
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   useCommandKeys([{ id: "commit.create", run: () => void commit() }], { target: textareaRef })
@@ -497,10 +515,14 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
           ref={textareaRef}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
-          onFocus={onFocus}
-          onBlur={onBlur}
+          onFocus={draft.onFocus}
+          onBlur={draft.onBlur}
           placeholder={
-            status.operation === null ? "Commit message" : `Commit message (${status.operation} in progress)`
+            amending && head === undefined
+              ? "Loading the previous commit message…"
+              : status.operation === null
+                ? "Commit message"
+                : `Commit message (${status.operation} in progress)`
           }
           rows={3}
           className={cn("min-h-0 resize-none font-mono text-xs", guide !== "off" && "pb-5")}
@@ -517,8 +539,13 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
         )}
       </div>
       <div className="flex items-center gap-2">
-        <Field orientation="horizontal" className="w-auto">
-          <Checkbox id={`amend-${repo}`} checked={amend} onCheckedChange={setAmend} />
+        <Field orientation="horizontal" className="w-auto" data-disabled={amendOid === null}>
+          <Checkbox
+            id={`amend-${repo}`}
+            checked={amending}
+            disabled={amendOid === null}
+            onCheckedChange={toggleAmend}
+          />
           <FieldLabel
             htmlFor={`amend-${repo}`}
             className="block py-1 font-normal text-muted-foreground [text-box:trim-both_cap_alphabetic]"
@@ -537,7 +564,7 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
         </Button>
         <Button size="sm" disabled={!canCommit} onClick={() => void commit()}>
           {busy && <Spinner data-icon="inline-start" />}
-          {amend
+          {amending
             ? "Amend"
             : stagedCount > 0
               ? `Commit ${stagedCount} ${stagedCount === 1 ? "file" : "files"}`

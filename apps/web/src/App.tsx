@@ -27,7 +27,7 @@ import { desktop } from "@/lib/desktop"
 import { basename } from "@/lib/format"
 import { connectionAtom, keys, latest, repoInfoAtom, statusAtom } from "@/lib/git"
 import { settingsAtom, settingsViewAtom } from "@/lib/settings"
-import { activeAfterClose } from "@/lib/tabs"
+import { activeAfterClose, cycleTab } from "@/lib/tabs"
 import { useRefreshOnFocus } from "@/lib/worktrees"
 import type { RepoInfo } from "@gitui/contracts"
 
@@ -98,17 +98,13 @@ export function App() {
     setTabs(tabs.filter((tab) => tab !== path))
     setActive(activeAfterClose(tabs, active, path))
   }
-  const cycle = (delta: 1 | -1) => {
-    const order = [...tabs, null]
-    setActive(order[(order.indexOf(active) + delta + order.length) % order.length] ?? null)
-  }
 
   useCommand("repo.open", () => setActive(null))
   useCommand("tab.close", () => {
     if (active !== null) close(active)
   })
-  useCommand("tab.next", () => cycle(1))
-  useCommand("tab.previous", () => cycle(-1))
+  useCommand("tab.next", () => setActive(cycleTab(tabs, active, 1)))
+  useCommand("tab.previous", () => setActive(cycleTab(tabs, active, -1)))
   useHotkeys(
     tabKeys.map((hotkey, index) => ({
       hotkey,

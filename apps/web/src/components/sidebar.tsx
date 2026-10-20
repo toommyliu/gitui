@@ -489,6 +489,7 @@ function SidebarRow({
     }
     case "remote": {
       const local = row.ref.name.slice(row.ref.remote.length + 1)
+      const configured = refs?.remotes.some((remote) => remote.name === row.ref.remote) ?? false
       return (
         <ContextMenu>
           <ContextMenuTrigger className="block h-full">
@@ -510,6 +511,31 @@ function SidebarRow({
             <ContextMenuItem onClick={() => void checkout(repo, local)}>Check out as {local}</ContextMenuItem>
             <ContextMenuSeparator />
             {integrate(row.ref.name, head?._tag === "Unborn")}
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              variant="destructive"
+              onClick={() =>
+                confirm({
+                  title: `Delete ${row.ref.name}?`,
+                  body: configured ? (
+                    <p>
+                      This deletes the local remote-tracking branch only. The branch on {row.ref.remote} stays, and the
+                      next fetch brings it back.
+                    </p>
+                  ) : (
+                    <p>No remote named {row.ref.remote} is configured, so fetching won't bring this branch back.</p>
+                  ),
+                  confirmLabel: "Delete",
+                  destructive: true,
+                  onConfirm: () =>
+                    void git("Delete remote-tracking branch", repo, (c) =>
+                      c("DeleteRemoteBranch", { repo, name: row.ref.name }),
+                    ),
+                })
+              }
+            >
+              Delete remote-tracking branch…
+            </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
       )

@@ -170,6 +170,7 @@ export class GitRpcs extends RpcGroup.make(
     error: GitError,
   }),
   Rpc.make("DeleteTag", { payload: { repo: RepoId, name: Schema.String }, error: GitError }),
+  Rpc.make("DeleteRemoteBranch", { payload: { repo: RepoId, name: Schema.String }, error: GitError }),
   Rpc.make("StashPush", {
     payload: { repo: RepoId, message: Schema.String, includeUntracked: Schema.Boolean },
     error: GitError,

@@ -183,5 +183,15 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         expect(repo.git("stash", "list", "--format=%gs")).toBe("On main: wip")
       }),
     )
+
+    it.effect("deletes a remote-tracking branch whose remote is not configured", () =>
+      Effect.gen(function* () {
+        const repo = makeRepo()
+        const base = repo.commit("base")
+        repo.git("update-ref", "refs/remotes/pr/274", base)
+        yield* (yield* Repo).deleteRemoteBranch(id(repo.root), "pr/274")
+        expect(repo.git("for-each-ref", "refs/remotes")).toBe("")
+      }),
+    )
   },
 )

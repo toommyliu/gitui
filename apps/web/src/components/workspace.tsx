@@ -1,8 +1,9 @@
-import { useAtomMount } from "@effect/atom-react"
+import { useAtom, useAtomMount } from "@effect/atom-react"
 import type { RepoId } from "@gitui/contracts"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useRef, useState } from "react"
+import * as Atom from "effect/reactivity/Atom"
+import { useRef } from "react"
 import { flushSync } from "react-dom"
 import { useCommand } from "@/lib/commands"
 import { pathQuery, watchAtom } from "@/lib/git"
@@ -18,6 +19,10 @@ import { WorktreePreview } from "./worktree-preview"
 type Pane = "locations" | "history" | "detail"
 const paneLabels: Record<Pane, string> = { locations: "Locations", history: "History", detail: "Details" }
 
+const selectionAtom = Atom.family((_repo: RepoId) => Atom.make<Selection>({ _tag: "WorkingCopy" }).pipe(Atom.keepAlive))
+const paneAtom = Atom.family((_repo: RepoId) => Atom.make<Pane>("history").pipe(Atom.keepAlive))
+const queryAtom = Atom.family((_repo: RepoId) => Atom.make("").pipe(Atom.keepAlive))
+
 export function Workspace({
   repo,
   onOpenWorktree,
@@ -27,9 +32,9 @@ export function Workspace({
 }) {
   useAtomMount(watchAtom(repo))
   const narrow = useNarrow()
-  const [selection, setSelection] = useState<Selection>({ _tag: "WorkingCopy" })
-  const [pane, setPane] = useState<Pane>("history")
-  const [query, setQuery] = useState("")
+  const [selection, setSelection] = useAtom(selectionAtom(repo))
+  const [pane, setPane] = useAtom(paneAtom(repo))
+  const [query, setQuery] = useAtom(queryAtom(repo))
   const searchRef = useRef<HTMLInputElement>(null)
   useCommand("history.search", () => {
     if (narrow) flushSync(() => setPane("history"))

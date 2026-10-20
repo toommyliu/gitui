@@ -26,6 +26,7 @@ import { desktop } from "@/lib/desktop"
 import { basename } from "@/lib/format"
 import { connectionAtom, keys, latest, repoInfoAtom, statusAtom } from "@/lib/git"
 import { settingsAtom, settingsViewAtom } from "@/lib/settings"
+import { activeAfterClose } from "@/lib/tabs"
 import { useRefreshOnFocus } from "@/lib/worktrees"
 import type { RepoInfo } from "@gitui/contracts"
 
@@ -92,9 +93,8 @@ export function App() {
     setActive(path)
   }
   const close = (path: string) => {
-    const remaining = tabs.filter((tab) => tab !== path)
-    setTabs(remaining)
-    if (active === path) setActive(remaining.at(-1) ?? null)
+    setTabs(tabs.filter((tab) => tab !== path))
+    setActive(activeAfterClose(tabs, active, path))
   }
   const cycle = (delta: 1 | -1) => {
     const order = [...tabs, null]

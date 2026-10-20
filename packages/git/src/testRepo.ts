@@ -43,5 +43,7 @@ export const makeRepo = () => {
     execFileSync("git", ["fast-import", "--quiet"], { cwd: root, env: fixtureEnv(), input: stream })
   }
   git("init", "-q", "-b", "main")
+  git("config", "user.name", "Ada")
+  git("config", "user.email", "ada@example.com")
   return { root, git, raw, write, commit, emptyCommits }
 }

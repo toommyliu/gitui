@@ -1,4 +1,5 @@
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { Button } from "@/components/ui/button"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 
 export function Loading({ label }: { label: string }) {
@@ -14,13 +15,28 @@ export function Loading({ label }: { label: string }) {
   )
 }
 
-export function Nothing({ title, description }: { title: string; description?: string }) {
+export function Nothing({
+  title,
+  description,
+  onRetry,
+}: {
+  title: string
+  description?: string
+  onRetry?: () => void
+}) {
   return (
     <Empty className="h-full">
       <EmptyHeader>
         <EmptyTitle>{title}</EmptyTitle>
         {description !== undefined && <EmptyDescription>{description}</EmptyDescription>}
       </EmptyHeader>
+      {onRetry !== undefined && (
+        <EmptyContent>
+          <Button size="sm" variant="outline" onClick={onRetry}>
+            Retry
+          </Button>
+        </EmptyContent>
+      )}
     </Empty>
   )
 }

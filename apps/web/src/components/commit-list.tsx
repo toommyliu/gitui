@@ -1,6 +1,7 @@
-import { RegistryContext, useAtomValue } from "@effect/atom-react"
+import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { CommitRow, Head, Oid, Refs, RepoId, Status } from "@gitui/contracts"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
 import {
   InputGroup,
@@ -25,7 +26,9 @@ import { useHistoryDate } from "@/lib/dates"
 import { shortOid } from "@/lib/format"
 import {
   LOG_PAGE_SIZE,
+  describeFailure,
   latest,
+  loadError,
   logAtom,
   logIndexAtom,
   logIndexKey,
@@ -163,6 +166,7 @@ export function CommitList({
   const search = useDebounced(query.trim(), 250)
   const { historyRemotes } = useAtomValue(settingsAtom)
   const result = useAtomValue(logAtom(logKey(repo, search, historyRemotes)))
+  const refreshLog = useAtomRefresh(logAtom(logKey(repo, search, historyRemotes)))
   const current = latest(result)
   const [shown, setShown] = useState(current)
   if (current !== undefined && current !== shown) setShown(current)
@@ -191,7 +195,7 @@ export function CommitList({
   const registry = useContext(RegistryContext)
   const oidAt = (index: number): Oid | undefined => {
     if (log === undefined) return undefined
-    const page = registry.get(logPageAtom(logPageKey(repo, log.logId, Math.floor(index / LOG_PAGE_SIZE))))
+    const page = registry.get(logPageAtom(logPageKey(log.key, log.logId, Math.floor(index / LOG_PAGE_SIZE))))
     return AsyncResult.isSuccess(page) ? page.value[index % LOG_PAGE_SIZE]?.oid : undefined
   }
 
@@ -218,7 +222,7 @@ export function CommitList({
     const oid = oidAt(row)
     if (oid !== undefined) return onSelect({ _tag: "Commit", oid })
     if (log === undefined) return
-    const page = logPageAtom(logPageKey(repo, log.logId, Math.floor(row / LOG_PAGE_SIZE)))
+    const page = logPageAtom(logPageKey(log.key, log.logId, Math.floor(row / LOG_PAGE_SIZE)))
     void Effect.runPromise(AtomRegistry.getResult(registry, page)).then(
       (rows) => {
         const next = rows[row % LOG_PAGE_SIZE]?.oid
@@ -266,10 +270,11 @@ export function CommitList({
   )
 
   const pending = current === undefined || search !== query.trim()
+  const failed = result._tag === "Failure" && !result.waiting && search === query.trim()
   const summary =
     query.trim() === ""
       ? null
-      : result._tag === "Failure" && current === undefined
+      : failed
         ? "Search failed"
         : pending || (log?.done !== true && loaded === 0)
           ? "Searching…"
@@ -309,7 +314,13 @@ export function CommitList({
           </InputGroupAddon>
         )}
       </InputGroup>
-      {filtering && log?.done === true && loaded === 0 && !pending ? (
+      {failed ? (
+        <Nothing
+          title={filtering ? "Search failed" : "Couldn't load history"}
+          description={describeFailure(result.cause)}
+          onRetry={refreshLog}
+        />
+      ) : filtering && log?.done === true && loaded === 0 && !pending ? (
         <Nothing title="No matching commits" description="Search looks at branches, remotes and HEAD." />
       ) : (
         <ScrollArea
@@ -349,6 +360,7 @@ export function CommitList({
                 ) : log !== undefined ? (
                   <CommitRowView
                     repo={repo}
+                    log={log.key}
                     logId={log.logId}
                     index={row.index - offset}
                     graphWidth={graphWidth}
@@ -370,6 +382,7 @@ export function CommitList({
 
 const CommitRowView = memo(function CommitRowView({
   repo,
+  log,
   logId,
   index,
   graphWidth,
@@ -380,6 +393,7 @@ const CommitRowView = memo(function CommitRowView({
   report,
 }: {
   repo: RepoId
+  log: string
   logId: string
   index: number
   graphWidth: number
@@ -389,7 +403,9 @@ const CommitRowView = memo(function CommitRowView({
   onSelect: (selection: Selection) => void
   report: (lanes: number) => void
 }) {
-  const page = useAtomValue(logPageAtom(logPageKey(repo, logId, Math.floor(index / LOG_PAGE_SIZE))))
+  const pageAtom = logPageAtom(logPageKey(log, logId, Math.floor(index / LOG_PAGE_SIZE)))
+  const page = useAtomValue(pageAtom)
+  const refreshPage = useAtomRefresh(pageAtom)
   const date = useHistoryDate()
   const row: CommitRow | undefined = latest(page)?.[index % LOG_PAGE_SIZE]
   useEffect(() => {
@@ -397,10 +413,20 @@ const CommitRowView = memo(function CommitRowView({
   }, [row, report])
 
   if (row === undefined) {
+    const error = loadError(page)
     return (
       <div className="flex h-full items-center gap-2 px-2">
         <span className="shrink-0" style={{ width: graphWidth }} />
-        <Skeleton className="h-2.5 w-1/3" />
+        {error === undefined ? (
+          <Skeleton className="h-2.5 w-1/3" />
+        ) : (
+          <>
+            <span className="min-w-0 truncate text-muted-foreground">Couldn't load: {error}</span>
+            <Button size="xs" variant="ghost" className="shrink-0" onClick={refreshPage}>
+              Retry
+            </Button>
+          </>
+        )}
       </div>
     )
   }

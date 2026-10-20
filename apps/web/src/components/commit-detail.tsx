@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react"
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { CommitDetail as Detail, FileChange, Oid, RepoId } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, HistoryIcon } from "lucide-react"
@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "cn"
 import { type ReactNode, useMemo, useRef, useState } from "react"
 import { longDate, shortOid } from "@/lib/format"
-import { commitAtom, diffAtom, diffKey, latest } from "@/lib/git"
+import { commitAtom, diffAtom, diffKey, latest, loadError } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
 import { settingsAtom } from "@/lib/settings"
@@ -94,16 +94,28 @@ export function CommitDetail({
   onSelect: (selection: Selection) => void
   onHistory: (path: string) => void
 }) {
-  const detail = latest(useAtomValue(commitAtom(`${repo}\n${oid}`)))
+  const commit = commitAtom(`${repo}\n${oid}`)
+  const commitResult = useAtomValue(commit)
+  const refreshCommit = useAtomRefresh(commit)
+  const detail = latest(commitResult)
   const { ignoreWhitespace } = useAtomValue(settingsAtom)
-  const diff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Commit", oid }, [], ignoreWhitespace))))
+  const patch = diffAtom(diffKey(repo, { _tag: "Commit", oid }, [], ignoreWhitespace))
+  const diffResult = useAtomValue(patch)
+  const refreshDiff = useAtomRefresh(patch)
+  const diff = latest(diffResult)
+  const diffError = loadError(diffResult)
   const items = useMemo(() => (diff?._tag === "Patch" ? patchItems(oid, diff.patch) : []), [diff, oid])
   const collapse = useCollapse()
   const expandable = useMemo(() => expandableIds(items), [items])
   const allCollapsed = expandable.every((id) => collapse.ids.has(id))
 
   if (detail === undefined || detail.oid !== oid) {
-    return <Loading label="Loading commit" />
+    const error = loadError(commitResult)
+    return error === undefined ? (
+      <Loading label="Loading commit" />
+    ) : (
+      <Nothing title="Couldn't load this commit" description={error} onRetry={refreshCommit} />
+    )
   }
   if (diff?._tag === "TooLarge") {
     return (
@@ -131,16 +143,25 @@ export function CommitDetail({
       >
         <ChangeTotals files={detail.files} />
       </SectionBar>
-      <div className="min-h-0 flex-1">
-        <DiffStack
-          key={oid}
-          repo={repo}
-          items={items}
-          collapse={collapse}
-          header={() => <Summary detail={detail} onSelect={onSelect} />}
-          actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />}
-        />
-      </div>
+      {diffError === undefined ? (
+        <div className="min-h-0 flex-1">
+          <DiffStack
+            key={oid}
+            repo={repo}
+            items={items}
+            collapse={collapse}
+            header={() => <Summary detail={detail} onSelect={onSelect} />}
+            actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />}
+          />
+        </div>
+      ) : (
+        <>
+          <Summary detail={detail} onSelect={onSelect} />
+          <div className="min-h-0 flex-1">
+            <Nothing title="Couldn't load the diff" description={diffError} onRetry={refreshDiff} />
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -315,9 +336,19 @@ function SingleFileDiff({
 }) {
   const paths = file.from === null ? [file.path] : [file.from, file.path]
   const { ignoreWhitespace } = useAtomValue(settingsAtom)
-  const diff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Commit", oid }, paths, ignoreWhitespace))))
+  const atom = diffAtom(diffKey(repo, { _tag: "Commit", oid }, paths, ignoreWhitespace))
+  const result = useAtomValue(atom)
+  const refresh = useAtomRefresh(atom)
+  const diff = latest(result)
   const items = useMemo(() => (diff?._tag === "Patch" ? patchItems("file", diff.patch) : []), [diff])
-  if (diff === undefined) return <Loading label="Loading diff" />
+  if (diff === undefined) {
+    const error = loadError(result)
+    return error === undefined ? (
+      <Loading label="Loading diff" />
+    ) : (
+      <Nothing title="Couldn't load the diff" description={error} onRetry={refresh} />
+    )
+  }
   if (diff._tag === "TooLarge")
     return <Nothing title="Too large to display" description="This file's diff is over 4 MB." />
   return (

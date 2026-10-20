@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react"
+import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type {
   Change,
   CommitDetail,
@@ -23,7 +23,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "cn"
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { type ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { basename, dirname } from "@/lib/format"
 import {
   type ClickMode,
@@ -36,7 +36,7 @@ import {
   type Side,
 } from "@/lib/file-selection"
 import { useAppHotkeys } from "@tanstack/react-hotkeys"
-import { commitAtom, diffAtom, diffKey, latest, statusAtom, useGitAction } from "@/lib/git"
+import { commitAtom, diffAtom, diffKey, latest, loadError, statusAtom, useGitAction } from "@/lib/git"
 import { settingsAtom } from "@/lib/settings"
 import { hunkChanges, selectedChanges } from "@/lib/lines"
 import { type CommandId, type KeyBinding, useCommand, useCommandKeys } from "@/lib/commands"
@@ -211,7 +211,9 @@ function useLastLoaded<A>(repo: RepoId, value: A | undefined): A | undefined {
 }
 
 export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (path: string) => void }) {
-  const status = latest(useAtomValue(statusAtom(repo)))
+  const statusResult = useAtomValue(statusAtom(repo))
+  const refreshStatus = useAtomRefresh(statusAtom(repo))
+  const status = latest(statusResult)
   const { unstaged, staged } = useMemo(() => classify(status?.entries ?? []), [status])
   const untrackedPaths = useMemo(
     () =>
@@ -232,16 +234,20 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     [onDemand, untrackedPaths, unstaged],
   )
 
-  const unstagedDiff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Unstaged" }))))
-  const stagedDiff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Staged" }))))
-  const untrackedDiff = useLastLoaded(
-    repo,
-    latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Untracked" }, untrackedPaths)))),
-  )
+  const unstagedAtom = diffAtom(diffKey(repo, { _tag: "Unstaged" }))
+  const stagedAtom = diffAtom(diffKey(repo, { _tag: "Staged" }))
+  const untrackedAtom = diffAtom(diffKey(repo, { _tag: "Untracked" }, untrackedPaths))
+  const unstagedResult = useAtomValue(unstagedAtom)
+  const stagedResult = useAtomValue(stagedAtom)
+  const untrackedResult = useAtomValue(untrackedAtom)
+  const unstagedDiff = latest(unstagedResult)
+  const stagedDiff = latest(stagedResult)
+  const untrackedDiff = useLastLoaded(repo, latest(untrackedResult))
   const onDemandDiff = useLastLoaded(
     repo,
     latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Untracked" }, onDemandPaths)))),
   )
+  const registry = useContext(RegistryContext)
 
   const items = useMemo(
     () => [
@@ -258,6 +264,12 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
   )
   const diffs = untrackedPaths.length > 0 ? [unstagedDiff, stagedDiff, untrackedDiff] : [unstagedDiff, stagedDiff]
   const diffsLoading = diffs.some((d) => d === undefined)
+  const diffError = diffsLoading
+    ? [unstagedResult, stagedResult, untrackedResult]
+        .slice(0, diffs.length)
+        .map(loadError)
+        .find((error) => error !== undefined)
+    : undefined
   const tooLarge = [...diffs, onDemandPaths.length > 0 ? onDemandDiff : undefined].some((d) => d?._tag === "TooLarge")
 
   const git = useGitAction()
@@ -376,7 +388,14 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     )
   }
 
-  if (status === undefined) return <Loading label="Loading changes" />
+  if (status === undefined) {
+    const error = loadError(statusResult)
+    return error === undefined ? (
+      <Loading label="Loading changes" />
+    ) : (
+      <Nothing title="Couldn't read the working copy" description={error} onRetry={refreshStatus} />
+    )
+  }
 
   return (
     <ResizablePanelGroup orientation="vertical">
@@ -409,7 +428,13 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
       </ResizablePanel>
       <ResizableHandle />
       <ResizablePanel minSize="20%">
-        {diffsLoading ? (
+        {diffError !== undefined ? (
+          <Nothing
+            title="Couldn't load the diffs"
+            description={diffError}
+            onRetry={() => [unstagedAtom, stagedAtom, untrackedAtom].forEach((atom) => registry.refresh(atom))}
+          />
+        ) : diffsLoading ? (
           <Loading label="Loading diffs" />
         ) : tooLarge ? (
           <Nothing

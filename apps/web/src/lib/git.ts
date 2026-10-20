@@ -78,6 +78,16 @@ export const latest = <A, E>(result: AsyncResult.AsyncResult<A, E>): A | undefin
   return undefined
 }
 
+export const describeFailure = (cause: Cause.Cause<unknown>) => {
+  const error = Cause.squash(cause)
+  return error instanceof GitError ? error.summary : String(error)
+}
+
+export const loadError = <A, E>(result: AsyncResult.AsyncResult<A, E>): string | undefined =>
+  result._tag === "Failure" && !result.waiting && Option.isNone(result.previousSuccess)
+    ? describeFailure(result.cause)
+    : undefined
+
 const CACHE_TTL = "10 minutes"
 
 export const directoryAtom = Atom.family((path: string) => GitClient.query("ListDirectory", { path }))
@@ -116,7 +126,13 @@ export const logAtom = Atom.family((key: string) => {
       Effect.gen(function* () {
         const client = yield* GitClient
         return client("OpenLog", { repo, query, remotes })
-      }).pipe(Stream.unwrap, Stream.retry(Schedule.spaced("1 second"))),
+      }).pipe(
+        Stream.unwrap,
+        Stream.map((handle) => ({ ...handle, key })),
+        Stream.retry(($) =>
+          $(Schedule.spaced("1 second")).pipe(Schedule.while(({ input }) => input._tag !== "GitError")),
+        ),
+      ),
     )
     .pipe(GitClient.runtime.factory.withReactivity([keys.refs(repo)]))
 })
@@ -126,16 +142,22 @@ export const pathQuery = (path: string) => `path:${/[\s"]/.test(path) ? `"${path
 export const LOG_PAGE_SIZE = 200
 
 export const logPageAtom = Atom.family((key: string) => {
-  const [repo, logId, page] = key.split("\n") as [RepoId, string, string]
+  const [log, logId, page] = key.split("\n") as [string, string, string]
+  const [repo, query, remotes] = JSON.parse(log) as [RepoId, string, boolean]
+  const request = { repo, logId, start: Number(page) * LOG_PAGE_SIZE, count: LOG_PAGE_SIZE }
   return GitClient.runtime.atom(
     Effect.gen(function* () {
       const client = yield* GitClient
-      return yield* client("GetLogPage", { repo, logId, start: Number(page) * LOG_PAGE_SIZE, count: LOG_PAGE_SIZE })
+      return yield* client("GetLogPage", request).pipe(
+        Effect.catchTag("LogExpired", () =>
+          Effect.andThen(Stream.runHead(client("OpenLog", { repo, query, remotes })), client("GetLogPage", request)),
+        ),
+      )
     }).pipe(Effect.retry({ while: (error) => error._tag === "RpcClientError", schedule: Schedule.spaced("1 second") })),
   )
 })
 
-export const logPageKey = (repo: RepoId, logId: string, page: number) => `${repo}\n${logId}\n${page}`
+export const logPageKey = (log: string, logId: string, page: number) => `${log}\n${logId}\n${page}`
 
 export const logIndexAtom = Atom.family((key: string) => {
   const [repo, logId, oid] = key.split("\n") as [RepoId, string, Oid]
@@ -216,11 +238,6 @@ export const logSeenAtom = Atom.family((_repo: RepoId) => Atom.make(0).pipe(Atom
 type Client = GitClient["Service"]
 type ActionError = GitError | RpcClientError
 type Action = (client: Client) => Effect.Effect<unknown, ActionError>
-
-const describeFailure = (cause: Cause.Cause<ActionError>) => {
-  const error = Cause.squash(cause)
-  return error instanceof GitError ? error.summary : String(error)
-}
 
 const actionAtom = GitClient.runtime.fn(
   (action: { readonly repo: RepoId; readonly run: Action }) =>

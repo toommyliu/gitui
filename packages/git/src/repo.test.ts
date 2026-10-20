@@ -69,6 +69,30 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
     }),
   )
 
+  it.effect("fails a log whose git command fails, and runs git again when it is reopened", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.commit("base")
+      const r = yield* Repo
+
+      const opened = r.openLog(id(repo.root), "path:../outside")
+      const first = yield* Effect.flip(Stream.runCollect(opened))
+      const second = yield* Effect.flip(Stream.runCollect(opened))
+      const [entries = []] = yield* (yield* CommandLog).entries(repo.root).pipe(Stream.take(1), Stream.runCollect)
+
+      expect(first._tag === "GitError" && first.summary.split(" at ")[0]).toBe(
+        "../outside: '../outside' is outside repository",
+      )
+      expect(second._tag).toBe("GitError")
+      expect(entries.filter((entry) => entry.args[entry.prefixLength] === "log").map((entry) => entry.outcome)).toEqual(
+        [
+          { _tag: "Exited", code: 128, accepted: false },
+          { _tag: "Exited", code: 128, accepted: false },
+        ],
+      )
+    }),
+  )
+
   it.effect("keeps a commit message draft per worktree until the next commit clears it", () =>
     Effect.gen(function* () {
       const repo = makeRepo()

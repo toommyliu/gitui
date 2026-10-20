@@ -412,7 +412,10 @@ export class Repo extends Context.Service<
           return { logId, session }
         }
         const existing = open.get(logId)
-        if (existing !== undefined) return reuse(existing)
+        if (existing?.status._tag === "Failed") {
+          open.delete(logId)
+          yield* closeSession(existing)
+        } else if (existing !== undefined) return reuse(existing)
 
         const scope = yield* Scope.make()
         const pull = yield* Stream.toPull(git.stream(repo, logArgs(revs, query))).pipe(Scope.provide(scope))

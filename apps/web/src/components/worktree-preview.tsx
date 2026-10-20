@@ -3,7 +3,6 @@ import {
   type BaseRef,
   type BranchCommit,
   type Change,
-  GitError,
   type MergeCheck,
   type Oid,
   type RepoId,
@@ -12,7 +11,6 @@ import {
   type WorktreeDetail,
 } from "@gitui/contracts"
 import type { CodeViewHandle } from "@pierre/diffs/react"
-import * as Cause from "effect/Cause"
 import { ArrowUpRightIcon, CheckIcon, RotateCwIcon, TriangleAlertIcon } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
@@ -23,7 +21,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
 import { basename, dirname, shortDate, shortOid } from "@/lib/format"
-import { latest, refsAtom, watchAtom } from "@/lib/git"
+import { describeFailure, latest, refsAtom, watchAtom } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import {
   mergeCheckAtom,
@@ -70,11 +68,6 @@ const fingerprint = (detail: WorktreeDetail) =>
       entry._tag === "Tracked" ? `${entry.path}:${entry.staged}:${entry.unstaged}` : `${entry._tag}:${entry.path}`,
     ),
   ].join("\n")
-
-const describe = (cause: Cause.Cause<unknown>) => {
-  const error = Cause.squash(cause)
-  return error instanceof GitError ? error.summary : String(error)
-}
 
 const plural = (count: number, word: string) => `${count.toLocaleString()} ${count === 1 ? word : `${word}s`}`
 
@@ -168,7 +161,7 @@ function MergeStatus({
   if (result._tag === "Failure" && current === undefined && !busy) {
     return (
       <span className="flex items-center gap-1.5 text-muted-foreground">
-        Couldn't check: {describe(result.cause)}
+        Couldn't check: {describeFailure(result.cause)}
         {again}
       </span>
     )
@@ -347,7 +340,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
 
   if (detail === undefined) {
     return result._tag === "Failure" ? (
-      <Nothing title="Couldn't read this worktree" description={describe(result.cause)} />
+      <Nothing title="Couldn't read this worktree" description={describeFailure(result.cause)} />
     ) : (
       <Loading label="Reading worktree" />
     )
@@ -455,7 +448,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
       <ResizablePanel minSize="20%">
         {diff === undefined ? (
           diffResult._tag === "Failure" ? (
-            <Nothing title="Couldn't load the diff" description={describe(diffResult.cause)} />
+            <Nothing title="Couldn't load the diff" description={describeFailure(diffResult.cause)} />
           ) : (
             <Loading label="Loading diff" />
           )

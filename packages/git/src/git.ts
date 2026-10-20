@@ -3,6 +3,7 @@ import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
+import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Stream from "effect/Stream"
 import * as ChildProcess from "effect/process/ChildProcess"
@@ -135,15 +136,22 @@ export class Git extends Context.Service<
         text: (cwd, args, options) => Effect.map(run(cwd, args, options), (bytes) => decoder.decode(bytes)),
         stream: (cwd, args) =>
           Stream.unwrap(
-            Effect.map(recorder(cwd, args, undefined), (finish) =>
-              spawner.spawn(command(cwd, args, undefined)).pipe(
-                Effect.map((handle) => handle.stdout),
-                Stream.unwrap,
-                Stream.mapError(spawnError(args)),
-                Stream.ensuring(finish({ _tag: "Streamed" }, "")),
-              ),
-            ),
-          ),
+            Effect.gen(function* () {
+              const finish = yield* recorder(cwd, args, undefined)
+              const handle = yield* spawner.spawn(command(cwd, args, undefined))
+              const stderr = yield* Effect.forkScoped(Stream.mkUint8Array(handle.stderr))
+              const exited = Effect.gen(function* () {
+                const exitCode = yield* handle.exitCode
+                const message = decoder.decode(yield* Fiber.join(stderr)).trim()
+                yield* finish({ _tag: "Exited", code: exitCode, accepted: exitCode === 0 }, message)
+                if (exitCode !== 0) return yield* new GitError({ args: [...args], exitCode, stderr: message })
+              })
+              return handle.stdout.pipe(
+                Stream.concat(Stream.drain(Stream.fromEffect(exited))),
+                Stream.onExit((exit) => (Exit.hasInterrupts(exit) ? finish({ _tag: "Streamed" }, "") : Effect.void)),
+              )
+            }),
+          ).pipe(Stream.mapError((error) => (error instanceof GitError ? error : spawnError(args)(error)))),
         progress: (cwd, args) =>
           Stream.unwrap(
             Effect.gen(function* () {

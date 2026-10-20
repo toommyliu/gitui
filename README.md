@@ -9,7 +9,7 @@ pnpm install
 pnpm serve
 ```
 
-`pnpm serve` builds the web app and starts the server. On first run the repo picker asks which folder holds your repositories. After that, a new tab lists that folder, and you can type a name to filter it or a path to browse elsewhere. Change the folder in Settings.
+`pnpm serve` builds the web app and starts the server. The Open tab lists the repositories you've opened, most recent first, and skips any that no longer exist. Type a name to filter them, or a path starting with `~/` or `/` to browse folders. Before you've opened anything, it browses your home folder. The sidebar lists Home, folders you pin with `Mod+P`, and the folders your recent repositories live in. The footer shows the keys for the highlighted row.
 
 | Variable | Default     | Meaning         |
 | -------- | ----------- | --------------- |

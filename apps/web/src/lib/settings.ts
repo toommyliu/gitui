@@ -12,7 +12,6 @@ const withDefault = <S extends Schema.Top>(schema: S, value: S["Encoded"]) =>
 export const Settings = Schema.Struct({
   diffStyle: Schema.Literals(["unified", "split"]),
   wrapLines: Schema.Boolean,
-  repoBase: Schema.optionalKey(Schema.String),
   changeMarkers: withDefault(Schema.Literals(["color", "signs", "both"]), "color"),
   wordDiff: withDefault(Schema.Literals(["word", "char", "none"]), "word"),
   lineNumbers: withDefault(Schema.Boolean, true),

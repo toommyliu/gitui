@@ -10,7 +10,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { PatchDiff } from "@pierre/diffs/react"
@@ -93,36 +92,19 @@ const useSettings = () => {
 function GeneralSettings() {
   const [settings, update] = useSettings()
   return (
-    <>
-      <Field className="py-3">
-        <FieldContent>
-          <FieldLabel htmlFor="repo-base">Repositories folder</FieldLabel>
-          <FieldDescription>
-            New tabs list the repositories in this folder. Empty means your home folder.
-          </FieldDescription>
-        </FieldContent>
-        <Input
-          id="repo-base"
-          placeholder="~/projects"
-          className="font-mono"
-          value={settings.repoBase ?? ""}
-          onChange={(event) => update({ repoBase: event.target.value })}
-        />
-      </Field>
-      <Row label="Fetch in the background" description="Fetches the open repository while this window is open.">
-        <Choice
-          label="Fetch in the background"
-          value={settings.backgroundFetch}
-          onChange={(backgroundFetch) => update({ backgroundFetch })}
-          options={[
-            ["off", "Off"],
-            ["5", "5 min"],
-            ["15", "15 min"],
-            ["30", "30 min"],
-          ]}
-        />
-      </Row>
-    </>
+    <Row label="Fetch in the background" description="Fetches the open repository while this window is open.">
+      <Choice
+        label="Fetch in the background"
+        value={settings.backgroundFetch}
+        onChange={(backgroundFetch) => update({ backgroundFetch })}
+        options={[
+          ["off", "Off"],
+          ["5", "5 min"],
+          ["15", "15 min"],
+          ["30", "30 min"],
+        ]}
+      />
+    </Row>
   )
 }
 

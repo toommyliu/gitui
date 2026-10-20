@@ -6,6 +6,8 @@ import * as Effect from "effect/Effect"
 
 const isRepo = (dir: string) => existsSync(join(dir, ".git"))
 
+export const filterRepos = (paths: ReadonlyArray<string>) => paths.filter(isRepo)
+
 const isDirectory = (path: string) => statSync(path, { throwIfNoEntry: false })?.isDirectory() === true
 
 export const listDirectory = (requested: string) => {

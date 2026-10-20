@@ -258,6 +258,7 @@ export class Repo extends Context.Service<
     readonly checkoutDetached: (repo: RepoId, oid: Oid) => Effect.Effect<void, GitError>
     readonly createTag: (repo: RepoId, name: string, oid: Oid, message: string) => Effect.Effect<void, GitError>
     readonly deleteTag: (repo: RepoId, name: string) => Effect.Effect<void, GitError>
+    readonly deleteRemoteBranch: (repo: RepoId, name: string) => Effect.Effect<void, GitError>
     readonly stashPush: (repo: RepoId, message: string, includeUntracked: boolean) => Effect.Effect<void, GitError>
     readonly addWorktree: (
       repo: RepoId,
@@ -798,6 +799,7 @@ export class Repo extends Context.Service<
             ? run(repo, ["tag", name, oid])
             : run(repo, ["tag", "-a", name, "-F", "-", oid], new TextEncoder().encode(message)),
         deleteTag: (repo, name) => run(repo, ["tag", "-d", name]),
+        deleteRemoteBranch: (repo, name) => run(repo, ["branch", "-d", "-r", name]),
         stashPush: (repo, message, includeUntracked) =>
           Effect.asVoid(
             git.run(
@@ -853,6 +855,7 @@ export class Repo extends Context.Service<
         checkoutDetached: locked(service.checkoutDetached),
         createTag: locked(service.createTag),
         deleteTag: locked(service.deleteTag),
+        deleteRemoteBranch: locked(service.deleteRemoteBranch),
         stashPush: locked(service.stashPush),
         addWorktree: locked(service.addWorktree),
         stashApply: locked(service.stashApply),

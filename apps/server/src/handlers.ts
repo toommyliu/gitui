@@ -56,6 +56,7 @@ export const handlers = GitRpcs.toLayer(
       CheckoutDetached: ({ repo: id, oid }) => repo.checkoutDetached(id, oid),
       CreateTag: ({ repo: id, name, oid, message }) => repo.createTag(id, name, oid, message),
       DeleteTag: ({ repo: id, name }) => repo.deleteTag(id, name),
+      DeleteRemoteBranch: ({ repo: id, name }) => repo.deleteRemoteBranch(id, name),
       StashPush: ({ repo: id, message, includeUntracked }) => repo.stashPush(id, message, includeUntracked),
       AddWorktree: ({ repo: id, path, branch, startPoint }) => repo.addWorktree(id, path, branch, startPoint),
       StashApply: ({ repo: id, oid, drop }) => repo.stashApply(id, oid, drop),

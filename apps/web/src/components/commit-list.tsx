@@ -14,13 +14,27 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
 import { CloudIcon, SearchIcon } from "lucide-react"
+import * as Effect from "effect/Effect"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
-import { memo, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import * as Atom from "effect/reactivity/Atom"
+import * as AtomRegistry from "effect/reactivity/AtomRegistry"
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { copyWithToast } from "@/lib/clipboard"
 import { useCommandKeys } from "@/lib/commands"
 import { useHistoryDate } from "@/lib/dates"
 import { shortOid } from "@/lib/format"
-import { LOG_PAGE_SIZE, latest, logAtom, logKey, logPageAtom, logPageKey, refsAtom, statusAtom } from "@/lib/git"
+import {
+  LOG_PAGE_SIZE,
+  latest,
+  logAtom,
+  logIndexAtom,
+  logIndexKey,
+  logKey,
+  logPageAtom,
+  logPageKey,
+  refsAtom,
+  statusAtom,
+} from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import { settingsAtom } from "@/lib/settings"
 import { useTallList } from "@/lib/tall-list"
@@ -120,6 +134,8 @@ const changeSummary = (status: Status) => {
   return [unstaged > 0 && `${unstaged} unstaged`, staged > 0 && `${staged} staged`].filter(Boolean).join(", ")
 }
 
+const idle = Atom.make(AsyncResult.initial<never, never>())
+
 const useDebounced = <T,>(value: T, ms: number) => {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -179,26 +195,61 @@ export function CommitList({
     return AsyncResult.isSuccess(page) ? page.value[index % LOG_PAGE_SIZE]?.oid : undefined
   }
 
-  const selectedIndex = (() => {
+  const renderedIndex = (() => {
     if (selection._tag !== "Commit") return selection._tag === "WorkingCopy" && hasChanges ? 0 : -1
     for (const row of list.rows) {
       if (row.index >= offset && oidAt(row.index - offset) === selection.oid) return row.index
     }
     return -1
   })()
+  const lookup =
+    selection._tag === "Commit" && renderedIndex === -1 && log !== undefined
+      ? logIndexKey(repo, log.logId, selection.oid)
+      : undefined
+  const located = latest(useAtomValue(lookup === undefined ? idle : logIndexAtom(lookup)))
+  const selectedIndex = renderedIndex !== -1 ? renderedIndex : located == null ? -1 : located + offset
 
+  const { scrollToIndex } = list
   const selectIndex = (index: number) => {
     if (index < 0 || index >= count) return
-    if (index < offset) onSelect({ _tag: "WorkingCopy" })
-    else {
-      const oid = oidAt(index - offset)
-      if (oid !== undefined) onSelect({ _tag: "Commit", oid })
-    }
-    list.scrollToIndex(index)
+    scrollToIndex(index)
+    if (index < offset) return onSelect({ _tag: "WorkingCopy" })
+    const row = index - offset
+    const oid = oidAt(row)
+    if (oid !== undefined) return onSelect({ _tag: "Commit", oid })
+    if (log === undefined) return
+    const page = logPageAtom(logPageKey(repo, log.logId, Math.floor(row / LOG_PAGE_SIZE)))
+    void Effect.runPromise(AtomRegistry.getResult(registry, page)).then(
+      (rows) => {
+        const next = rows[row % LOG_PAGE_SIZE]?.oid
+        if (next !== undefined) onSelect({ _tag: "Commit", oid: next })
+      },
+      () => {},
+    )
   }
 
+  const follow = selection._tag === "Commit" ? selection.oid : selection._tag
+  const followed = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (current === undefined || selectedIndex === -1 || followed.current === follow) return
+    followed.current = follow
+    scrollToIndex(selectedIndex, true)
+  }, [current, selectedIndex, follow, scrollToIndex])
+
+  const picking = useRef(false)
+  const pickFirstMatch = () => {
+    if (current === undefined || search !== query.trim()) return false
+    if (selectedIndex !== -1 || (log?.done === true && count === 0)) return true
+    if (count === 0 || (selection._tag === "Commit" && located !== null)) return false
+    selectIndex(0)
+    return true
+  }
+  useEffect(() => {
+    if (picking.current && pickFirstMatch()) picking.current = false
+  })
+
   const step = (delta: number) => () => {
-    if (selectedIndex !== -1) selectIndex(selectedIndex + delta)
+    selectIndex(selectedIndex === -1 ? 0 : selectedIndex + delta)
   }
   useCommandKeys(
     [
@@ -243,7 +294,10 @@ export function CommitList({
           enterKeyHint="search"
           onKeyDown={(event) => {
             if (event.key === "Escape") onQueryChange("")
-            if (event.key === "Enter") event.currentTarget.blur()
+            if (event.key === "Enter") {
+              list.element?.focus()
+              picking.current = !pickFirstMatch()
+            }
           }}
         />
         {summary !== null && (

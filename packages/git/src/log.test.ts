@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
+import type { Oid } from "@gitui/contracts"
 import { GraphLayout } from "./graph.ts"
 import { logArgs, logRevArgs, parseLogQuery } from "./log.ts"
 import { LogStore } from "./log-store.ts"
@@ -53,5 +54,20 @@ describe("LogStore", () => {
     expect(store.page(1100, 200)).toEqual(expected.slice(1100, 1300))
     expect(store.page(0, 200)).toEqual(expected.slice(0, 200))
     expect(store.page(commits.length - 50, 200)).toEqual(expected.slice(-50))
+  })
+
+  it("finds a commit's row only where a whole oid starts", () => {
+    const a = `${"00".repeat(10)}${"11".repeat(10)}` as Oid
+    const b = `${"22".repeat(10)}${"33".repeat(10)}` as Oid
+    const c = `${"44".repeat(20)}` as Oid
+    const store = new LogStore(false)
+    store.push(Buffer.from([a, b, c].map((oid, i) => `${oid}\0\0Ada\0${i}\0change ${i}\0`).join("")))
+    store.flush()
+
+    expect(store.indexOf(a)).toBe(0)
+    expect(store.indexOf(c)).toBe(2)
+    expect(store.indexOf(a, 1)).toBe(-1)
+    expect(store.indexOf(`${"11".repeat(10)}${"22".repeat(10)}` as Oid)).toBe(-1)
+    expect(store.indexOf("55".repeat(20) as Oid)).toBe(-1)
   })
 })

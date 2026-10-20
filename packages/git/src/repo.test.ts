@@ -56,6 +56,19 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
     }),
   )
 
+  it.effect("finds a commit's row in a log that has not been read that far", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.emptyCommits(20_000)
+      const oldest = repo.git("rev-list", "--max-parents=0", "HEAD") as Oid
+      const r = yield* Repo
+
+      const { logId } = Option.getOrThrow(yield* Stream.runHead(r.openLog(id(repo.root), "")))
+      expect(yield* r.logIndex(id(repo.root), logId, oldest)).toBe(19_999)
+      expect(yield* r.logIndex(id(repo.root), logId, "0".repeat(40) as Oid)).toBe(null)
+    }),
+  )
+
   it.effect("keeps a commit message draft per worktree until the next commit clears it", () =>
     Effect.gen(function* () {
       const repo = makeRepo()

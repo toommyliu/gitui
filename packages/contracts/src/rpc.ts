@@ -91,6 +91,11 @@ export class GitRpcs extends RpcGroup.make(
     success: Schema.Array(CommitRow),
     error: Schema.Union([GitError, LogExpired]),
   }),
+  Rpc.make("GetLogIndex", {
+    payload: { repo: RepoId, logId: Schema.String, oid: Oid },
+    success: Schema.NullOr(Schema.Int),
+    error: Schema.Union([GitError, LogExpired]),
+  }),
   Rpc.make("GetCommit", { payload: { repo: RepoId, oid: Oid }, success: CommitDetail, error: GitError }),
   Rpc.make("GetDiff", {
     payload: {

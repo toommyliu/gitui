@@ -108,14 +108,16 @@ export function useTallList({
   }, [resetKey, element, show])
 
   const scrollToIndex = useCallback(
-    (index: number) => {
+    (index: number, center = false) => {
       if (element === null) return
       const { top, offset } = live.current.scroll
       const position = top + offset
       const rowTop = index * rowHeight
       const rowBottom = rowTop + rowHeight
       const viewport = element.clientHeight
-      if (rowTop < position) show(scrollTo(rowTop, live.current.total, viewport))
+      if (center && (rowBottom <= position || rowTop >= position + viewport))
+        show(scrollTo(rowTop - (viewport - rowHeight) / 2, live.current.total, viewport))
+      else if (rowTop < position) show(scrollTo(rowTop, live.current.total, viewport))
       else if (rowBottom > position + viewport) show(scrollTo(rowBottom - viewport, live.current.total, viewport))
     },
     [element, rowHeight, show],

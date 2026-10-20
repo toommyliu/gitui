@@ -168,6 +168,23 @@ const waitFor = (session: LogSession, end: number): Effect.Effect<void, GitError
     }
   })
 
+const find = (session: LogSession, oid: Oid, from: number): Effect.Effect<number | null, GitError | LogExpired> =>
+  Effect.suspend(() => {
+    const end = session.store.length
+    const index = session.store.indexOf(oid, from)
+    if (index !== -1) return Effect.succeed(index)
+    switch (session.status._tag) {
+      case "Closed":
+        return Effect.fail(new LogExpired())
+      case "Failed":
+        return Effect.fail(session.status.error)
+      case "Done":
+        return Effect.succeed(null)
+      case "Loading":
+        return Effect.andThen(Deferred.await(session.progressed), find(session, oid, end))
+    }
+  })
+
 export class Repo extends Context.Service<
   Repo,
   {
@@ -185,6 +202,7 @@ export class Repo extends Context.Service<
       start: number,
       count: number,
     ) => Effect.Effect<ReadonlyArray<CommitRow>, GitError | LogExpired>
+    readonly logIndex: (repo: RepoId, logId: string, oid: Oid) => Effect.Effect<number | null, GitError | LogExpired>
     readonly commit: (repo: RepoId, oid: Oid) => Effect.Effect<CommitDetail, GitError>
     readonly diff: (
       repo: RepoId,
@@ -447,6 +465,12 @@ export class Repo extends Context.Service<
         return session.store.page(start, count)
       })
 
+      const logIndex = Effect.fn("Repo.logIndex")(function* (repo: RepoId, logId: string, oid: Oid) {
+        const session = sessions.get(repo)?.get(logId)
+        if (session === undefined) return yield* new LogExpired()
+        return yield* Effect.scoped(Effect.andThen(want(session), find(session, oid, 0)))
+      })
+
       const commit = Effect.fn("Repo.commit")(function* (repo: RepoId, oid: Oid) {
         const show = yield* git.run(repo, showArgs(oid))
         const detail = parseCommit(show, [])
@@ -692,6 +716,7 @@ export class Repo extends Context.Service<
         refs,
         openLog,
         logPage,
+        logIndex,
         commit,
         diff,
         stage,

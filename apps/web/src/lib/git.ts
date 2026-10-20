@@ -137,6 +137,18 @@ export const logPageAtom = Atom.family((key: string) => {
 
 export const logPageKey = (repo: RepoId, logId: string, page: number) => `${repo}\n${logId}\n${page}`
 
+export const logIndexAtom = Atom.family((key: string) => {
+  const [repo, logId, oid] = key.split("\n") as [RepoId, string, Oid]
+  return GitClient.runtime.atom(
+    Effect.gen(function* () {
+      const client = yield* GitClient
+      return yield* client("GetLogIndex", { repo, logId, oid })
+    }).pipe(Effect.retry({ while: (error) => error._tag === "RpcClientError", schedule: Schedule.spaced("1 second") })),
+  )
+})
+
+export const logIndexKey = (repo: RepoId, logId: string, oid: Oid) => `${repo}\n${logId}\n${oid}`
+
 export const commitAtom = Atom.family((key: string) => {
   const [repo, oid] = key.split("\n") as [RepoId, Oid]
   return GitClient.query("GetCommit", { repo, oid }, { timeToLive: "2 minutes" })

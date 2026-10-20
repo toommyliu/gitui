@@ -23,6 +23,10 @@ class ByteColumn {
   read(start: number, end: number, encoding: "hex" | "utf8") {
     return this.buffer.toString(encoding, start, end)
   }
+
+  indexOf(bytes: Uint8Array, from: number) {
+    return this.buffer.subarray(0, this.length).indexOf(bytes, from)
+  }
 }
 
 class NumberColumn {
@@ -99,6 +103,15 @@ export class LogStore {
       })
     }
     return rows
+  }
+
+  indexOf(oid: Oid, from = 0) {
+    const bytes = Buffer.from(oid, "hex")
+    if (bytes.length !== this.oidBytes) return -1
+    for (let at = this.oids.indexOf(bytes, from * this.oidBytes); at !== -1; at = this.oids.indexOf(bytes, at + 1)) {
+      if (at % this.oidBytes === 0) return at / this.oidBytes
+    }
+    return -1
   }
 
   private take(tokens: Array<string>) {

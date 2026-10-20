@@ -72,6 +72,8 @@ interface FileRow {
   readonly label: string
 }
 
+const withoutConflicts = (rows: ReadonlyArray<FileRow>) => rows.filter((row) => row.area !== "conflicted")
+
 const MAX_UNTRACKED_PREVIEWS = 50
 const ROW = 28
 
@@ -645,13 +647,13 @@ function FileLists({
         () => {
           if (current === null) return
           if (side === "staged") onUnstage(selected)
-          else onStage(selected)
+          else onStage(selected.length === 1 ? selected : withoutConflicts(selected))
         },
       ],
       [
         "files.discard",
         () => {
-          const rows = selected.filter((r) => r.area !== "conflicted")
+          const rows = withoutConflicts(selected)
           if (current !== null && side === "unstaged" && rows.length > 0) onDiscard(rows)
         },
       ],
@@ -666,7 +668,8 @@ function FileLists({
       },
     }))
   }
-  useCommand("files.stageAll", () => onStage(unstaged), { enabled: unstaged.length > 0 })
+  const stageable = withoutConflicts(unstaged)
+  useCommand("files.stageAll", () => onStage(stageable), { enabled: stageable.length > 0 })
   useCommand("files.unstageAll", () => onUnstage(staged), { enabled: staged.length > 0 })
   const listKeys = { preventDefault: false, stopPropagation: false }
   useCommandKeys(fileKeys("unstaged"), { ...listKeys, target: unstagedViewport })
@@ -816,8 +819,8 @@ function SectionHeader({
 }) {
   const multi = selected.length > 1
   const targets = multi ? selected : rows
-  const count = (rows: ReadonlyArray<FileRow>) => (multi ? rows.length : "all")
-  const discardable = targets.filter((r) => r.area !== "conflicted")
+  const count = (subset: ReadonlyArray<FileRow>) => (multi || subset.length < rows.length ? subset.length : "all")
+  const changes = withoutConflicts(targets)
   const conflicted = targets.filter((r) => r.area === "conflicted")
   return (
     <div className="flex h-7 shrink-0 items-center gap-2 bg-muted/40 px-2 text-muted-foreground">
@@ -852,14 +855,16 @@ function SectionHeader({
                   </Button>
                 </>
               )}
-              {discardable.length > 0 && (
-                <Button size="sm" variant="ghost" onClick={() => onDiscard(discardable)}>
-                  Discard {count(discardable)}
-                </Button>
+              {changes.length > 0 && (
+                <>
+                  <Button size="sm" variant="ghost" onClick={() => onDiscard(changes)}>
+                    Discard {count(changes)}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => onStage(changes)}>
+                    Stage {count(changes)}
+                  </Button>
+                </>
               )}
-              <Button size="sm" variant="ghost" onClick={() => onStage(targets)}>
-                Stage {count(targets)}
-              </Button>
             </>
           )}
         </span>

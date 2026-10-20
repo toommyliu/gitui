@@ -5,6 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>Git</title>
+    <script>
+      {
+        const stored = localStorage.getItem("theme")
+        const theme =
+          stored === "light" || stored === "dark"
+            ? stored
+            : matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light"
+        document.documentElement.classList.add(theme)
+        document.documentElement.style.colorScheme = theme
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

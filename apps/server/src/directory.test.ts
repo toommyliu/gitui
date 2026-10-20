@@ -3,7 +3,7 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { describe, expect, it } from "@effect/vitest"
 import * as Effect from "effect/Effect"
-import { listDirectory } from "./directory.ts"
+import { filterRepos, listDirectory } from "./directory.ts"
 
 const fixture = () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "gitui-dir-")))
@@ -51,4 +51,12 @@ describe("listDirectory", () => {
       expect((yield* Effect.flip(listDirectory(join(root, "notes.txt"))))._tag).toBe("DirectoryNotFound")
     }),
   )
+})
+
+describe("filterRepos", () => {
+  it("keeps only the paths that are still repositories, in order", () => {
+    const root = fixture()
+    const paths = ["zeta", "alpha", "gone", "worktree", "linked"].map((name) => join(root, name))
+    expect(filterRepos(paths)).toEqual([join(root, "zeta"), join(root, "worktree"), join(root, "linked")])
+  })
 })

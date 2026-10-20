@@ -26,6 +26,7 @@ import { paletteOpenAtom, tabKeys, useCommand, useDesktopMenu, useOverlayOpen } 
 import { desktop } from "@/lib/desktop"
 import { basename } from "@/lib/format"
 import { connectionAtom, keys, latest, repoInfoAtom, statusAtom } from "@/lib/git"
+import { addRecent, recentAtom } from "@/lib/places"
 import { settingsAtom, settingsViewAtom } from "@/lib/settings"
 import { activeAfterClose, cycleTab } from "@/lib/tabs"
 import { repoNameOf, useRefreshOnFocus } from "@/lib/worktrees"
@@ -68,6 +69,8 @@ export function App() {
   const { resolvedTheme, setTheme } = useTheme()
   useCommand("theme.toggle", () => setTheme(resolvedTheme === "dark" ? "light" : "dark"))
   const [settings, setSettings] = useAtom(settingsAtom)
+  const setRecent = useAtomSet(recentAtom)
+  const remember = (path: string) => setRecent((recent) => addRecent(recent, path))
   useCommand("diff.wrap", () => setSettings({ ...settings, wrapLines: !settings.wrapLines }))
   useCommand("diff.layout", () =>
     setSettings({ ...settings, diffStyle: settings.diffStyle === "split" ? "unified" : "split" }),
@@ -80,10 +83,12 @@ export function App() {
   }, [active])
 
   const open = (path: string) => {
+    remember(path)
     setTabs((current) => (current.includes(path) ? current : [...current, path]))
     setActive(path)
   }
   const openWorktree = (path: string, family: ReadonlyArray<string>) => {
+    remember(path)
     setTabs((current) => {
       if (current.includes(path)) return current
       const parent = active === null ? -1 : current.indexOf(active)
@@ -95,11 +100,17 @@ export function App() {
     setActive(path)
   }
   const close = (path: string) => {
+    remember(path)
     setTabs(tabs.filter((tab) => tab !== path))
     setActive(activeAfterClose(tabs, active, path))
   }
 
-  useCommand("repo.open", () => setActive(null))
+  useCommand("repo.open", () => {
+    if (active !== null || desktop === undefined) return setActive(null)
+    void desktop.pickFolder().then((folder) => {
+      if (folder !== null) open(folder)
+    })
+  })
   useCommand("tab.close", () => {
     if (active !== null) close(active)
   })

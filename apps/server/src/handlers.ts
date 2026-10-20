@@ -2,7 +2,7 @@ import { GitError, GitRpcs } from "@gitui/contracts"
 import { CommandLog, Repo, Worktrees } from "@gitui/git"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
-import { listDirectory } from "./directory.ts"
+import { filterRepos, listDirectory } from "./directory.ts"
 import { watchRepo } from "./watch.ts"
 
 export const handlers = GitRpcs.toLayer(
@@ -12,6 +12,7 @@ export const handlers = GitRpcs.toLayer(
     const worktrees = yield* Worktrees
     return GitRpcs.of({
       ListDirectory: ({ path }) => listDirectory(path),
+      FilterRepos: ({ paths }) => Effect.sync(() => filterRepos(paths)),
       CommandLog: ({ repo: id }) => commandLog.entries(id),
       OpenRepo: ({ path }) => repo.open(path),
       WatchRepo: ({ repo: id }) =>

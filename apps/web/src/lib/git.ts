@@ -92,6 +92,10 @@ const CACHE_TTL = "10 minutes"
 
 export const directoryAtom = Atom.family((path: string) => GitClient.query("ListDirectory", { path }))
 
+export const existingReposAtom = Atom.family((paths: string) =>
+  GitClient.query("FilterRepos", { paths: JSON.parse(paths) as Array<string> }),
+)
+
 export const repoInfoAtom = Atom.family((path: string) =>
   GitClient.query("OpenRepo", { path }, { timeToLive: "5 minutes" }),
 )

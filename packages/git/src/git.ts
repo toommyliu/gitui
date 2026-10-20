@@ -41,6 +41,7 @@ export interface RunOptions {
   readonly okExitCodes?: ReadonlyArray<number>
   readonly write?: boolean
   readonly patternPathspecs?: boolean
+  readonly env?: Readonly<Record<string, string>>
 }
 
 // `git stash push --include-untracked` cleans up through pathspec magic; with
@@ -53,7 +54,7 @@ const MAX_LOGGED_STDERR = 8 * 1024
 const command = (cwd: string, args: ReadonlyArray<string>, options: RunOptions | undefined) =>
   ChildProcess.make("git", [...globalArgs(options), ...args], {
     cwd,
-    env: gitEnv(),
+    env: { ...gitEnv(), ...options?.env },
     extendEnv: false,
     stdin: options?.stdin === undefined ? "ignore" : Stream.make(options.stdin),
   })

@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import { createServer } from "node:http"
 import { NodeHttpServer } from "@effect/platform-node"
 import { GitRpcs } from "@gitui/contracts"
-import { CommandLog, Repo } from "@gitui/git"
+import { CommandLog, Repo, Worktrees } from "@gitui/git"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as HttpMiddleware from "effect/http/HttpMiddleware"
@@ -47,6 +47,7 @@ export const serverLayer = (options: ServerOptions) => {
   const rpc = RpcServer.layerHttp({ group: GitRpcs, path: "/rpc", protocol: "websocket" }).pipe(
     Layer.provide(handlers),
     Layer.provide(Repo.layer),
+    Layer.provide(Worktrees.layer),
     Layer.provide(CommandLog.layer),
     Layer.provide(RpcSerialization.layerJson),
   )

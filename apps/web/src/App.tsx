@@ -12,13 +12,15 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "cn"
 import * as Cause from "effect/Cause"
 import { XIcon } from "lucide-react"
-import { useEffect, useState } from "react"
+import { type Ref, useEffect, useState } from "react"
 import { Loading } from "@/components/loading"
 import { RepoPicker } from "@/components/repo-picker"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { Workspace } from "@/components/workspace"
 import { basename } from "@/lib/format"
-import { connectionAtom, repoInfoAtom } from "@/lib/git"
+import { connectionAtom, keys, latest, repoInfoAtom, statusAtom } from "@/lib/git"
+import { useRefreshOnFocus } from "@/lib/worktrees"
+import type { RepoInfo } from "@gitui/contracts"
 
 const PICKER = "\0picker"
 const tabClassName =
@@ -53,6 +55,17 @@ export function App() {
 
   const open = (path: string) => {
     setTabs((current) => (current.includes(path) ? current : [...current, path]))
+    setActive(path)
+  }
+  const openWorktree = (path: string, family: ReadonlyArray<string>) => {
+    setTabs((current) => {
+      if (current.includes(path)) return current
+      const parent = active === null ? -1 : current.indexOf(active)
+      if (parent === -1) return [...current, path]
+      let at = parent + 1
+      while (at < current.length && family.includes(current[at]!)) at++
+      return [...current.slice(0, at), path, ...current.slice(at)]
+    })
     setActive(path)
   }
   const close = (path: string) => {
@@ -104,34 +117,89 @@ export function App() {
           {active !== null && <SettingsDialog icon />}
         </div>
       </div>
-      {active === null ? <RepoPicker onOpen={open} openPaths={tabs} /> : <RepoTab key={active} path={active} />}
+      {active === null ? (
+        <RepoPicker onOpen={open} openPaths={tabs} />
+      ) : (
+        <RepoTab key={active} path={active} onOpenWorktree={openWorktree} />
+      )}
     </div>
   )
 }
 
 function SortableRepoTab({ path, index, onClose }: { path: string; index: number; onClose: () => void }) {
   const { ref, handleRef } = useSortable({ id: path, index })
+  const info = latest(useAtomValue(repoInfoAtom(path)))
   return (
     <div ref={ref} className={cn(tabFrameClassName, "group/repo-tab pr-1")}>
-      <TabsTrigger ref={handleRef} value={path} className={tabClassName}>
-        {basename(path)}
-      </TabsTrigger>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={`Close ${basename(path)}`}
-        onClick={onClose}
-        className="opacity-50 group-hover/repo-tab:opacity-100"
-      >
-        <XIcon />
-      </Button>
+      {info === undefined ? (
+        <RepoTabHandle handleRef={handleRef} path={path} label={basename(path)} dirty={false} onClose={onClose} />
+      ) : (
+        <OpenRepoTabHandle handleRef={handleRef} path={path} info={info} onClose={onClose} />
+      )}
     </div>
   )
 }
 
-function RepoTab({ path }: { path: string }) {
+function OpenRepoTabHandle({
+  info,
+  ...props
+}: {
+  handleRef: Ref<HTMLButtonElement>
+  path: string
+  info: RepoInfo
+  onClose: () => void
+}) {
+  useRefreshOnFocus([keys.status(info.id)])
+  const status = latest(useAtomValue(statusAtom(info.id)))
+  const linked = info.gitDir !== info.commonDir
+  const label = linked && status?.head._tag === "Branch" ? status.head.name : basename(props.path)
+  return <RepoTabHandle {...props} label={label} dirty={(status?.entries.length ?? 0) > 0} />
+}
+
+function RepoTabHandle({
+  handleRef,
+  path,
+  label,
+  dirty,
+  onClose,
+}: {
+  handleRef: Ref<HTMLButtonElement>
+  path: string
+  label: string
+  dirty: boolean
+  onClose: () => void
+}) {
+  return (
+    <>
+      <TabsTrigger ref={handleRef} value={path} title={path} className={tabClassName}>
+        {label}
+      </TabsTrigger>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={dirty ? `Close ${label}, which has uncommitted changes` : `Close ${label}`}
+        title={dirty ? "Uncommitted changes" : undefined}
+        onClick={onClose}
+        className={cn("group/close", !dirty && "opacity-50 group-hover/repo-tab:opacity-100")}
+      >
+        {dirty && (
+          <span className="size-2 rounded-full bg-current group-hover/close:hidden group-focus-visible/close:hidden" />
+        )}
+        <XIcon className={cn(dirty && "hidden group-hover/close:block group-focus-visible/close:block")} />
+      </Button>
+    </>
+  )
+}
+
+function RepoTab({
+  path,
+  onOpenWorktree,
+}: {
+  path: string
+  onOpenWorktree: (path: string, family: ReadonlyArray<string>) => void
+}) {
   const info = useAtomValue(repoInfoAtom(path))
-  if (info._tag === "Success") return <Workspace repo={info.value.id} />
+  if (info._tag === "Success") return <Workspace repo={info.value.id} onOpenWorktree={onOpenWorktree} />
   if (info._tag === "Failure") {
     return (
       <div className="p-4">

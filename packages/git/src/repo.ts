@@ -250,7 +250,13 @@ export class Repo extends Context.Service<
 
       const open = Effect.fn("Repo.open")(function* (path: string) {
         const out = yield* git
-          .text(resolve(path), ["rev-parse", "--show-toplevel", "--absolute-git-dir", "--git-common-dir"])
+          .text(resolve(path), [
+            "rev-parse",
+            "--path-format=absolute",
+            "--show-toplevel",
+            "--absolute-git-dir",
+            "--git-common-dir",
+          ])
           .pipe(Effect.mapError(() => new RepoNotFound({ path })))
         const [root = "", gitDir = "", commonDir = ""] = out.trimEnd().split("\n")
         if (root === "") return yield* new RepoNotFound({ path })

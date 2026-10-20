@@ -11,6 +11,7 @@ import {
   LineAction,
   LineSelection,
   LogHandle,
+  MergeCheck,
   Oid,
   Progress,
   Refs,
@@ -19,6 +20,8 @@ import {
   RepoInfo,
   RepoPath,
   Status,
+  WorktreeDetail,
+  WorktreeSummary,
 } from "./domain.ts"
 
 export class GitError extends Schema.TaggedError<GitError>()("GitError", {
@@ -155,4 +158,8 @@ export class GitRpcs extends RpcGroup.make(
   }),
   Rpc.make("StashApply", { payload: { repo: RepoId, oid: Oid, drop: Schema.Boolean }, error: GitError }),
   Rpc.make("StashDrop", { payload: { repo: RepoId, oid: Oid }, error: GitError }),
+  Rpc.make("GetWorktreeSummaries", { payload: repo, success: Schema.Array(WorktreeSummary), error: GitError }),
+  Rpc.make("GetWorktree", { payload: repo, success: WorktreeDetail, error: GitError }),
+  Rpc.make("GetWorktreeDiff", { payload: repo, success: FileDiff, error: GitError }),
+  Rpc.make("CheckWorktreeMerge", { payload: { repo: RepoId, base: Oid }, success: MergeCheck, error: GitError }),
 ) {}

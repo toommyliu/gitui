@@ -248,3 +248,41 @@ export const Progress = Schema.Struct({
   percent: Schema.NullOr(Schema.Int),
 })
 export type Progress = typeof Progress.Type
+
+export const WorktreeSummary = Schema.Struct({
+  path: Schema.String,
+  changes: Schema.Int,
+  commits: Schema.NullOr(Schema.Int),
+  paths: Schema.Array(RepoPath),
+})
+export type WorktreeSummary = typeof WorktreeSummary.Type
+
+export const BaseRef = Schema.Struct({ name: Schema.String, oid: Oid })
+export type BaseRef = typeof BaseRef.Type
+
+export const BranchCommit = Schema.Struct({
+  oid: Oid,
+  subject: Schema.String,
+  time: Schema.Int,
+  landed: Schema.NullOr(Oid),
+})
+export type BranchCommit = typeof BranchCommit.Type
+
+export const WorktreeDetail = Schema.Struct({
+  head: Head,
+  base: Schema.NullOr(BaseRef),
+  mergeBase: Schema.NullOr(Oid),
+  behind: Schema.Int,
+  unique: Schema.Int,
+  commits: Schema.Array(BranchCommit),
+  truncated: Schema.Boolean,
+  entries: Schema.Array(StatusEntry),
+  editedAt: Schema.NullOr(Schema.Int),
+})
+export type WorktreeDetail = typeof WorktreeDetail.Type
+
+export const MergeCheck = Schema.Union([
+  Schema.TaggedStruct("Clean", {}),
+  Schema.TaggedStruct("Conflicts", { paths: Schema.Array(RepoPath) }),
+])
+export type MergeCheck = typeof MergeCheck.Type

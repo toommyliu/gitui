@@ -31,6 +31,7 @@ import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "
 import { basename, shortDate, shortOid } from "@/lib/format"
 import { latest, refsAtom, statusAtom, useGitAction, useNetwork } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
+import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
 import { useConfirm } from "./confirm"
 import { SyncButtons } from "./network"
 import { usePrompt } from "./prompt"
@@ -88,7 +89,18 @@ const flattenTree = <T,>(
   for (const { label, value } of tree.leaves) out.push(leaf(label, value, depth))
 }
 
-export function Sidebar({ repo, onSelect }: { repo: RepoId; onSelect: (selection: Selection) => void }) {
+export function Sidebar({
+  repo,
+  selection,
+  onSelect,
+  onOpen,
+}: {
+  repo: RepoId
+  selection: Selection
+  onSelect: (selection: Selection) => void
+  onOpen: (path: string, family: ReadonlyArray<string>) => void
+}) {
+  useRefreshOnFocus([worktreesKey(repo)])
   const refs = latest(useAtomValue(refsAtom(repo)))
   const status = latest(useAtomValue(statusAtom(repo)))
   const head = status?.head
@@ -187,6 +199,8 @@ export function Sidebar({ repo, onSelect }: { repo: RepoId; onSelect: (selection
                 collapsed={collapsed}
                 toggle={toggle}
                 onSelect={onSelect}
+                onOpen={(path) => onOpen(path, refs?.worktrees.map((worktree) => worktree.path) ?? [])}
+                selectedWorktree={selection._tag === "Worktree" ? selection.path : null}
                 worktreeByBranch={worktreeByBranch}
                 onDelete={(branch) => setDeleting({ branch, worktree: worktreeByBranch.get(branch.name) })}
               />
@@ -240,23 +254,43 @@ function SmallBadge({ className, ...props }: ComponentProps<typeof Badge>) {
   )
 }
 
+function WorktreeChips({ repo, worktree }: { repo: RepoId; worktree: Worktree }) {
+  const summary = latest(useAtomValue(worktreeSummariesAtom(repo)))?.find((s) => s.path === worktree.path)
+  if (summary === undefined) return null
+  const commits = summary.commits ?? 0
+  return (
+    <span className="ml-auto flex shrink-0 gap-1">
+      {commits > 0 && <SmallBadge>{commits === 1 ? "1 commit" : `${commits} commits`}</SmallBadge>}
+      {summary.changes > 0 && <SmallBadge>{summary.changes === 1 ? "1 file" : `${summary.changes} files`}</SmallBadge>}
+      {!worktree.isMain && summary.commits === 0 && summary.changes === 0 && (
+        <SmallBadge variant="outline">empty</SmallBadge>
+      )}
+    </span>
+  )
+}
+
 function Line({
   depth,
   onClick,
   active,
+  selected,
   children,
+  ...props
 }: {
   depth: number
   onClick?: () => void
   active?: boolean
+  selected?: boolean
   children: ReactNode
-}) {
+} & Pick<ComponentProps<"button">, "title" | "onDoubleClick" | "onKeyDown">) {
   return (
     <button
       type="button"
       onClick={onClick}
+      {...props}
       className={cn(
-        "flex h-full w-full items-center gap-1.5 pr-2 text-left whitespace-nowrap hover:bg-muted/60",
+        "flex h-full w-full items-center gap-1.5 pr-2 text-left whitespace-nowrap",
+        selected ? "bg-selection" : "hover:bg-muted/60",
         active && "font-semibold",
       )}
       style={{ paddingLeft: 12 + depth * 12 }}
@@ -278,6 +312,8 @@ function SidebarRow({
   collapsed,
   toggle,
   onSelect,
+  onOpen,
+  selectedWorktree,
   worktreeByBranch,
   onDelete,
 }: {
@@ -288,6 +324,8 @@ function SidebarRow({
   collapsed: ReadonlySet<string>
   toggle: (id: string) => void
   onSelect: (selection: Selection) => void
+  onOpen: (path: string) => void
+  selectedWorktree: string | null
   worktreeByBranch: Map<string, Worktree>
   onDelete: (branch: Branch) => void
 }) {
@@ -530,8 +568,7 @@ function SidebarRow({
     case "worktree": {
       const { worktree } = row
       const current = worktree.path === repo
-      const label =
-        worktree.head._tag === "Branch" ? worktree.head.name : worktree.head._tag === "Detached" ? "detached" : "bare"
+      const openable = !current && worktree.head._tag !== "Bare" && worktree.prunable === null
       const remove = (force: boolean) =>
         confirm({
           title: force ? "Force remove worktree?" : "Remove worktree?",
@@ -549,23 +586,50 @@ function SidebarRow({
       return (
         <ContextMenu>
           <ContextMenuTrigger className="block h-full">
-            <Line depth={1} active={current} onClick={() => worktree.head._tag !== "Bare" && select(worktree.head.oid)}>
+            <Line
+              depth={1}
+              active={current}
+              selected={selectedWorktree === worktree.path}
+              title={worktree.path}
+              onClick={() => {
+                if (current) onSelect({ _tag: "WorkingCopy" })
+                else if (openable) onSelect({ _tag: "Worktree", path: worktree.path })
+              }}
+              onDoubleClick={() => openable && onOpen(worktree.path)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" || !openable) return
+                event.preventDefault()
+                onOpen(worktree.path)
+              }}
+            >
               <span className="w-3 shrink-0" />
-              <span className="truncate">{basename(worktree.path)}</span>
-              <span className="truncate text-[11px] text-muted-foreground">{label}</span>
+              <span className="truncate">{worktreeLabel(worktree)}</span>
+              {worktree.head._tag !== "Branch" && (
+                <span className="truncate text-[11px] text-muted-foreground">
+                  {worktree.head._tag === "Detached" ? "detached" : "bare"}
+                </span>
+              )}
               {worktree.locked !== null && (
                 <SmallBadge variant="outline" className="ml-auto">
                   locked
                 </SmallBadge>
               )}
-              {worktree.prunable !== null && (
+              {worktree.prunable !== null ? (
                 <SmallBadge variant="destructive" className="ml-auto">
                   missing
                 </SmallBadge>
+              ) : current ? (
+                <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">this tab</span>
+              ) : (
+                openable && <WorktreeChips repo={repo} worktree={worktree} />
               )}
             </Line>
           </ContextMenuTrigger>
           <ContextMenuContent>
+            <ContextMenuItem disabled={!openable} onClick={() => onOpen(worktree.path)}>
+              Open in new tab
+            </ContextMenuItem>
+            <ContextMenuSeparator />
             <ContextMenuItem disabled={worktree.isMain || current} onClick={() => remove(false)}>
               Remove worktree…
             </ContextMenuItem>

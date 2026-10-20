@@ -79,6 +79,16 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
     }),
   )
 
+  it.effect("finds the shared git dir when a repo is opened from a subdirectory", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.write("deep/er/file.txt", "x\n")
+      const info = yield* (yield* Repo).open(join(repo.root, "deep", "er"))
+      expect(info.commonDir).toBe(join(info.id, ".git"))
+      expect(info.gitDir).toBe(info.commonDir)
+    }),
+  )
+
   it.effect("commits exactly the index, leaving later working-tree edits uncommitted", () =>
     Effect.gen(function* () {
       const repo = makeRepo()

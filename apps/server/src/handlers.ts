@@ -1,5 +1,5 @@
 import { GitError, GitRpcs } from "@gitui/contracts"
-import { CommandLog, Repo } from "@gitui/git"
+import { CommandLog, Repo, Worktrees } from "@gitui/git"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
 import { listDirectory } from "./directory.ts"
@@ -9,6 +9,7 @@ export const handlers = GitRpcs.toLayer(
   Effect.gen(function* () {
     const repo = yield* Repo
     const commandLog = yield* CommandLog
+    const worktrees = yield* Worktrees
     return GitRpcs.of({
       ListDirectory: ({ path }) => listDirectory(path),
       CommandLog: ({ repo: id }) => commandLog.entries(id),
@@ -58,6 +59,10 @@ export const handlers = GitRpcs.toLayer(
       AddWorktree: ({ repo: id, path, branch, startPoint }) => repo.addWorktree(id, path, branch, startPoint),
       StashApply: ({ repo: id, oid, drop }) => repo.stashApply(id, oid, drop),
       StashDrop: ({ repo: id, oid }) => repo.stashDrop(id, oid),
+      GetWorktreeSummaries: ({ repo: id }) => worktrees.summaries(id),
+      GetWorktree: ({ repo: id }) => worktrees.detail(id),
+      GetWorktreeDiff: ({ repo: id }) => worktrees.diff(id),
+      CheckWorktreeMerge: ({ repo: id, base }) => worktrees.checkMerge(id, base),
     })
   }),
 )

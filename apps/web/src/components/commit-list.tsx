@@ -173,7 +173,7 @@ export function CommitList({
   }
 
   const selectedIndex = (() => {
-    if (selection._tag === "WorkingCopy") return hasChanges ? 0 : -1
+    if (selection._tag !== "Commit") return selection._tag === "WorkingCopy" && hasChanges ? 0 : -1
     for (const row of list.rows) {
       if (row.index >= offset && oidAt(row.index - offset) === selection.oid) return row.index
     }

@@ -11,11 +11,18 @@ import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
 import { Sidebar } from "./sidebar"
 import { WorkingCopy } from "./working-copy"
+import { WorktreePreview } from "./worktree-preview"
 
 type Pane = "locations" | "history" | "detail"
 const paneLabels: Record<Pane, string> = { locations: "Locations", history: "History", detail: "Details" }
 
-export function Workspace({ repo }: { repo: RepoId }) {
+export function Workspace({
+  repo,
+  onOpenWorktree,
+}: {
+  repo: RepoId
+  onOpenWorktree: (path: string, family: ReadonlyArray<string>) => void
+}) {
   useAtomMount(watchAtom(repo))
   const narrow = useNarrow()
   const [selection, setSelection] = useState<Selection>({ _tag: "WorkingCopy" })
@@ -34,10 +41,19 @@ export function Workspace({ repo }: { repo: RepoId }) {
   const detail =
     selection._tag === "Commit" ? (
       <CommitDetail repo={repo} oid={selection.oid} onSelect={select} onHistory={showHistory} />
+    ) : selection._tag === "Worktree" ? (
+      <WorktreePreview
+        key={selection.path}
+        repo={repo}
+        path={selection.path}
+        onSelect={select}
+        onOpen={onOpenWorktree}
+        onHistory={showHistory}
+      />
     ) : (
       <WorkingCopy repo={repo} onHistory={showHistory} />
     )
-  const sidebar = <Sidebar repo={repo} onSelect={select} />
+  const sidebar = <Sidebar repo={repo} selection={selection} onSelect={select} onOpen={onOpenWorktree} />
   const history = (
     <CommitList repo={repo} selection={selection} onSelect={select} query={query} onQueryChange={setQuery} />
   )

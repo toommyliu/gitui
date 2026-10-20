@@ -62,6 +62,8 @@ const chunks = <T>(items: ReadonlyArray<T>, size: number) =>
 
 // A separate process finishes the delete even if the server exits first, and keeps the unlinks off
 // libuv's threadpool, which every git spawn needs for its fs.access of the working directory.
+// In the desktop app process.execPath is Electron, and the backend unsets ELECTRON_RUN_AS_NODE, so
+// without it here Electron opens the script as an app and shows an "Error launching app" dialog.
 const deleteInBackground = (path: string) =>
   spawn(
     process.execPath,
@@ -69,6 +71,7 @@ const deleteInBackground = (path: string) =>
     {
       detached: true,
       stdio: "ignore",
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
     },
   )
     .on("error", () => {})

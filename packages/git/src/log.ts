@@ -1,4 +1,8 @@
-export const logRevArgs = (hasHead: boolean) => [...(hasHead ? ["HEAD"] : []), "--branches", "--remotes"]
+export const logRevArgs = (hasHead: boolean, remotes = true) => [
+  ...(hasHead ? ["HEAD"] : []),
+  "--branches",
+  ...(remotes ? ["--remotes"] : []),
+]
 
 export interface LogQuery {
   readonly words: ReadonlyArray<string>

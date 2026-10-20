@@ -1,6 +1,9 @@
+import { Theme } from "@gitui/contracts"
+import * as Schema from "effect/Schema"
 import * as React from "react"
+import { desktop } from "@/lib/desktop"
 
-export type Theme = "dark" | "light" | "system"
+export type { Theme }
 type ResolvedTheme = "dark" | "light"
 
 type ThemeProviderProps = {
@@ -17,17 +20,9 @@ type ThemeProviderState = {
 }
 
 const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)"
-const THEME_VALUES: Theme[] = ["dark", "light", "system"]
+const isTheme = Schema.is(Theme)
 
 const ThemeProviderContext = React.createContext<ThemeProviderState | undefined>(undefined)
-
-function isTheme(value: string | null): value is Theme {
-  if (value === null) {
-    return false
-  }
-
-  return THEME_VALUES.includes(value as Theme)
-}
 
 function getSystemTheme(): ResolvedTheme {
   if (window.matchMedia(COLOR_SCHEME_QUERY).matches) {
@@ -58,23 +53,6 @@ function disableTransitionsTemporarily() {
       })
     })
   }
-}
-
-function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  if (target.isContentEditable) {
-    return true
-  }
-
-  const editableParent = target.closest("input, textarea, select, [contenteditable='true']")
-  if (editableParent) {
-    return true
-  }
-
-  return false
 }
 
 export function ThemeProvider({
@@ -114,44 +92,16 @@ export function ThemeProvider({
   }, [resolvedTheme, disableTransitionOnChange])
 
   React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) {
-        return
-      }
+    desktop?.setTheme(theme)
+  }, [theme])
 
-      if (event.metaKey || event.ctrlKey || event.altKey) {
-        return
-      }
-
-      if (isEditableTarget(event.target)) {
-        return
-      }
-
-      if (event.key.toLowerCase() !== "d") {
-        return
-      }
-
-      setThemeState((currentTheme) => {
-        const nextTheme =
-          currentTheme === "dark"
-            ? "light"
-            : currentTheme === "light"
-              ? "dark"
-              : getSystemTheme() === "dark"
-                ? "light"
-                : "dark"
-
-        localStorage.setItem(storageKey, nextTheme)
-        return nextTheme
-      })
-    }
-
-    window.addEventListener("keydown", handleKeyDown)
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [storageKey])
+  React.useEffect(
+    () =>
+      desktop?.onTheme((value) => {
+        if (isTheme(value)) setTheme(value)
+      }),
+    [setTheme],
+  )
 
   React.useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {

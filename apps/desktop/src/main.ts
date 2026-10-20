@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process"
 import { existsSync, statSync } from "node:fs"
 import { join, resolve, sep } from "node:path"
 import { pathToFileURL } from "node:url"
+import { MenuShortcuts, menuShortcuts, Theme } from "@gitui/contracts"
 import {
   app,
   BrowserWindow,
@@ -9,12 +10,14 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
+  Menu,
   nativeTheme,
   net,
   protocol,
   shell,
 } from "electron"
 import * as Schema from "effect/Schema"
+import { buildMenu } from "./menu.ts"
 import { APP_ORIGIN, BackendReady, SCHEME } from "./protocol.ts"
 
 const webDist = resolve(__dirname, "../../web/dist")
@@ -129,6 +132,20 @@ if (!app.requestSingleInstanceLock()) {
         const result = await dialog.showOpenDialog(window, { properties: ["openDirectory"] })
         return result.canceled ? null : (result.filePaths[0] ?? null)
       })
+      let menu: Parameters<typeof buildMenu>[0] = { theme: nativeTheme.themeSource, shortcuts: menuShortcuts }
+      const updateMenu = (change: Partial<typeof menu>) => {
+        menu = { ...menu, ...change }
+        Menu.setApplicationMenu(buildMenu(menu))
+      }
+      ipcMain.on("gitui:theme", (event, value: unknown) => {
+        if (!fromApp(event) || !Schema.is(Theme)(value)) return
+        nativeTheme.themeSource = value
+        updateMenu({ theme: value })
+      })
+      ipcMain.on("gitui:menu-shortcuts", (event, value: unknown) => {
+        if (fromApp(event) && Schema.is(MenuShortcuts)(value)) updateMenu({ shortcuts: value })
+      })
+      updateMenu({})
       createWindow()
       app.on("activate", () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -3,22 +3,29 @@ import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { arrayMove } from "@dnd-kit/helpers"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
-import { useAtomValue } from "@effect/atom-react"
+import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useHotkeys } from "@tanstack/react-hotkeys"
 import { cn } from "cn"
 import * as Cause from "effect/Cause"
-import { XIcon } from "lucide-react"
+import { SettingsIcon, XIcon } from "lucide-react"
 import { type Ref, useEffect, useState } from "react"
+import { CommandPalette } from "@/components/command-palette"
 import { Loading } from "@/components/loading"
 import { RepoPicker } from "@/components/repo-picker"
-import { SettingsDialog } from "@/components/settings-dialog"
+import { SettingsPage } from "@/components/settings-page"
+import { useTheme } from "@/components/theme-provider"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Workspace } from "@/components/workspace"
+import { paletteOpenAtom, tabKeys, useCommand, useDesktopMenu, useOverlayOpen } from "@/lib/commands"
+import { desktop } from "@/lib/desktop"
 import { basename } from "@/lib/format"
 import { connectionAtom, keys, latest, repoInfoAtom, statusAtom } from "@/lib/git"
+import { settingsAtom, settingsViewAtom } from "@/lib/settings"
 import { useRefreshOnFocus } from "@/lib/worktrees"
 import type { RepoInfo } from "@gitui/contracts"
 
@@ -46,6 +53,22 @@ export function App() {
   const [tabs, setTabs] = useState<ReadonlyArray<string>>(() => stored("gitui.tabs", []))
   const [active, setActive] = useState<string | null>(() => stored("gitui.active", null))
   const connection = useAtomValue(connectionAtom)
+  const navigateSettings = useAtomSet(settingsViewAtom)
+  const overlayOpen = useOverlayOpen()
+  const setPaletteOpen = useAtomSet(paletteOpenAtom)
+  useDesktopMenu()
+  useCommand("settings.open", () => {
+    setPaletteOpen(false)
+    navigateSettings("open")
+  })
+  useCommand("palette.open", () => setPaletteOpen(true))
+  const { resolvedTheme, setTheme } = useTheme()
+  useCommand("theme.toggle", () => setTheme(resolvedTheme === "dark" ? "light" : "dark"))
+  const [settings, setSettings] = useAtom(settingsAtom)
+  useCommand("diff.wrap", () => setSettings({ ...settings, wrapLines: !settings.wrapLines }))
+  useCommand("diff.layout", () =>
+    setSettings({ ...settings, diffStyle: settings.diffStyle === "split" ? "unified" : "split" }),
+  )
 
   useEffect(() => localStorage.setItem("gitui.tabs", JSON.stringify(tabs)), [tabs])
   useEffect(() => localStorage.setItem("gitui.active", JSON.stringify(active)), [active])
@@ -73,6 +96,27 @@ export function App() {
     setTabs(remaining)
     if (active === path) setActive(remaining.at(-1) ?? null)
   }
+  const cycle = (delta: 1 | -1) => {
+    const order = [...tabs, null]
+    setActive(order[(order.indexOf(active) + delta + order.length) % order.length] ?? null)
+  }
+
+  useCommand("repo.open", () => setActive(null))
+  useCommand("tab.close", () => {
+    if (active !== null) close(active)
+  })
+  useCommand("tab.next", () => cycle(1))
+  useCommand("tab.previous", () => cycle(-1))
+  useHotkeys(
+    tabKeys.map((hotkey, index) => ({
+      hotkey,
+      callback: () => {
+        const tab = index === tabKeys.length - 1 ? tabs.at(-1) : tabs[index]
+        if (tab !== undefined) setActive(tab)
+      },
+    })),
+    { enabled: !overlayOpen },
+  )
 
   return (
     <div className="flex h-full flex-col">
@@ -114,7 +158,23 @@ export function App() {
               Reconnecting to server
             </Badge>
           )}
-          {active !== null && <SettingsDialog icon />}
+          {desktop === undefined && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Settings"
+                    onClick={() => navigateSettings("open")}
+                  />
+                }
+              >
+                <SettingsIcon />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Settings</TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
       {active === null ? (
@@ -122,6 +182,8 @@ export function App() {
       ) : (
         <RepoTab key={active} path={active} onOpenWorktree={openWorktree} />
       )}
+      <SettingsPage />
+      <CommandPalette />
     </div>
   )
 }

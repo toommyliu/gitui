@@ -4,13 +4,26 @@ import {
   type ChangeTypes,
   type CodeViewDiffItem,
   type CodeViewLineSelection,
+  type DiffIndicators,
   type FileDiffMetadata,
+  type LineDiffTypes,
   type SelectionSide,
   parsePatchFiles,
 } from "@pierre/diffs"
-import { CodeView, type CodeViewHandle } from "@pierre/diffs/react"
+import { CodeView, type CodeViewHandle, useWorkerPool, WorkerPoolContextProvider } from "@pierre/diffs/react"
+import DiffsWorker from "@pierre/diffs/worker/worker.js?worker"
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
-import { type ReactNode, type Ref, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import {
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -21,8 +34,10 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { cn } from "cn"
-import { copyText } from "@/lib/clipboard"
-import { settingsAtom } from "@/lib/settings"
+import { copyText, copyWithToast } from "@/lib/clipboard"
+import { useCommandKeys, useOverlayOpen } from "@/lib/commands"
+import { diffThemes } from "@/lib/diff-themes"
+import { type Settings, settingsAtom } from "@/lib/settings"
 import { ChangeLetter } from "./change-letter"
 import { useTheme } from "./theme-provider"
 
@@ -222,12 +237,6 @@ const scrollToEnd = (node: HTMLDivElement | null) => {
   if (node !== null) node.scrollLeft = node.scrollWidth
 }
 
-const copyWithToast = (text: string, title: string) =>
-  copyText(text).then(
-    () => toast.success(title, { description: text }),
-    () => toast.error("Couldn't copy", { description: "This browser blocked clipboard access." }),
-  )
-
 function CopyPathButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
   useEffect(() => {
@@ -342,6 +351,76 @@ function FileHeader({
   )
 }
 
+const changeMarkers = {
+  color: { diffIndicators: "bars", disableBackground: false },
+  signs: { diffIndicators: "classic", disableBackground: true },
+  both: { diffIndicators: "classic", disableBackground: false },
+} as const satisfies Record<
+  Settings["changeMarkers"],
+  { readonly diffIndicators: DiffIndicators; readonly disableBackground: boolean }
+>
+
+const textSizes = {
+  small: { fontSize: 12, lineHeight: 18 },
+  medium: { fontSize: 13, lineHeight: 20 },
+  large: { fontSize: 14, lineHeight: 22 },
+} as const satisfies Record<Settings["diffTextSize"], { readonly fontSize: number; readonly lineHeight: number }>
+
+export const useDiffAppearance = () => {
+  const { resolvedTheme } = useTheme()
+  const { diffStyle, wrapLines, changeMarkers: markers, lineNumbers, diffTextSize } = useAtomValue(settingsAtom)
+  return useMemo(() => {
+    const { fontSize, lineHeight } = textSizes[diffTextSize]
+    return {
+      options: {
+        ...changeMarkers[markers],
+        diffStyle,
+        themeType: resolvedTheme,
+        overflow: wrapLines ? ("wrap" as const) : ("scroll" as const),
+        disableLineNumbers: !lineNumbers,
+      },
+      style: { "--diffs-font-size": `${fontSize}px`, "--diffs-line-height": `${lineHeight}px` } as CSSProperties,
+      lineHeight,
+    }
+  }, [markers, diffStyle, resolvedTheme, wrapLines, lineNumbers, diffTextSize])
+}
+
+const lineDiffTypes = {
+  word: "word-alt",
+  char: "char",
+  none: "none",
+} as const satisfies Record<Settings["wordDiff"], LineDiffTypes>
+
+const poolSize = Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1))
+
+type RenderSettings = Pick<Settings, "wordDiff" | "diffTheme">
+
+const renderOptions = ({ wordDiff, diffTheme }: RenderSettings) => {
+  const { light, dark } = diffThemes[diffTheme]
+  return { lineDiffType: lineDiffTypes[wordDiff], theme: { light, dark } }
+}
+
+function SyncRenderOptions({ wordDiff, diffTheme }: RenderSettings) {
+  const pool = useWorkerPool()
+  useEffect(() => {
+    void pool?.setRenderOptions(renderOptions({ wordDiff, diffTheme }))
+  }, [pool, wordDiff, diffTheme])
+  return null
+}
+
+export function DiffWorkerPool({ children }: { children: ReactNode }) {
+  const { wordDiff, diffTheme } = useAtomValue(settingsAtom)
+  return (
+    <WorkerPoolContextProvider
+      poolOptions={{ workerFactory: () => new DiffsWorker(), poolSize }}
+      highlighterOptions={renderOptions({ wordDiff, diffTheme })}
+    >
+      <SyncRenderOptions wordDiff={wordDiff} diffTheme={diffTheme} />
+      {children}
+    </WorkerPoolContextProvider>
+  )
+}
+
 export function DiffStack({
   repo,
   items,
@@ -355,7 +434,7 @@ export function DiffStack({
   items: ReadonlyArray<DiffItem>
   header?: () => ReactNode
   actions?: (meta: DiffItemMeta) => ReactNode
-  viewRef?: Ref<CodeViewHandle<undefined, undefined>>
+  viewRef?: RefObject<CodeViewHandle<undefined, undefined> | null>
   lines?: LineSelectionProps
   collapse?: Collapse
 }) {
@@ -371,17 +450,15 @@ export function DiffStack({
   )
   const expandable = useMemo(() => expandableIds(items), [items])
   const notes = useMemo(() => new Map(items.map((item) => [item.id, hasText(item) ? null : noTextNote(item)])), [items])
-  const { resolvedTheme } = useTheme()
-  const { diffStyle, wrapLines } = useAtomValue(settingsAtom)
+  const { options: look, style, lineHeight } = useDiffAppearance()
   const selectable = lines !== undefined
   const options = useMemo(
     () => ({
-      diffStyle,
-      themeType: resolvedTheme,
-      overflow: wrapLines ? ("wrap" as const) : ("scroll" as const),
+      ...look,
       stickyHeaders: true,
       unsafeCSS: UNSAFE_CSS,
       itemMetrics: {
+        lineHeight,
         diffHeaderHeight: HEADER_HEIGHT,
         hunkSeparatorHeight: SEPARATOR_HEIGHT,
         spacing: 0,
@@ -390,17 +467,46 @@ export function DiffStack({
       },
       layout: { paddingTop: 0, paddingBottom: 8, gap: 0 },
       hunkSeparators: "line-info" as const,
-      lineDiffType: "word" as const,
       enableLineSelection: selectable,
       enableGutterUtility: selectable,
     }),
-    [resolvedTheme, diffStyle, wrapLines, selectable],
+    [look, lineHeight, selectable],
+  )
+  const [view, setView] = useState<CodeViewHandle<undefined, undefined> | null>(null)
+  const attachView = useCallback(
+    (handle: CodeViewHandle<undefined, undefined> | null) => {
+      setView(handle)
+      if (viewRef !== undefined) viewRef.current = handle
+    },
+    [viewRef],
+  )
+  const fileStep = (delta: 1 | -1) => () => {
+    const instance = view?.getInstance()
+    if (instance === undefined) return
+    const scrollTop = instance.getScrollTop()
+    const tops = shown.map((item) => instance.getTopForItem(item.id) ?? Number.POSITIVE_INFINITY)
+    const current = Math.max(
+      0,
+      tops.findLastIndex((top) => top <= scrollTop + 1),
+    )
+    const withinCurrent = (tops[current] ?? 0) < scrollTop - 1
+    const target = shown[delta === -1 && withinCurrent ? current : current + delta]
+    if (target !== undefined) view?.scrollTo({ type: "item", id: target.id, align: "start" })
+  }
+  const overlayOpen = useOverlayOpen()
+  useCommandKeys(
+    [
+      { id: "diff.nextFile", run: fileStep(1) },
+      { id: "diff.previousFile", run: fileStep(-1) },
+    ],
+    { enabled: !overlayOpen },
   )
   return (
     <CodeView
-      {...(viewRef === undefined ? {} : { ref: viewRef })}
+      ref={attachView}
       items={shown}
       options={options}
+      style={style}
       className="h-full overflow-auto overscroll-contain select-text"
       {...(header === undefined ? {} : { renderCodeViewHeader: header })}
       renderCustomHeader={(item) =>

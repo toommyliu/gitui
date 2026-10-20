@@ -125,5 +125,5 @@ export function useTallList({
   for (let index = view.first; index < Math.min(view.end, count); index++) {
     rows.push({ index, top: index * rowHeight - view.offset })
   }
-  return { ref: setElement, height: scrollHeight(total), rows, scrollToIndex }
+  return { ref: setElement, element, height: scrollHeight(total), rows, scrollToIndex }
 }

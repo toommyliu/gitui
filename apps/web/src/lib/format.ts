@@ -15,6 +15,23 @@ export const shortDate = (seconds: number, now = Date.now()) => {
   return otherYear.format(date)
 }
 
+const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto", style: "narrow" })
+
+const units = [
+  ["year", 31_536_000],
+  ["month", 2_592_000],
+  ["week", 604_800],
+  ["day", 86_400],
+  ["hour", 3_600],
+  ["minute", 60],
+] as const
+
+export const relativeDate = (seconds: number, now = Date.now()) => {
+  const age = Math.max(0, Math.round(now / 1000 - seconds))
+  const unit = units.find(([, size]) => age >= size)
+  return unit === undefined ? relative.format(0, "second") : relative.format(-Math.floor(age / unit[1]), unit[0])
+}
+
 export const longDate = (seconds: number) => full.format(new Date(seconds * 1000))
 
 export const shortOid = (oid: string) => oid.slice(0, 7)

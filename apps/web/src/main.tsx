@@ -1,6 +1,5 @@
 import { RegistryProvider } from "@effect/atom-react"
-import { WorkerPoolContextProvider } from "@pierre/diffs/react"
-import DiffsWorker from "@pierre/diffs/worker/worker.js?worker"
+import { HotkeysProvider } from "@tanstack/react-hotkeys"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { StrictMode } from "react"
@@ -9,9 +8,11 @@ import "./globals.css"
 import "./app.css"
 import { App } from "./App.tsx"
 import { ConfirmProvider } from "@/components/confirm"
+import { DiffWorkerPool } from "@/components/diff-view"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { PromptProvider } from "@/components/prompt"
 import { ThemeProvider, useTheme } from "@/components/theme-provider.tsx"
+import { appHotkeys, loadCustomHotkeys, saveCustomHotkeys } from "@/lib/commands"
 
 function ThemedToaster() {
   const { resolvedTheme } = useTheme()
@@ -26,26 +27,27 @@ document.addEventListener("pointerdown", (event) => {
   active.blur()
 })
 
-const poolSize = Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1))
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider defaultTheme="system">
       <RegistryProvider>
-        <WorkerPoolContextProvider
-          poolOptions={{ workerFactory: () => new DiffsWorker(), poolSize }}
-          highlighterOptions={{}}
-        >
-          <ConfirmProvider>
-            <PromptProvider>
-              <TooltipProvider>
-                <ErrorBoundary>
-                  <App />
-                </ErrorBoundary>
-              </TooltipProvider>
-            </PromptProvider>
-          </ConfirmProvider>
-        </WorkerPoolContextProvider>
+        <DiffWorkerPool>
+          <HotkeysProvider
+            appHotkeys={appHotkeys}
+            customHotkeys={loadCustomHotkeys()}
+            onCustomHotkeysChange={saveCustomHotkeys}
+          >
+            <ConfirmProvider>
+              <PromptProvider>
+                <TooltipProvider>
+                  <ErrorBoundary>
+                    <App />
+                  </ErrorBoundary>
+                </TooltipProvider>
+              </PromptProvider>
+            </ConfirmProvider>
+          </HotkeysProvider>
+        </DiffWorkerPool>
         <ThemedToaster />
       </RegistryProvider>
     </ThemeProvider>

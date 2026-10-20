@@ -5,7 +5,10 @@ import { Spinner } from "@/components/ui/spinner"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ArrowDownIcon, ArrowUpIcon, CheckIcon, CircleAlertIcon, RefreshCwIcon } from "lucide-react"
+import { useEffect, useEffectEvent } from "react"
+import { useCommand } from "@/lib/commands"
 import { networkDoneLabels, networkLabels, networkStateAtom, useNetwork } from "@/lib/git"
+import { settingsAtom } from "@/lib/settings"
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" })
 
@@ -15,6 +18,19 @@ export function SyncButtons({ repo, upstream }: { repo: RepoId; upstream: Tracki
   const network = useNetwork(repo)
   const state = useAtomValue(networkStateAtom(repo))
   const running = state?._tag === "Running" ? state : null
+  const idle = running === null
+  const { backgroundFetch } = useAtomValue(settingsAtom)
+  const fetchQuietly = useEffectEvent(() => {
+    if (idle) void network.run({ action: "Fetch" }, { quiet: true })
+  })
+  useEffect(() => {
+    if (backgroundFetch === "off") return
+    const timer = setInterval(fetchQuietly, Number(backgroundFetch) * 60_000)
+    return () => clearInterval(timer)
+  }, [backgroundFetch])
+  useCommand("repo.fetch", () => void network.run({ action: "Fetch" }), { enabled: idle })
+  useCommand("repo.pull", () => void network.run({ action: "Pull" }), { enabled: idle })
+  useCommand("repo.push", () => void network.run({ action: "Push" }), { enabled: idle })
   const behind = upstream?.behind ?? 0
   const ahead = upstream?.ahead ?? 0
   const from = upstream === null ? "" : ` from ${upstream.name}`

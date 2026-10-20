@@ -171,7 +171,11 @@ export class Repo extends Context.Service<
     readonly open: (path: string) => Effect.Effect<RepoInfo, RepoNotFound>
     readonly status: (repo: RepoId) => Effect.Effect<Status, GitError>
     readonly refs: (repo: RepoId) => Effect.Effect<Refs, GitError>
-    readonly openLog: (repo: RepoId, query: string) => Stream.Stream<LogHandle, GitError | LogExpired>
+    readonly openLog: (
+      repo: RepoId,
+      query: string,
+      remotes?: boolean,
+    ) => Stream.Stream<LogHandle, GitError | LogExpired>
     readonly logPage: (
       repo: RepoId,
       logId: string,
@@ -183,6 +187,7 @@ export class Repo extends Context.Service<
       repo: RepoId,
       target: DiffTarget,
       paths: ReadonlyArray<RepoPath>,
+      ignoreWhitespace?: boolean,
     ) => Effect.Effect<FileDiff, GitError>
     readonly stage: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
     readonly unstage: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
@@ -361,7 +366,7 @@ export class Repo extends Context.Service<
           return Scope.close(session.scope, Exit.void)
         })
 
-      const logSession = Effect.fn("Repo.logSession")(function* (repo: RepoId, search: string) {
+      const logSession = Effect.fn("Repo.logSession")(function* (repo: RepoId, search: string, remotes: boolean) {
         const parsed = parseLogQuery(search)
         const head = yield* hasHead(repo)
         const sha = shaCandidate(parsed)
@@ -372,7 +377,7 @@ export class Repo extends Context.Service<
                 okExitCodes: [1, 128],
               })).trim()
         const query = commit === "" ? parsed : parseLogQuery("")
-        const revs = commit === "" ? logRevArgs(head) : ["--no-walk", commit]
+        const revs = commit === "" ? logRevArgs(head, remotes) : ["--no-walk", commit]
         const tips = commit || (yield* git.text(repo, ["rev-parse", ...revs], { okExitCodes: [128] }))
         const logId = createHash("sha1")
           .update(`${tips}\0${JSON.stringify(query)}`)
@@ -413,10 +418,10 @@ export class Repo extends Context.Service<
         return { logId, session }
       })
 
-      const openLog = (repo: RepoId, search: string) =>
+      const openLog = (repo: RepoId, search: string, remotes = true) =>
         Stream.unwrap(
           Effect.gen(function* () {
-            const { logId, session } = yield* logSession(repo, search)
+            const { logId, session } = yield* logSession(repo, search, remotes)
             yield* want(session)
             const handle = (): LogHandle => ({
               logId,
@@ -446,8 +451,12 @@ export class Repo extends Context.Service<
         return { ...detail, files }
       })
 
-      const patchArgs = (target: DiffTarget, paths: ReadonlyArray<string>): ReadonlyArray<string> => {
-        const common = ["--no-ext-diff", "--no-color", "-M"]
+      const patchArgs = (
+        target: DiffTarget,
+        paths: ReadonlyArray<string>,
+        ignoreWhitespace: boolean,
+      ): ReadonlyArray<string> => {
+        const common = ["--no-ext-diff", "--no-color", "-M", ...(ignoreWhitespace ? ["-w"] : [])]
         switch (target._tag) {
           case "Commit":
             return [
@@ -471,15 +480,20 @@ export class Repo extends Context.Service<
         }
       }
 
-      const diff = Effect.fn("Repo.diff")(function* (repo: RepoId, target: DiffTarget, paths: ReadonlyArray<RepoPath>) {
+      const diff = Effect.fn("Repo.diff")(function* (
+        repo: RepoId,
+        target: DiffTarget,
+        paths: ReadonlyArray<RepoPath>,
+        ignoreWhitespace = false,
+      ) {
         const bytes =
           target._tag === "Untracked"
             ? Buffer.concat(
                 yield* Effect.forEach(paths.slice(0, MAX_UNTRACKED_DIFFS), (path) =>
-                  git.run(repo, patchArgs(target, [path]), { okExitCodes: [1] }),
+                  git.run(repo, patchArgs(target, [path], ignoreWhitespace), { okExitCodes: [1] }),
                 ),
               )
-            : yield* git.run(repo, patchArgs(target, paths))
+            : yield* git.run(repo, patchArgs(target, paths, ignoreWhitespace))
         if (bytes.length > MAX_PATCH_BYTES) return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
         const text = decoder.decode(bytes)
         const files = text.match(/^diff --git /gm)?.length ?? 0

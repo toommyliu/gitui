@@ -7,8 +7,7 @@ import {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu"
-import { toast } from "sonner"
-import { copyText } from "@/lib/clipboard"
+import { copyWithToast } from "@/lib/clipboard"
 import { shortOid } from "@/lib/format"
 import { latest, statusAtom, useGitAction } from "@/lib/git"
 import { useConfirm } from "./confirm"
@@ -113,16 +112,7 @@ export function CommitMenuItems({ repo, row }: { repo: RepoId; row: CommitRow })
         </ContextMenuSubContent>
       </ContextMenuSub>
       <ContextMenuSeparator />
-      <ContextMenuItem
-        onClick={() =>
-          copyText(oid).then(
-            () => toast.success("SHA copied", { description: oid }),
-            () => toast.error("Couldn't copy", { description: "This browser blocked clipboard access." }),
-          )
-        }
-      >
-        Copy SHA
-      </ContextMenuItem>
+      <ContextMenuItem onClick={() => void copyWithToast(oid, "SHA copied")}>Copy SHA</ContextMenuItem>
     </>
   )
 }

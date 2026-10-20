@@ -13,6 +13,7 @@ import { longDate, shortOid } from "@/lib/format"
 import { commitAtom, diffAtom, diffKey, latest } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
+import { settingsAtom } from "@/lib/settings"
 import { DiffStack, expandableIds, patchItems, useCollapse } from "./diff-view"
 import { ChangeLetter } from "./change-letter"
 import { Loading, Nothing } from "./loading"
@@ -94,7 +95,8 @@ export function CommitDetail({
   onHistory: (path: string) => void
 }) {
   const detail = latest(useAtomValue(commitAtom(`${repo}\n${oid}`)))
-  const diff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Commit", oid }))))
+  const { ignoreWhitespace } = useAtomValue(settingsAtom)
+  const diff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Commit", oid }, [], ignoreWhitespace))))
   const items = useMemo(() => (diff?._tag === "Patch" ? patchItems(oid, diff.patch) : []), [diff, oid])
   const collapse = useCollapse()
   const expandable = useMemo(() => expandableIds(items), [items])
@@ -312,7 +314,8 @@ function SingleFileDiff({
   onHistory: (path: string) => void
 }) {
   const paths = file.from === null ? [file.path] : [file.from, file.path]
-  const diff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Commit", oid }, paths))))
+  const { ignoreWhitespace } = useAtomValue(settingsAtom)
+  const diff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Commit", oid }, paths, ignoreWhitespace))))
   const items = useMemo(() => (diff?._tag === "Patch" ? patchItems("file", diff.patch) : []), [diff])
   if (diff === undefined) return <Loading label="Loading diff" />
   if (diff._tag === "TooLarge")

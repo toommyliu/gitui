@@ -107,15 +107,15 @@ export const saveDraftAtom = GitClient.runtime.fn(
   { concurrent: true },
 )
 
-export const logKey = (repo: RepoId, query: string) => JSON.stringify([repo, query])
+export const logKey = (repo: RepoId, query: string, remotes: boolean) => JSON.stringify([repo, query, remotes])
 
 export const logAtom = Atom.family((key: string) => {
-  const [repo, query] = JSON.parse(key) as [RepoId, string]
+  const [repo, query, remotes] = JSON.parse(key) as [RepoId, string, boolean]
   return GitClient.runtime
     .atom(
       Effect.gen(function* () {
         const client = yield* GitClient
-        return client("OpenLog", { repo, query })
+        return client("OpenLog", { repo, query, remotes })
       }).pipe(Stream.unwrap, Stream.retry(Schedule.spaced("1 second"))),
     )
     .pipe(GitClient.runtime.factory.withReactivity([keys.refs(repo)]))
@@ -142,13 +142,21 @@ export const commitAtom = Atom.family((key: string) => {
   return GitClient.query("GetCommit", { repo, oid }, { timeToLive: "2 minutes" })
 })
 
-export const diffKey = (repo: RepoId, target: DiffTarget, paths: ReadonlyArray<RepoPath> = []) =>
-  JSON.stringify([repo, target, paths])
+export const diffKey = (
+  repo: RepoId,
+  target: DiffTarget,
+  paths: ReadonlyArray<RepoPath> = [],
+  ignoreWhitespace = false,
+) => JSON.stringify([repo, target, paths, ignoreWhitespace && target._tag === "Commit"])
 
 export const diffAtom = Atom.family((key: string) => {
-  const [repo, target, paths] = JSON.parse(key) as [RepoId, DiffTarget, Array<RepoPath>]
+  const [repo, target, paths, ignoreWhitespace] = JSON.parse(key) as [RepoId, DiffTarget, Array<RepoPath>, boolean]
   const live = target._tag !== "Commit"
-  return GitClient.query("GetDiff", { repo, target, paths }, live ? { reactivityKeys: [keys.worktree(repo)] } : {})
+  return GitClient.query(
+    "GetDiff",
+    { repo, target, paths, ignoreWhitespace },
+    live ? { reactivityKeys: [keys.worktree(repo)] } : {},
+  )
 })
 
 export const watchAtom = Atom.family((repo: RepoId) =>
@@ -304,10 +312,11 @@ export const useNetwork = (repo: RepoId) => {
   const interrupt = useAtomSet(networkAtom(repo))
   const fail = useFailureToast()
   return {
-    run: async (request: NetworkRequest) => {
+    run: async (request: NetworkRequest, options?: { readonly quiet?: boolean }) => {
       const exit = await run(request)
       if (Exit.isSuccess(exit)) return true
-      if (!Cause.hasInterruptsOnly(exit.cause)) fail(networkLabels[request.action], exit.cause)
+      if (options?.quiet !== true && !Cause.hasInterruptsOnly(exit.cause))
+        fail(networkLabels[request.action], exit.cause)
       return false
     },
     cancel: () => interrupt(Atom.Interrupt),

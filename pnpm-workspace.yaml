@@ -2,6 +2,10 @@ packages:
   - "apps/*"
   - "packages/*"
 
+minimumReleaseAgeExclude:
+  - "@tanstack/react-hotkeys"
+  - "@tanstack/hotkeys"
+
 allowBuilds:
   electron: true
   esbuild: true

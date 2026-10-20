@@ -11,7 +11,6 @@ import { useState } from "react"
 import { desktop } from "@/lib/desktop"
 import { directoryAtom, latest } from "@/lib/git"
 import { settingsAtom } from "@/lib/settings"
-import { SettingsDialog } from "./settings-dialog"
 
 const CHOOSE = "choose"
 const SUGGESTED = new Set(["projects", "code", "src", "dev", "developer", "repos", "git", "github", "workspace"])
@@ -168,12 +167,9 @@ function Browser({
             )}
           </CommandList>
         </Command>
-        <div className="flex items-center gap-1.5 border-t py-1 pr-1 pl-3 text-muted-foreground">
+        <div className="flex h-8 items-center gap-1.5 border-t px-3 text-muted-foreground">
           <Kbd>Tab</Kbd>
           <span>goes into a folder</span>
-          <span className="ml-auto">
-            <SettingsDialog />
-          </span>
         </div>
       </div>
     </div>

@@ -18,6 +18,7 @@ import {
   useState,
 } from "react"
 import { copyText } from "@/lib/clipboard"
+import { useCommand } from "@/lib/commands"
 import { commandLogAtom, isFailure, latest, logOpenAtom, logSeenAtom } from "@/lib/git"
 import { Nothing } from "./loading"
 import { NetworkStatus } from "./network"
@@ -91,6 +92,7 @@ function Outcome({ entry }: { entry: CommandEntry }) {
 
 export function CommandLogDrawer({ repo, children }: { repo: RepoId; children: ReactNode }) {
   const [open, setOpen] = useAtom(logOpenAtom)
+  useCommand("log.toggle", () => setOpen(!open))
   const [seenId, setSeenId] = useAtom(logSeenAtom(repo))
   const log = latest(useAtomValue(commandLogAtom(repo)))
   const entries = log ?? []

@@ -28,7 +28,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "cn"
 import { ChevronRightIcon, GitBranchIcon } from "lucide-react"
 import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "react"
-import { basename, shortDate, shortOid } from "@/lib/format"
+import { useHistoryDate } from "@/lib/dates"
+import { basename, shortOid } from "@/lib/format"
 import { latest, refsAtom, statusAtom, useGitAction, useNetwork } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
@@ -330,6 +331,7 @@ function SidebarRow({
   onDelete: (branch: Branch) => void
 }) {
   const git = useGitAction()
+  const date = useHistoryDate()
   const confirm = useConfirm()
   const prompt = usePrompt()
   const network = useNetwork(repo)
@@ -532,7 +534,7 @@ function SidebarRow({
             <Line depth={1} onClick={() => select(stash.oid)}>
               <span className="w-3 shrink-0" />
               <span className="truncate">{stash.message}</span>
-              <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{shortDate(stash.time)}</span>
+              <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{date(stash.time)}</span>
             </Line>
           </ContextMenuTrigger>
           <ContextMenuContent>

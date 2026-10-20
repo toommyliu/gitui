@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Rpc from "effect/rpc/Rpc"
 import * as RpcGroup from "effect/rpc/RpcGroup"
@@ -69,7 +70,11 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("GetStatus", { payload: repo, success: Status, error: GitError }),
   Rpc.make("GetRefs", { payload: repo, success: Refs, error: GitError }),
   Rpc.make("OpenLog", {
-    payload: { repo: RepoId, query: Schema.String },
+    payload: {
+      repo: RepoId,
+      query: Schema.String,
+      remotes: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
+    },
     success: LogHandle,
     error: Schema.Union([GitError, LogExpired]),
     stream: true,
@@ -81,7 +86,12 @@ export class GitRpcs extends RpcGroup.make(
   }),
   Rpc.make("GetCommit", { payload: { repo: RepoId, oid: Oid }, success: CommitDetail, error: GitError }),
   Rpc.make("GetDiff", {
-    payload: { repo: RepoId, target: DiffTarget, paths: Schema.Array(RepoPath) },
+    payload: {
+      repo: RepoId,
+      target: DiffTarget,
+      paths: Schema.Array(RepoPath),
+      ignoreWhitespace: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+    },
     success: FileDiff,
     error: GitError,
   }),

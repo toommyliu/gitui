@@ -16,9 +16,13 @@ import { cn } from "cn"
 import { CloudIcon, SearchIcon } from "lucide-react"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import { memo, useCallback, useContext, useEffect, useMemo, useState } from "react"
-import { shortDate, shortOid } from "@/lib/format"
+import { copyWithToast } from "@/lib/clipboard"
+import { useCommandKeys } from "@/lib/commands"
+import { useHistoryDate } from "@/lib/dates"
+import { shortOid } from "@/lib/format"
 import { LOG_PAGE_SIZE, latest, logAtom, logKey, logPageAtom, logPageKey, refsAtom, statusAtom } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
+import { settingsAtom } from "@/lib/settings"
 import { useTallList } from "@/lib/tall-list"
 import { CommitMenuItems } from "./commit-menu"
 import { Nothing } from "./loading"
@@ -131,15 +135,18 @@ export function CommitList({
   onSelect,
   query,
   onQueryChange,
+  searchRef,
 }: {
   repo: RepoId
   selection: Selection
   onSelect: (selection: Selection) => void
   query: string
   onQueryChange: (query: string) => void
+  searchRef: React.RefObject<HTMLInputElement | null>
 }) {
   const search = useDebounced(query.trim(), 250)
-  const result = useAtomValue(logAtom(logKey(repo, search)))
+  const { historyRemotes } = useAtomValue(settingsAtom)
+  const result = useAtomValue(logAtom(logKey(repo, search, historyRemotes)))
   const current = latest(result)
   const [shown, setShown] = useState(current)
   if (current !== undefined && current !== shown) setShown(current)
@@ -190,13 +197,22 @@ export function CommitList({
     list.scrollToIndex(index)
   }
 
-  const onKeyDown = (event: React.KeyboardEvent) => {
-    const delta =
-      event.key === "ArrowDown" || event.key === "j" ? 1 : event.key === "ArrowUp" || event.key === "k" ? -1 : 0
-    if (delta === 0 || selectedIndex === -1) return
-    event.preventDefault()
-    selectIndex(selectedIndex + delta)
+  const step = (delta: number) => () => {
+    if (selectedIndex !== -1) selectIndex(selectedIndex + delta)
   }
+  useCommandKeys(
+    [
+      { id: "list.next", run: step(1) },
+      { id: "list.previous", run: step(-1) },
+      {
+        id: "history.copySha",
+        run: () => {
+          if (selection._tag === "Commit") void copyWithToast(selection.oid, "SHA copied")
+        },
+      },
+    ],
+    { target: list.element },
+  )
 
   const pending = current === undefined || search !== query.trim()
   const summary =
@@ -215,6 +231,7 @@ export function CommitList({
           <SearchIcon />
         </InputGroupAddon>
         <InputGroupInput
+          ref={searchRef}
           aria-label="Search history"
           placeholder="Search messages, author:name, path:file or a SHA"
           autoComplete="off"
@@ -247,7 +264,6 @@ export function CommitList({
           scrollbarClassName="opacity-0 transition-opacity duration-500 hover:opacity-100 hover:duration-150 data-scrolling:opacity-100 data-scrolling:duration-150"
           viewportProps={{
             tabIndex: 0,
-            onKeyDown,
             role: "listbox",
             "aria-label": "Commits",
             className: "[contain:strict] focus-visible:ring-0 focus-visible:outline-none",
@@ -320,6 +336,7 @@ const CommitRowView = memo(function CommitRowView({
   report: (lanes: number) => void
 }) {
   const page = useAtomValue(logPageAtom(logPageKey(repo, logId, Math.floor(index / LOG_PAGE_SIZE))))
+  const date = useHistoryDate()
   const row: CommitRow | undefined = latest(page)?.[index % LOG_PAGE_SIZE]
   useEffect(() => {
     if (row !== undefined) report(lanesUsed(row.graph))
@@ -355,7 +372,7 @@ const CommitRowView = memo(function CommitRowView({
           </span>
           <span className="hidden w-28 shrink-0 truncate text-muted-foreground @xl:block">{row.author}</span>
           <span className="hidden w-24 shrink-0 truncate text-right text-muted-foreground @md:block">
-            {shortDate(row.time)}
+            {date(row.time)}
           </span>
           <span className="hidden w-14 shrink-0 font-mono text-[11px] text-muted-foreground @3xl:block">
             {shortOid(row.oid)}

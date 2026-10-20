@@ -381,6 +381,49 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
     }),
   )
 
+  it.effect("leaves commits only a remote branch reaches out of the log when remotes are off", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.commit("base")
+      repo.git("checkout", "-q", "-b", "feature")
+      const remoteOnly = repo.commit("remote only")
+      repo.git("checkout", "-q", "main")
+      repo.git("update-ref", "refs/remotes/origin/feature", remoteOnly)
+      repo.git("branch", "-q", "-D", "feature")
+      const r = yield* Repo
+
+      const subjects = (remotes: boolean) =>
+        Effect.gen(function* () {
+          const handle = Option.getOrThrow(yield* Stream.runLast(r.openLog(id(repo.root), "", remotes)))
+          const rows = yield* r.logPage(id(repo.root), handle.logId, 0, 10)
+          return rows.map((row) => row.subject)
+        })
+      expect(yield* subjects(true)).toEqual(["remote only", "base"])
+      expect(yield* subjects(false)).toEqual(["base"])
+    }),
+  )
+
+  it.effect("drops whitespace-only lines from a commit diff when whitespace is ignored", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.write("a.txt", "one\ntwo\n")
+      repo.git("add", ".")
+      repo.commit("base")
+      repo.write("a.txt", "  one\nthree\n")
+      repo.git("add", ".")
+      const oid = repo.commit("reindent and change") as Oid
+      const r = yield* Repo
+
+      const patch = (ignoreWhitespace: boolean) =>
+        Effect.gen(function* () {
+          const diff = yield* r.diff(id(repo.root), { _tag: "Commit", oid }, [], ignoreWhitespace)
+          return diff._tag === "Patch" ? diff.patch.split("\n").filter((line) => /^[-+][^-+]/.test(line)) : []
+        })
+      expect(yield* patch(false)).toEqual(["-one", "-two", "+  one", "+three"])
+      expect(yield* patch(true)).toEqual(["-two", "+three"])
+    }),
+  )
+
   it.effect("diffs a stash with untracked files against its first parent only", () =>
     Effect.gen(function* () {
       const repo = makeRepo()

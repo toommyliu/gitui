@@ -2,7 +2,9 @@ import { useAtomMount } from "@effect/atom-react"
 import type { RepoId } from "@gitui/contracts"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { flushSync } from "react-dom"
+import { useCommand } from "@/lib/commands"
 import { pathQuery, watchAtom } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
@@ -28,6 +30,12 @@ export function Workspace({
   const [selection, setSelection] = useState<Selection>({ _tag: "WorkingCopy" })
   const [pane, setPane] = useState<Pane>("history")
   const [query, setQuery] = useState("")
+  const searchRef = useRef<HTMLInputElement>(null)
+  useCommand("history.search", () => {
+    if (narrow) flushSync(() => setPane("history"))
+    searchRef.current?.focus()
+    searchRef.current?.select()
+  })
   const showHistory = (path: string) => {
     setQuery(pathQuery(path))
     if (narrow) setPane("history")
@@ -55,7 +63,14 @@ export function Workspace({
     )
   const sidebar = <Sidebar repo={repo} selection={selection} onSelect={select} onOpen={onOpenWorktree} />
   const history = (
-    <CommitList repo={repo} selection={selection} onSelect={select} query={query} onQueryChange={setQuery} />
+    <CommitList
+      repo={repo}
+      selection={selection}
+      onSelect={select}
+      query={query}
+      onQueryChange={setQuery}
+      searchRef={searchRef}
+    />
   )
 
   return (

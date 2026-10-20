@@ -17,7 +17,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldLabel } from "@/components/ui/field"
-import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
@@ -35,12 +34,16 @@ import {
   selectedRows,
   type Side,
 } from "@/lib/file-selection"
+import { useAppHotkeys } from "@tanstack/react-hotkeys"
 import { diffAtom, diffKey, latest, statusAtom, useGitAction } from "@/lib/git"
+import { settingsAtom } from "@/lib/settings"
 import { hunkChanges, selectedChanges } from "@/lib/lines"
+import { type CommandId, type KeyBinding, useCommand, useCommandKeys } from "@/lib/commands"
 import { ChangeLetter } from "./change-letter"
 import { HistoryButton } from "./commit-detail"
 import { useConfirm } from "./confirm"
 import { Loading, Nothing } from "./loading"
+import { Shortcut } from "./shortcut"
 import { useStashPrompt } from "./stash-prompt"
 import { useDraft } from "@/lib/draft"
 import { ChevronDownIcon, ChevronRightIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from "lucide-react"
@@ -455,24 +458,38 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
       setAmend(false)
     }
   }
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  useCommandKeys([{ id: "commit.create", run: () => void commit() }], { target: textareaRef })
+  const commitHotkey = useAppHotkeys()["commit.create"].hotkey
+  const guide = useAtomValue(settingsAtom).subjectGuide
+  const subjectLength = message.split("\n", 1)[0]?.length ?? 0
 
   return (
     <div className="shrink-0 space-y-1.5 border-b p-2">
-      <Textarea
-        value={message}
-        onChange={(event) => setMessage(event.target.value)}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault()
-            void commit()
+      <div className="relative">
+        <Textarea
+          ref={textareaRef}
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          placeholder={
+            status.operation === null ? "Commit message" : `Commit message (${status.operation} in progress)`
           }
-        }}
-        placeholder={status.operation === null ? "Commit message" : `Commit message (${status.operation} in progress)`}
-        rows={3}
-        className="min-h-0 resize-none font-mono text-xs"
-      />
+          rows={3}
+          className={cn("min-h-0 resize-none font-mono text-xs", guide !== "off" && "pb-5")}
+        />
+        {guide !== "off" && subjectLength > 0 && (
+          <span
+            className={cn(
+              "pointer-events-none absolute right-2 bottom-1.5 text-[11px] tabular-nums",
+              subjectLength > Number(guide) ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {subjectLength}/{guide}
+          </span>
+        )}
+      </div>
       <div className="flex items-center gap-2">
         <Field orientation="horizontal" className="w-auto">
           <Checkbox id={`amend-${repo}`} checked={amend} onCheckedChange={setAmend} />
@@ -499,10 +516,7 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
             : stagedCount > 0
               ? `Commit ${stagedCount} ${stagedCount === 1 ? "file" : "files"}`
               : "Commit"}
-          <KbdGroup className="max-md:hidden">
-            <Kbd>⌘</Kbd>
-            <Kbd>↩</Kbd>
-          </KbdGroup>
+          {commitHotkey !== null && <Shortcut hotkey={commitHotkey} className="max-md:hidden" />}
         </Button>
       </div>
     </div>
@@ -539,6 +553,12 @@ function FileLists({
   const stagedViewport = useRef<HTMLDivElement>(null)
   const viewports = { unstaged: unstagedViewport, staged: stagedViewport }
   const [closed, setClosed] = useState<ReadonlySet<Side>>(() => new Set())
+  const [focusRequest, setFocusRequest] = useState<{ readonly side: Side } | null>(null)
+  useEffect(() => {
+    if (focusRequest === null) return
+    const viewport = focusRequest.side === "unstaged" ? unstagedViewport : stagedViewport
+    viewport.current?.focus({ preventScroll: true })
+  }, [focusRequest])
 
   const toggleSection = (side: Side) => {
     const next = new Set(closed)
@@ -550,32 +570,54 @@ function FileLists({
   const select = (next: FileSelection | null, reveal: boolean) => {
     setSelection(next)
     if (next === null) return
-    viewports[next.side].current?.focus({ preventScroll: true })
+    setFocusRequest({ side: next.side })
     if (reveal) onReveal(lists[next.side][next.leadIndex]!)
   }
 
-  const onKeyDown = (side: Side) => (event: React.KeyboardEvent) => {
-    if (event.target !== event.currentTarget && (event.target as HTMLElement).getAttribute("role") !== "option") return
+  const fileKeys = (side: Side): ReadonlyArray<KeyBinding> => {
     const current = selection?.side === side ? selection : null
-    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
-    const mod = event.metaKey || event.ctrlKey
-    const delta = key === "ArrowDown" || key === "j" ? 1 : key === "ArrowUp" || key === "k" ? -1 : 0
-    if (delta !== 0 && !mod && !event.altKey) {
-      const next = move(current, lists, side, delta, event.shiftKey)
+    const step = (delta: 1 | -1, extend: boolean) => () => {
+      const next = move(current, lists, side, delta, extend)
       if (next !== current && (next === null || !closed.has(next.side))) select(next, true)
-    } else if (mod && key === "a") {
-      select(selectAll(lists, side), false)
-    } else if (key === "Escape" && current !== null) {
-      setSelection(null)
-    } else if (key === " " && current !== null) {
-      if (side === "staged") onUnstage(selected)
-      else onStage(selected)
-    } else if ((key === "Backspace" || key === "Delete") && current !== null && side === "unstaged") {
-      const rows = selected.filter((r) => r.area !== "conflicted")
-      if (rows.length > 0) onDiscard(rows)
-    } else return
-    event.preventDefault()
+    }
+    const bindings: ReadonlyArray<readonly [CommandId, () => void]> = [
+      ["list.next", step(1, false)],
+      ["list.previous", step(-1, false)],
+      ["files.extendNext", step(1, true)],
+      ["files.extendPrevious", step(-1, true)],
+      ["files.selectAll", () => select(selectAll(lists, side), false)],
+      ["files.clear", () => setSelection(null)],
+      [
+        "files.stage",
+        () => {
+          if (current === null) return
+          if (side === "staged") onUnstage(selected)
+          else onStage(selected)
+        },
+      ],
+      [
+        "files.discard",
+        () => {
+          const rows = selected.filter((r) => r.area !== "conflicted")
+          if (current !== null && side === "unstaged" && rows.length > 0) onDiscard(rows)
+        },
+      ],
+    ]
+    return bindings.map(([id, run]) => ({
+      id,
+      run: (event) => {
+        const target = event.target
+        if (target !== event.currentTarget && !(target instanceof Element && target.role === "option")) return
+        event.preventDefault()
+        run()
+      },
+    }))
   }
+  useCommand("files.stageAll", () => onStage(unstaged), { enabled: unstaged.length > 0 })
+  useCommand("files.unstageAll", () => onUnstage(staged), { enabled: staged.length > 0 })
+  const listKeys = { preventDefault: false, stopPropagation: false }
+  useCommandKeys(fileKeys("unstaged"), { ...listKeys, target: unstagedViewport })
+  useCommandKeys(fileKeys("staged"), { ...listKeys, target: stagedViewport })
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -589,7 +631,6 @@ function FileLists({
           selection={selection?.side === side ? selection : null}
           selected={selection?.side === side ? selected : []}
           viewportRef={viewports[side]}
-          onKeyDown={onKeyDown(side)}
           onClick={(row, mode) => select(click(selection, lists, side, row.path, mode), mode === "only")}
           diffToggle={diffToggle}
           sides={sides}
@@ -619,7 +660,6 @@ function FileSection({
   selection,
   selected,
   viewportRef,
-  onKeyDown,
   onClick,
   diffToggle,
   ...actions
@@ -631,7 +671,6 @@ function FileSection({
   selection: FileSelection | null
   selected: ReadonlyArray<FileRow>
   viewportRef: React.RefObject<HTMLDivElement | null>
-  onKeyDown: (event: React.KeyboardEvent) => void
   onClick: (row: FileRow, mode: ClickMode) => void
   diffToggle: (side: Side) => ReactNode
 }) {
@@ -670,7 +709,6 @@ function FileSection({
         scrollbarClassName="opacity-0 transition-opacity duration-500 hover:opacity-100 hover:duration-150 data-scrolling:opacity-100 data-scrolling:duration-150"
         viewportProps={{
           tabIndex: open && rows.length > 0 ? 0 : -1,
-          onKeyDown,
           role: "listbox",
           "aria-label": `${label} files`,
           "aria-multiselectable": true,

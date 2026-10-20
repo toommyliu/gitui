@@ -5,11 +5,67 @@ const decoder = new TextDecoder()
 
 export const forEachRefArgs = [
   "for-each-ref",
-  "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(symref)",
+  "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(upstream)%00%(upstream:short)%00%(symref)",
   "refs/heads",
   "refs/remotes",
   "refs/tags",
 ]
+
+const rows = (bytes: Uint8Array) =>
+  decoder
+    .decode(bytes)
+    .split("\n")
+    .flatMap((line) => (line === "" ? [] : [line.split("\0")]))
+
+export interface RefRow {
+  readonly ref: string
+  readonly oid: string
+  readonly peeled: string
+  readonly upstream: string
+  readonly upstreamName: string
+  readonly symref: string
+}
+
+export const parseRefRows = (bytes: Uint8Array): Array<RefRow> =>
+  rows(bytes).map(([ref = "", oid = "", peeled = "", upstream = "", upstreamName = "", symref = ""]) => ({
+    ref,
+    oid,
+    peeled,
+    upstream,
+    upstreamName,
+    symref,
+  }))
+
+const pairKey = (oid: string, upstreamOid: string) => `${oid} ${upstreamOid}`
+
+export const trackingPairs = (refs: ReadonlyArray<RefRow>) => {
+  const oids = new Map(refs.map((row) => [row.ref, row.oid]))
+  const pairs = new Map<string, readonly [branch: string, upstream: string]>()
+  for (const row of refs) {
+    const upstreamOid = oids.get(row.upstream)
+    if (row.ref.startsWith("refs/heads/") && upstreamOid !== undefined) {
+      pairs.set(pairKey(row.oid, upstreamOid), [row.ref, row.upstream])
+    }
+  }
+  return pairs
+}
+
+export const trackArgs = (refs: Iterable<string>) => [
+  "for-each-ref",
+  "--format=%(refname)%00%(objectname)%00%(upstream)%00%(upstream:track,nobracket)",
+  ...refs,
+]
+
+export const parseTracks = (bytes: Uint8Array): Map<string, string> => {
+  const parsed = rows(bytes)
+  const oids = new Map(parsed.map(([ref = "", oid = ""]) => [ref, oid]))
+  const tracks = new Map<string, string>()
+  for (const [, oid = "", upstream = "", track = ""] of parsed) {
+    const upstreamOid = oids.get(upstream)
+    if (upstreamOid !== undefined) tracks.set(pairKey(oid, upstreamOid), track)
+  }
+  return tracks
+}
 
 const parseUpstream = (name: string, track: string): Upstream | null => {
   if (name === "") return null
@@ -25,18 +81,23 @@ export interface ParsedRefs {
   readonly tags: ReadonlyArray<Tag>
 }
 
-export const parseRefs = (bytes: Uint8Array, remotes: ReadonlyArray<Remote>): ParsedRefs => {
+export const parseRefs = (
+  refs: ReadonlyArray<RefRow>,
+  remotes: ReadonlyArray<Remote>,
+  tracks: ReadonlyMap<string, string>,
+): ParsedRefs => {
   const branches: Array<Branch> = []
   const remoteBranches: Array<RemoteBranch> = []
   const tags: Array<Tag> = []
   const remoteNames = remotes.map((r) => r.name).sort((a, b) => b.length - a.length)
+  const oids = new Map(refs.map((row) => [row.ref, row.oid]))
 
-  for (const line of decoder.decode(bytes).split("\n")) {
-    if (line === "") continue
-    const [ref = "", oid = "", peeled = "", upstream = "", track = "", symref = ""] = line.split("\0")
+  for (const { ref, oid, peeled, upstream, upstreamName, symref } of refs) {
     if (symref !== "") continue
     if (ref.startsWith("refs/heads/")) {
-      branches.push({ name: ref.slice(11), oid: oid as Oid, upstream: parseUpstream(upstream, track) })
+      const upstreamOid = oids.get(upstream)
+      const track = upstreamOid === undefined ? "gone" : (tracks.get(pairKey(oid, upstreamOid)) ?? "")
+      branches.push({ name: ref.slice(11), oid: oid as Oid, upstream: parseUpstream(upstreamName, track) })
     } else if (ref.startsWith("refs/remotes/")) {
       const name = ref.slice(13)
       const remote = remoteNames.find((r) => name.startsWith(`${r}/`)) ?? name.slice(0, name.indexOf("/"))

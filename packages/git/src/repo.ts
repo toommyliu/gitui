@@ -1,6 +1,7 @@
-import { createHash } from "node:crypto"
+import { spawn } from "node:child_process"
+import { createHash, randomBytes } from "node:crypto"
 import { existsSync } from "node:fs"
-import { basename, join, resolve } from "node:path"
+import { basename, dirname, join, resolve } from "node:path"
 import {
   type CommitDetail,
   type CommitRow,
@@ -17,6 +18,7 @@ import {
   type RepoInfo,
   type RepoPath,
   type Status,
+  type Worktree,
   GitError,
   LogExpired,
   RepoNotFound,
@@ -40,12 +42,16 @@ import { hasGraph, logArgs, logRevArgs, parseLogQuery, shaCandidate } from "./lo
 import { LogStore } from "./log-store.ts"
 import {
   forEachRefArgs,
+  parseRefRows,
   parseRefs,
   parseRemotes,
   parseStashes,
+  parseTracks,
   parseWorktrees,
   remotesArgs,
   stashArgs,
+  trackArgs,
+  trackingPairs,
   worktreeArgs,
 } from "./refs.ts"
 import { parseFilePatch, selectLines } from "./patch.ts"
@@ -53,6 +59,20 @@ import { parseStatus, statusArgs } from "./status.ts"
 
 const chunks = <T>(items: ReadonlyArray<T>, size: number) =>
   Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size))
+
+// A separate process finishes the delete even if the server exits first, and keeps the unlinks off
+// libuv's threadpool, which every git spawn needs for its fs.access of the working directory.
+const deleteInBackground = (path: string) =>
+  spawn(
+    process.execPath,
+    ["-e", `require("node:fs").rmSync(process.argv[1], { recursive: true, force: true })`, path],
+    {
+      detached: true,
+      stdio: "ignore",
+    },
+  )
+    .on("error", () => {})
+    .unref()
 
 const MAX_UNTRACKED_DIFFS = 50
 const MAX_PATCH_BYTES = 4 * 1024 * 1024
@@ -301,6 +321,8 @@ export class Repo extends Context.Service<
           yield* run(repo, yield* operationCommand(repo, step))
         })
 
+      const tracks = new Map<RepoId, ReadonlyMap<string, string>>()
+
       const refs = Effect.fn("Repo.refs")(function* (repo: RepoId) {
         const [remotesOut, refsOut, stashOut, worktreeOut] = yield* Effect.all(
           [
@@ -311,9 +333,21 @@ export class Repo extends Context.Service<
           ],
           { concurrency: 4 },
         )
+        const rows = parseRefRows(refsOut)
+        const pairs = trackingPairs(rows)
+        const known = tracks.get(repo) ?? new Map<string, string>()
+        const missing = new Set([...pairs].flatMap(([key, refs]) => (known.has(key) ? [] : refs)))
+        const fresh =
+          missing.size === 0 ? new Map<string, string>() : parseTracks(yield* git.run(repo, trackArgs(missing)))
+        const current = new Map<string, string>()
+        for (const key of pairs.keys()) {
+          const track = known.get(key) ?? fresh.get(key)
+          if (track !== undefined) current.set(key, track)
+        }
+        tracks.set(repo, current)
         const remotes = parseRemotes(remotesOut)
         return {
-          ...parseRefs(refsOut, remotes),
+          ...parseRefs(rows, remotes, current),
           remotes,
           stashes: parseStashes(stashOut),
           worktrees: parseWorktrees(worktreeOut),
@@ -539,8 +573,65 @@ export class Repo extends Context.Service<
       const draftError = (action: string, error: PlatformError) =>
         new GitError({ args: [], exitCode: -1, stderr: `Couldn't ${action} the commit draft: ${error.message}` })
 
-      const removeWorktree = (repo: RepoId, path: string, force: boolean) =>
-        run(repo, ["worktree", "remove", ...(force ? ["--force", "--force"] : []), path])
+      const worktreesOf = (repo: RepoId) => Effect.map(git.run(repo, worktreeArgs), parseWorktrees)
+
+      const removeWorktreeArgs = (path: string, force: boolean) => [
+        "worktree",
+        "remove",
+        ...(force ? ["--force", "--force"] : []),
+        path,
+      ]
+
+      // `git worktree remove` skips its clean and submodule checks when the directory is already gone,
+      // so they run here, before the directory moves.
+      const cleanForRemoval = Effect.fn("Repo.cleanForRemoval")(function* (worktree: Worktree) {
+        const [status, index, gitDir] = yield* Effect.all(
+          [
+            git.text(worktree.path, ["status", "--porcelain", "--ignore-submodules=none"]),
+            git.text(worktree.path, ["ls-files", "--stage", "-z"]),
+            git.text(worktree.path, ["rev-parse", "--absolute-git-dir"]),
+          ],
+          { concurrency: 3 },
+        )
+        const populatedSubmodule = index
+          .split("\0")
+          .some(
+            (entry) =>
+              entry.startsWith("160000 ") &&
+              existsSync(join(worktree.path, entry.slice(entry.indexOf("\t") + 1), ".git")),
+          )
+        return status === "" && !populatedSubmodule && !existsSync(join(gitDir.trim(), "modules"))
+      })
+
+      const removeListedWorktree = Effect.fn("Repo.removeListedWorktree")(function* (
+        repo: RepoId,
+        worktree: Worktree,
+        force: boolean,
+      ) {
+        const remove = run(repo, removeWorktreeArgs(worktree.path, force))
+        const movable =
+          !worktree.isMain &&
+          worktree.prunable === null &&
+          (force || (worktree.locked === null && (yield* cleanForRemoval(worktree))))
+        if (!movable) return yield* remove
+        const trash = join(
+          dirname(worktree.path),
+          `.${basename(worktree.path)}.removing-${randomBytes(4).toString("hex")}`,
+        )
+        const moved = yield* fs.rename(worktree.path, trash).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false),
+        )
+        if (!moved) return yield* remove
+        yield* remove.pipe(Effect.tapError(() => Effect.ignore(fs.rename(trash, worktree.path))))
+        yield* Effect.sync(() => deleteInBackground(trash))
+      })
+
+      const removeWorktree = Effect.fn("Repo.removeWorktree")(function* (repo: RepoId, path: string, force: boolean) {
+        const worktree = (yield* worktreesOf(repo)).find((candidate) => candidate.path === path)
+        if (worktree === undefined) return yield* run(repo, removeWorktreeArgs(path, force))
+        yield* removeListedWorktree(repo, worktree, force)
+      })
 
       const pushArgs = Effect.fn("Repo.pushArgs")(function* (repo: RepoId) {
         const { head, upstream } = yield* status(repo)
@@ -627,10 +718,9 @@ export class Repo extends Context.Service<
         deleteBranch: Effect.fn("Repo.deleteBranch")(function* (repo, name, force, alsoRemoveWorktree) {
           if (!force) yield* ensureMerged(repo, name)
           if (alsoRemoveWorktree) {
-            const worktrees = parseWorktrees(yield* git.run(repo, worktreeArgs))
-            for (const worktree of worktrees) {
+            for (const worktree of yield* worktreesOf(repo)) {
               if (worktree.isMain || worktree.head._tag !== "Branch" || worktree.head.name !== name) continue
-              yield* removeWorktree(repo, worktree.path, true)
+              yield* removeListedWorktree(repo, worktree, true)
             }
           }
           yield* run(repo, ["branch", force ? "-D" : "-d", name])

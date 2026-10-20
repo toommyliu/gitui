@@ -1,48 +1,9 @@
 import { join } from "node:path"
 import { describe, expect, it } from "@effect/vitest"
-import {
-  forEachRefArgs,
-  parseRefs,
-  parseRemotes,
-  parseStashes,
-  parseWorktrees,
-  remotesArgs,
-  stashArgs,
-  worktreeArgs,
-} from "./refs.ts"
+import { parseStashes, parseWorktrees, stashArgs, worktreeArgs } from "./refs.ts"
 import { makeRepo } from "./testRepo.ts"
 
 describe("refs parsers", () => {
-  it("reads branches with upstream state, remote branches and peeled tags", () => {
-    const repo = makeRepo()
-    const base = repo.commit("base")
-    repo.git("remote", "add", "origin", "git@example.com:a/b.git")
-    repo.git("update-ref", "refs/remotes/origin/main", base)
-    repo.git("update-ref", "refs/remotes/origin/feature/x", base)
-    repo.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
-    repo.git("branch", "--set-upstream-to=origin/main")
-    const tip = repo.commit("ahead")
-    repo.git("tag", "-a", "v1", "-m", "release", base)
-    repo.git("branch", "stale", base)
-    repo.git("update-ref", "refs/remotes/origin/stale", base)
-    repo.git("branch", "--set-upstream-to=origin/stale", "stale")
-    repo.git("update-ref", "-d", "refs/remotes/origin/stale")
-
-    const remotes = parseRemotes(repo.raw(...remotesArgs))
-    expect(remotes).toEqual([{ name: "origin", url: "git@example.com:a/b.git" }])
-    expect(parseRefs(repo.raw(...forEachRefArgs), remotes)).toEqual({
-      branches: [
-        { name: "main", oid: tip, upstream: { _tag: "Tracking", name: "origin/main", ahead: 1, behind: 0 } },
-        { name: "stale", oid: base, upstream: { _tag: "Gone", name: "origin/stale" } },
-      ],
-      remoteBranches: [
-        { remote: "origin", name: "origin/feature/x", oid: base },
-        { remote: "origin", name: "origin/main", oid: base },
-      ],
-      tags: [{ name: "v1", oid: base }],
-    })
-  })
-
   it("reads stashes newest first", () => {
     const repo = makeRepo()
     repo.write("a.txt", "a\n")

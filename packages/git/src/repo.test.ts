@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import { basename, dirname, join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
 import type { Oid, RepoId, RepoPath } from "@gitui/contracts"
@@ -14,6 +14,11 @@ import { fixtureEnv, makeRepo } from "./testRepo.ts"
 
 const id = (root: string) => root as RepoId
 const p = (path: string) => path as RepoPath
+const listedWorktree = (porcelain: string, suffix: string) =>
+  porcelain
+    .split("\n")
+    .find((line) => line.startsWith("worktree ") && line.endsWith(suffix))!
+    .slice("worktree ".length)
 
 layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeServices.layer)))("Repo", (it) => {
   it.effect("pages the log in order on demand and reports the full count once loaded", () =>
@@ -168,6 +173,147 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       expect(result.stderr).toBe("wip has 1 commit that HEAD doesn't contain. Nothing was deleted.")
       expect(readFileSync(join(linked, "dirty.txt"), "utf8")).toBe("keep me\n")
       expect(repo.git("branch", "--list", "wip")).toBe("+ wip")
+    }),
+  )
+
+  it.effect("removes a clean worktree with ignored files and leaves nothing behind", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.write(".gitignore", "node_modules/\n")
+      repo.git("add", ".")
+      repo.commit("base")
+      repo.git("worktree", "add", "-q", "-b", "clean", `${repo.root}-clean`)
+      const path = listedWorktree(repo.git("worktree", "list", "--porcelain"), "-clean")
+      mkdirSync(join(path, "node_modules", "pkg"), { recursive: true })
+      writeFileSync(join(path, "node_modules", "pkg", "index.js"), "module.exports = 1\n")
+
+      yield* (yield* Repo).removeWorktree(id(repo.root), path, false)
+      expect(existsSync(path)).toBe(false)
+      expect(repo.git("worktree", "list", "--porcelain")).not.toContain(path)
+      const leftovers = () => readdirSync(dirname(path)).filter((name) => name.startsWith(`.${basename(path)}.`))
+      for (let i = 0; i < 100 && leftovers().length > 0; i++) {
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)))
+      }
+      expect(leftovers()).toEqual([])
+    }),
+  )
+
+  it.effect("keeps a worktree with untracked files unless the removal is forced", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.commit("base")
+      repo.git("worktree", "add", "-q", "-b", "notes", `${repo.root}-notes`)
+      const path = listedWorktree(repo.git("worktree", "list", "--porcelain"), "-notes")
+      writeFileSync(join(path, "notes.txt"), "keep me\n")
+      const r = yield* Repo
+
+      const error = yield* Effect.flip(r.removeWorktree(id(repo.root), path, false))
+      expect(error.summary).toBe(`'${path}' contains modified or untracked files, use --force to delete it`)
+      expect(readFileSync(join(path, "notes.txt"), "utf8")).toBe("keep me\n")
+      yield* r.removeWorktree(id(repo.root), path, true)
+      expect(existsSync(path)).toBe(false)
+    }),
+  )
+
+  it.effect("keeps a locked worktree unless the removal is forced", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.commit("base")
+      repo.git("worktree", "add", "-q", "-b", "agent", `${repo.root}-locked`)
+      const path = listedWorktree(repo.git("worktree", "list", "--porcelain"), "-locked")
+      repo.git("worktree", "lock", "--reason", "agent running", path)
+      const r = yield* Repo
+
+      const error = yield* Effect.flip(r.removeWorktree(id(repo.root), path, false))
+      expect(error.summary).toBe("Cannot remove a locked working tree, lock reason: agent running")
+      expect(existsSync(join(path, ".git"))).toBe(true)
+      yield* r.removeWorktree(id(repo.root), path, true)
+      expect(existsSync(path)).toBe(false)
+    }),
+  )
+
+  it.effect("keeps a worktree with a checked-out submodule unless the removal is forced", () =>
+    Effect.gen(function* () {
+      const library = makeRepo()
+      library.commit("library")
+      const repo = makeRepo()
+      repo.commit("base")
+      repo.git("-c", "protocol.file.allow=always", "submodule", "add", "-q", library.root, "lib")
+      repo.git("commit", "-q", "-m", "add lib")
+      repo.git("worktree", "add", "-q", "-b", "sub", `${repo.root}-sub`)
+      const path = listedWorktree(repo.git("worktree", "list", "--porcelain"), "-sub")
+      execFileSync("git", ["-c", "protocol.file.allow=always", "submodule", "update", "-q", "--init"], {
+        cwd: path,
+        env: fixtureEnv(),
+      })
+      const r = yield* Repo
+
+      const error = yield* Effect.flip(r.removeWorktree(id(repo.root), path, false))
+      expect(error.summary).toBe("Working trees containing submodules cannot be moved or removed")
+      expect(existsSync(join(path, "lib", ".git"))).toBe(true)
+      yield* r.removeWorktree(id(repo.root), path, true)
+      expect(existsSync(path)).toBe(false)
+    }),
+  )
+
+  it.effect("reads branches with upstream state, remote branches and peeled tags", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      const base = repo.commit("base")
+      repo.git("remote", "add", "origin", "git@example.com:a/b.git")
+      repo.git("update-ref", "refs/remotes/origin/main", base)
+      repo.git("update-ref", "refs/remotes/origin/feature/x", base)
+      repo.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+      repo.git("branch", "--set-upstream-to=origin/main")
+      const tip = repo.commit("ahead")
+      repo.git("tag", "-a", "v1", "-m", "release", base)
+      repo.git("branch", "stale", base)
+      repo.git("update-ref", "refs/remotes/origin/stale", base)
+      repo.git("branch", "--set-upstream-to=origin/stale", "stale")
+      repo.git("update-ref", "-d", "refs/remotes/origin/stale")
+
+      const { branches, remoteBranches, tags, remotes } = yield* (yield* Repo).refs(id(repo.root))
+      expect({ branches, remoteBranches, tags, remotes }).toEqual({
+        branches: [
+          { name: "main", oid: tip, upstream: { _tag: "Tracking", name: "origin/main", ahead: 1, behind: 0 } },
+          { name: "stale", oid: base, upstream: { _tag: "Gone", name: "origin/stale" } },
+        ],
+        remoteBranches: [
+          { remote: "origin", name: "origin/feature/x", oid: base },
+          { remote: "origin", name: "origin/main", oid: base },
+        ],
+        tags: [{ name: "v1", oid: base }],
+        remotes: [{ name: "origin", url: "git@example.com:a/b.git" }],
+      })
+    }),
+  )
+
+  it.effect("recounts ahead and behind whenever a branch or its upstream moves", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      const base = repo.commit("base")
+      repo.git("remote", "add", "origin", "git@example.com:a/b.git")
+      repo.git("update-ref", "refs/remotes/origin/main", base)
+      repo.git("branch", "--set-upstream-to=origin/main")
+      const r = yield* Repo
+      const counts = Effect.map(r.refs(id(repo.root)), ({ branches }) => {
+        const upstream = branches.find((branch) => branch.name === "main")?.upstream
+        return upstream?._tag === "Tracking" ? [upstream.ahead, upstream.behind] : upstream
+      })
+
+      expect(yield* counts).toEqual([0, 0])
+      repo.commit("local")
+      expect(yield* counts).toEqual([1, 0])
+      repo.git(
+        "update-ref",
+        "refs/remotes/origin/main",
+        repo.git("commit-tree", "HEAD^{tree}", "-p", base, "-m", "theirs"),
+      )
+      expect(yield* counts).toEqual([1, 1])
+      repo.git("reset", "-q", "--hard", base)
+      expect(yield* counts).toEqual([0, 1])
+      repo.git("update-ref", "refs/remotes/origin/main", base)
+      expect(yield* counts).toEqual([0, 0])
     }),
   )
 

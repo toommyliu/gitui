@@ -132,6 +132,47 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
       }),
     )
 
+    it.effect("lists the files that block a checkout", () =>
+      Effect.gen(function* () {
+        const repo = makeRepo()
+        repo.commit("base")
+        repo.git("switch", "-q", "-c", "topic")
+        for (const name of ["a", "b", "c", "d", "e"]) repo.write(`${name}.txt`, "topic\n")
+        repo.git("add", ".")
+        repo.commit("topic files")
+        repo.git("switch", "-q", "main")
+        for (const name of ["a", "b"]) repo.write(`${name}.txt`, "mine\n")
+        repo.git("add", ".")
+        repo.commit("main files")
+        for (const name of ["a", "b"]) repo.write(`${name}.txt`, "dirty\n")
+        for (const name of ["c", "d", "e"]) repo.write(`${name}.txt`, "untracked\n")
+
+        const error = yield* Effect.flip((yield* Repo).checkout(id(repo.root), "topic"))
+        expect(error.summary).toBe(
+          "Your local changes to the following files would be overwritten by checkout: a.txt, b.txt\n" +
+            "The following untracked working tree files would be overwritten by checkout: c.txt, d.txt, e.txt",
+        )
+      }),
+    )
+
+    it.effect("shortens a long list of blocking files", () =>
+      Effect.gen(function* () {
+        const repo = makeRepo()
+        repo.commit("base")
+        repo.git("switch", "-q", "-c", "topic")
+        for (const name of ["a", "b", "c", "d", "e"]) repo.write(`${name}.txt`, "topic\n")
+        repo.git("add", ".")
+        repo.commit("topic files")
+        repo.git("switch", "-q", "main")
+        for (const name of ["a", "b", "c", "d", "e"]) repo.write(`${name}.txt`, "untracked\n")
+
+        const error = yield* Effect.flip((yield* Repo).merge(id(repo.root), "topic"))
+        expect(error.summary).toBe(
+          "The following untracked working tree files would be overwritten by merge: a.txt, b.txt, c.txt and 2 more",
+        )
+      }),
+    )
+
     it.effect("stashes untracked files when asked", () =>
       Effect.gen(function* () {
         const repo = makeRepo()

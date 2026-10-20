@@ -221,11 +221,29 @@ const actionAtom = GitClient.runtime.fn(
 
 const useFailureToast = () => {
   const setLogOpen = useAtomSet(logOpenAtom)
-  return (label: string, cause: Cause.Cause<ActionError>) =>
+  return (
+    label: string,
+    cause: Cause.Cause<ActionError>,
+    recover?: { readonly label: string; readonly onClick: () => void },
+  ) => {
+    const log = { label: "Show log", onClick: () => setLogOpen(true) }
     toast.error(`${label} failed`, {
       description: describeFailure(cause),
-      action: { label: "Show log", onClick: () => setLogOpen(true) },
+      ...(recover === undefined
+        ? { action: log, classNames: { description: "whitespace-pre-line" } }
+        : {
+            action: recover,
+            cancel: log,
+            classNames: {
+              toast: "flex-wrap!",
+              // Sonner's icon row is 23px: a 16px icon, -3px and 4px margins, and the 6px gap.
+              content: "basis-[calc(100%-23px)]!",
+              description: "whitespace-pre-line",
+              actionButton: "ml-0!",
+            },
+          }),
     })
+  }
 }
 
 export const useGitAction = () => {
@@ -236,6 +254,28 @@ export const useGitAction = () => {
     if (Exit.isSuccess(exit)) return true
     fail(label, exit.cause)
     return false
+  }
+}
+
+export const useCheckout = () => {
+  const run = useAtomSet(actionAtom, { mode: "promiseExit" })
+  const git = useGitAction()
+  const fail = useFailureToast()
+  return async (repo: RepoId, branch: string) => {
+    const checkout: Action = (c) => c("Checkout", { repo, branch })
+    const exit = await run({ repo, run: checkout })
+    if (Exit.isSuccess(exit)) return
+    const error = Cause.squash(exit.cause)
+    if (!(error instanceof GitError) || !/would be (?:overwritten|removed) by checkout:/.test(error.stderr)) {
+      fail("Checkout", exit.cause)
+      return
+    }
+    const includeUntracked = error.stderr.includes("untracked working tree files would be")
+    const stashAndSwitch = async () => {
+      if (await git("Stash", repo, (c) => c("StashPush", { repo, message: "", includeUntracked })))
+        await git("Checkout", repo, checkout)
+    }
+    fail("Checkout", exit.cause, { label: "Stash and switch", onClick: () => void stashAndSwitch() })
   }
 }
 

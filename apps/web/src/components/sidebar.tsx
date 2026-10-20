@@ -30,7 +30,7 @@ import { ChevronRightIcon, GitBranchIcon } from "lucide-react"
 import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "react"
 import { useHistoryDate } from "@/lib/dates"
 import { basename, shortOid } from "@/lib/format"
-import { latest, refsAtom, statusAtom, useGitAction, useNetwork } from "@/lib/git"
+import { latest, refsAtom, statusAtom, useCheckout, useGitAction, useNetwork } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
 import { useConfirm } from "./confirm"
@@ -331,6 +331,7 @@ function SidebarRow({
   onDelete: (branch: Branch) => void
 }) {
   const git = useGitAction()
+  const checkout = useCheckout()
   const date = useHistoryDate()
   const confirm = useConfirm()
   const prompt = usePrompt()
@@ -383,10 +384,25 @@ function SidebarRow({
           destructive: true,
           onConfirm: () => void network.run({ action: "ForcePush", expected }),
         })
+      const open = () => {
+        if (isHead) return
+        if (worktree === undefined) void checkout(repo, branch.name)
+        else if (worktree.prunable === null) onOpen(worktree.path)
+      }
       return (
         <ContextMenu>
           <ContextMenuTrigger className="block h-full">
-            <Line depth={row.depth} active={isHead} onClick={() => select(branch.oid)}>
+            <Line
+              depth={row.depth}
+              active={isHead}
+              onClick={() => select(branch.oid)}
+              onDoubleClick={open}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                open()
+              }}
+            >
               <span className="w-3 shrink-0" />
               <span className="truncate">{row.label}</span>
               {worktree !== undefined && (
@@ -402,7 +418,7 @@ function SidebarRow({
           <ContextMenuContent>
             <ContextMenuItem
               disabled={isHead || worktree !== undefined}
-              onClick={() => git("Checkout", repo, (c) => c("Checkout", { repo, branch: branch.name }))}
+              onClick={() => void checkout(repo, branch.name)}
             >
               Check out {branch.name}
             </ContextMenuItem>
@@ -476,15 +492,22 @@ function SidebarRow({
       return (
         <ContextMenu>
           <ContextMenuTrigger className="block h-full">
-            <Line depth={row.depth} onClick={() => select(row.ref.oid)}>
+            <Line
+              depth={row.depth}
+              onClick={() => select(row.ref.oid)}
+              onDoubleClick={() => void checkout(repo, local)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return
+                event.preventDefault()
+                void checkout(repo, local)
+              }}
+            >
               <span className="w-3 shrink-0" />
               <span className="truncate">{row.label}</span>
             </Line>
           </ContextMenuTrigger>
           <ContextMenuContent>
-            <ContextMenuItem onClick={() => git("Checkout", repo, (c) => c("Checkout", { repo, branch: local }))}>
-              Check out as {local}
-            </ContextMenuItem>
+            <ContextMenuItem onClick={() => void checkout(repo, local)}>Check out as {local}</ContextMenuItem>
             <ContextMenuSeparator />
             {integrate(row.ref.name, head?._tag === "Unborn")}
           </ContextMenuContent>

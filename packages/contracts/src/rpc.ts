@@ -31,13 +31,20 @@ export class GitError extends Schema.TaggedError<GitError>()("GitError", {
   stderr: Schema.String,
 }) {
   get summary(): string {
-    const lines = this.stderr
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line !== "" && !line.startsWith("hint:"))
-    const problems = lines.flatMap((line) => {
+    const raw = this.stderr.split("\n").filter((line) => line.trim() !== "" && !line.trimStart().startsWith("hint:"))
+    const lines = raw.map((line) => line.trim())
+    const problems = lines.flatMap((line, index) => {
       const match = /^(?:fatal|error): (.*)$/.exec(line)
-      return match === null ? [] : [match[1]!]
+      if (match === null) return []
+      const problem = match[1]!
+      if (!problem.endsWith(":")) return [problem]
+      const after = raw.slice(index + 1)
+      const end = after.findIndex((next) => !/^\s/.test(next))
+      const items = after.slice(0, end === -1 ? after.length : end).map((item) => item.trim())
+      if (items.length === 0) return [problem]
+      const listed =
+        items.length > 3 ? `${items.slice(0, 3).join(", ")} and ${items.length - 3} more` : items.join(", ")
+      return [`${problem} ${listed}`]
     })
     const shown = (problems.length > 0 ? problems : lines).slice(0, 2).join("\n")
     if (shown === "") return `git ${this.args[0] ?? ""} exited with ${this.exitCode}`

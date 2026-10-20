@@ -10,6 +10,12 @@ import { GitClient, keys } from "./git"
 export const worktreeLabel = (worktree: Worktree) =>
   worktree.head._tag === "Branch" ? worktree.head.name : basename(worktree.path)
 
+export const repoNameOf = (commonDir: string) => {
+  const name = basename(commonDir)
+  if (name === ".git") return basename(commonDir.slice(0, -"/.git".length))
+  return name.endsWith(".git") ? name.slice(0, -".git".length) : name
+}
+
 export const worktreesKey = (repo: RepoId) => `worktrees:${repo}`
 
 export const worktreeSummariesAtom = Atom.family((repo: RepoId) =>

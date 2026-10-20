@@ -28,7 +28,7 @@ import { basename } from "@/lib/format"
 import { connectionAtom, keys, latest, repoInfoAtom, statusAtom } from "@/lib/git"
 import { settingsAtom, settingsViewAtom } from "@/lib/settings"
 import { activeAfterClose, cycleTab } from "@/lib/tabs"
-import { useRefreshOnFocus } from "@/lib/worktrees"
+import { repoNameOf, useRefreshOnFocus } from "@/lib/worktrees"
 import type { RepoInfo } from "@gitui/contracts"
 
 const PICKER = "\0picker"
@@ -213,18 +213,27 @@ function OpenRepoTabHandle({
   const status = latest(useAtomValue(statusAtom(info.id)))
   const linked = info.gitDir !== info.commonDir
   const label = linked && status?.head._tag === "Branch" ? status.head.name : basename(props.path)
-  return <RepoTabHandle {...props} label={label} dirty={(status?.entries.length ?? 0) > 0} />
+  return (
+    <RepoTabHandle
+      {...props}
+      repo={linked ? repoNameOf(info.commonDir) : undefined}
+      label={label}
+      dirty={(status?.entries.length ?? 0) > 0}
+    />
+  )
 }
 
 function RepoTabHandle({
   handleRef,
   path,
+  repo,
   label,
   dirty,
   onClose,
 }: {
   handleRef: Ref<HTMLButtonElement>
   path: string
+  repo?: string | undefined
   label: string
   dirty: boolean
   onClose: () => void
@@ -232,6 +241,7 @@ function RepoTabHandle({
   return (
     <>
       <TabsTrigger ref={handleRef} value={path} title={path} className={tabClassName}>
+        {repo !== undefined && <span className="opacity-60">{repo}</span>}
         {label}
       </TabsTrigger>
       <Button

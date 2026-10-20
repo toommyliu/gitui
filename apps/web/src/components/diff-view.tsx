@@ -37,6 +37,7 @@ import { cn } from "cn"
 import { copyText, copyWithToast } from "@/lib/clipboard"
 import { useCommandKeys, useOverlayOpen } from "@/lib/commands"
 import { diffThemes } from "@/lib/diff-themes"
+import { fileStepTarget } from "@/lib/file-step"
 import { type Settings, settingsAtom } from "@/lib/settings"
 import { ChangeLetter } from "./change-letter"
 import { useTheme } from "./theme-provider"
@@ -483,14 +484,9 @@ export function DiffStack({
   const fileStep = (delta: 1 | -1) => () => {
     const instance = view?.getInstance()
     if (instance === undefined) return
-    const scrollTop = instance.getScrollTop()
     const tops = shown.map((item) => instance.getTopForItem(item.id) ?? Number.POSITIVE_INFINITY)
-    const current = Math.max(
-      0,
-      tops.findLastIndex((top) => top <= scrollTop + 1),
-    )
-    const withinCurrent = (tops[current] ?? 0) < scrollTop - 1
-    const target = shown[delta === -1 && withinCurrent ? current : current + delta]
+    const index = fileStepTarget(tops, instance.getScrollTop(), delta)
+    const target = index === null ? undefined : shown[index]
     if (target !== undefined) view?.scrollTo({ type: "item", id: target.id, align: "start" })
   }
   const overlayOpen = useOverlayOpen()

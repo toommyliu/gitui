@@ -12,6 +12,7 @@
     "format:check": "vp fmt --check",
     "prepare": "effect-tsgo patch --typescript --oxlint && git config core.hooksPath .githooks",
     "test": "vp run -r test",
+    "bench": "pnpm -F @gitui/server bench",
     "check": "vp fmt --check && vp lint --deny-warnings && vp run -r typecheck && vp run -r test",
     "serve": "pnpm -F @gitui/web build && pnpm -F @gitui/server start",
     "serve:desktop": "pnpm -F @gitui/web build && pnpm -F @gitui/desktop build && pnpm -F @gitui/desktop start"

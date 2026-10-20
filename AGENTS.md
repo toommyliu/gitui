@@ -10,6 +10,8 @@ A git GUI in the spirit of Sublime Merge. A Node server runs git and serves a Re
 
 Run `pnpm check` before you finish. It runs format, lint, typecheck and tests.
 
+To measure git latency, run `pnpm bench`. `apps/server/bench/README.md` explains the output and how to compare against another ref.
+
 # Dev servers
 
 - Other agents run dev servers on this machine at the same time. Work in your own git worktree, not the main checkout.

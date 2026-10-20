@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "node --watch src/main.ts",
     "start": "node src/main.ts",
+    "bench": "node bench/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vp test run"
   },

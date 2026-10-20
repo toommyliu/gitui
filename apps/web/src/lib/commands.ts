@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react"
+import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import { MenuCommand, menuCommands, MenuShortcuts, menuShortcuts } from "@gitui/contracts"
 import {
   type CustomHotkeys,
@@ -17,7 +17,6 @@ import * as Schema from "effect/Schema"
 import * as Atom from "effect/reactivity/Atom"
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react"
 import { desktop } from "./desktop"
-import { settingsViewAtom } from "./settings"
 
 declare module "@tanstack/react-hotkeys" {
   interface HotkeyMeta {
@@ -131,11 +130,18 @@ export const saveCustomHotkeys = (custom: CustomHotkeys) => localStorage.setItem
 
 export const paletteOpenAtom = Atom.make(false).pipe(Atom.keepAlive)
 
-export const useOverlayOpen = () => {
-  const settingsOpen = useAtomValue(settingsViewAtom) !== null
-  const paletteOpen = useAtomValue(paletteOpenAtom)
-  return settingsOpen || paletteOpen
+const openModalsAtom = Atom.make(0).pipe(Atom.keepAlive)
+
+export const useModal = (open: boolean) => {
+  const setOpenModals = useAtomSet(openModalsAtom)
+  useEffect(() => {
+    if (!open) return
+    setOpenModals((count) => count + 1)
+    return () => setOpenModals((count) => count - 1)
+  }, [open, setOpenModals])
 }
+
+export const useOverlayOpen = () => useAtomValue(openModalsAtom) > 0
 
 const handlers = new Map<CommandId, () => void>()
 const listeners = new Set<() => void>()

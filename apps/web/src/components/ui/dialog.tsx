@@ -5,9 +5,11 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { useModal } from "@/lib/commands"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
+function Dialog({ ...props }: DialogPrimitive.Root.Props & { open: boolean }) {
+  useModal(props.modal !== false && props.open)
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
 

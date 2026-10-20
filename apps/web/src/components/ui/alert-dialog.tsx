@@ -3,8 +3,10 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { useModal } from "@/lib/commands"
 
-function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
+function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props & { open: boolean }) {
+  useModal(props.open)
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
 }
 

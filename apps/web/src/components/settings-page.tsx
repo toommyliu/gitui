@@ -1,6 +1,7 @@
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Button } from "@/components/ui/button"
+import { Dialog } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -464,7 +465,7 @@ export function SettingsPage() {
   const section = view === null || view === "sections" ? (narrow ? null : "general") : view
 
   return (
-    <DialogPrimitive.Root open={view !== null} onOpenChange={(open) => !open && back()}>
+    <Dialog open={view !== null} onOpenChange={(open) => !open && back()}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Popup className="fixed inset-0 z-50 flex flex-col bg-background text-xs outline-none">
           <DialogPrimitive.Title className="sr-only">Settings</DialogPrimitive.Title>
@@ -532,6 +533,6 @@ export function SettingsPage() {
           )}
         </DialogPrimitive.Popup>
       </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+    </Dialog>
   )
 }

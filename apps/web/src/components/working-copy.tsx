@@ -667,13 +667,14 @@ function FileSection({
       <ScrollArea
         className={cn("min-h-0 flex-1", !open && "hidden")}
         viewportRef={viewportRef}
+        scrollbarClassName="opacity-0 transition-opacity duration-500 hover:opacity-100 hover:duration-150 data-scrolling:opacity-100 data-scrolling:duration-150"
         viewportProps={{
           tabIndex: open && rows.length > 0 ? 0 : -1,
           onKeyDown,
           role: "listbox",
           "aria-label": `${label} files`,
           "aria-multiselectable": true,
-          className: "[contain:strict] data-has-overflow-y:pr-2.5",
+          className: "[contain:strict] focus-visible:ring-0 focus-visible:outline-none",
         }}
       >
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>

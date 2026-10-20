@@ -244,12 +244,13 @@ export function CommitList({
         <ScrollArea
           className="@container min-h-0 flex-1"
           viewportRef={list.ref}
+          scrollbarClassName="opacity-0 transition-opacity duration-500 hover:opacity-100 hover:duration-150 data-scrolling:opacity-100 data-scrolling:duration-150"
           viewportProps={{
             tabIndex: 0,
             onKeyDown,
             role: "listbox",
             "aria-label": "Commits",
-            className: "[contain:strict] focus-visible:ring-0 focus-visible:outline-none data-has-overflow-y:pr-2.5",
+            className: "[contain:strict] focus-visible:ring-0 focus-visible:outline-none",
           }}
         >
           <div className="relative w-full" style={{ height: list.height }}>

@@ -49,4 +49,4 @@ The server only accepts RPC connections from its own origin, from `gitui://app`,
 
 ## Checks
 
-`pnpm check` runs oxfmt, oxlint with the Effect language service rules, `tsc` on TypeScript 7, and the vitest suite. The pre-commit hook runs it too. The git tests build real repositories in temp directories.
+`pnpm check` runs oxfmt, oxlint with the Effect language service rules, `tsc` on TypeScript 7, and the vitest suite. The git tests build real repositories in temp directories.

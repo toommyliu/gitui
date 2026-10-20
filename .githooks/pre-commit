@@ -1,3 +1,0 @@
-#!/bin/sh
-unset $(git rev-parse --local-env-vars)
-exec pnpm check

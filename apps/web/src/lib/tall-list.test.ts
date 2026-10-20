@@ -9,13 +9,17 @@ const position = (scroll: ScrollPosition) => scroll.top + scroll.offset
 const wheel = (from: ScrollPosition, delta: number, total: number, steps = Number.POSITIVE_INFINITY) => {
   const max = scrollHeight(total) - VIEWPORT
   let scroll = from
+  let lowest = Number.POSITIVE_INFINITY
+  let highest = Number.NEGATIVE_INFINITY
   for (let i = 0; i < steps; i++) {
     const next = scrolled(scroll, Math.min(Math.max(scroll.top + delta, 0), max), total, VIEWPORT)
-    expect(next.top).toBeGreaterThanOrEqual(0)
-    expect(next.top).toBeLessThanOrEqual(max)
+    lowest = Math.min(lowest, next.top)
+    highest = Math.max(highest, next.top)
     if (position(next) === position(scroll)) break
     scroll = next
   }
+  expect(lowest).toBeGreaterThanOrEqual(0)
+  expect(highest).toBeLessThanOrEqual(max)
   return scroll
 }
 

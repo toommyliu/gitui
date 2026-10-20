@@ -282,7 +282,7 @@ export function CommitList({
 
   return (
     <div className="flex h-full flex-col">
-      <InputGroup className="h-8 shrink-0 rounded-none border-0 border-b border-border bg-transparent ring-inset dark:bg-transparent">
+      <InputGroup className="h-8 shrink-0 rounded-none border-0 border-b border-border bg-transparent ring-inset has-[[data-slot=input-group-control]:focus-visible]:border-border has-[[data-slot=input-group-control]:focus-visible]:ring-ring dark:bg-transparent">
         <InputGroupAddon>
           <SearchIcon />
         </InputGroupAddon>

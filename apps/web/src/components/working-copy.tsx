@@ -216,12 +216,26 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
         .map((f) => f.path),
     [unstaged],
   )
+  const [onDemand, setOnDemand] = useState<RepoPath | null>(null)
+  const onDemandPaths = useMemo(
+    () =>
+      onDemand !== null &&
+      !untrackedPaths.includes(onDemand) &&
+      unstaged.some((f) => f.area === "untracked" && f.path === onDemand)
+        ? [onDemand]
+        : [],
+    [onDemand, untrackedPaths, unstaged],
+  )
 
   const unstagedDiff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Unstaged" }))))
   const stagedDiff = latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Staged" }))))
   const untrackedDiff = useLastLoaded(
     repo,
     latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Untracked" }, untrackedPaths)))),
+  )
+  const onDemandDiff = useLastLoaded(
+    repo,
+    latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Untracked" }, onDemandPaths)))),
   )
 
   const items = useMemo(
@@ -230,13 +244,16 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
       ...(untrackedPaths.length > 0 && untrackedDiff?._tag === "Patch"
         ? patchItems("untracked", untrackedDiff.patch)
         : []),
+      ...(onDemandPaths.length > 0 && onDemandDiff?._tag === "Patch"
+        ? patchItems("untracked", onDemandDiff.patch)
+        : []),
       ...(stagedDiff?._tag === "Patch" ? patchItems("staged", stagedDiff.patch) : []),
     ],
-    [unstagedDiff, stagedDiff, untrackedDiff, untrackedPaths.length],
+    [unstagedDiff, stagedDiff, untrackedDiff, untrackedPaths.length, onDemandDiff, onDemandPaths.length],
   )
   const diffs = untrackedPaths.length > 0 ? [unstagedDiff, stagedDiff, untrackedDiff] : [unstagedDiff, stagedDiff]
   const diffsLoading = diffs.some((d) => d === undefined)
-  const tooLarge = diffs.some((d) => d?._tag === "TooLarge")
+  const tooLarge = [...diffs, onDemandPaths.length > 0 ? onDemandDiff : undefined].some((d) => d?._tag === "TooLarge")
 
   const git = useGitAction()
   const confirm = useConfirm()
@@ -307,11 +324,20 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
   }, [items])
 
   const viewRef = useRef<CodeViewHandle<undefined, undefined>>(null)
+  const [revealing, setRevealing] = useState<{ readonly id: string } | null>(null)
+  const revealed = useRef<object | null>(null)
+  useEffect(() => {
+    if (revealing === null || revealed.current === revealing || !itemsById.has(revealing.id)) return
+    revealed.current = revealing
+    // A CodeView that mounts in this commit (after "Too large to diff") ignores a scrollTo until it has laid out.
+    requestAnimationFrame(() => viewRef.current?.scrollTo({ type: "item", id: revealing.id, align: "start" }))
+  }, [revealing, itemsById])
   const reveal = (row: FileRow) => {
     const section = row.area === "staged" ? "staged" : row.area === "untracked" ? "untracked" : "unstaged"
     const id = `${section}\n${row.path}`
     collapse.set([id], false)
-    viewRef.current?.scrollTo({ type: "item", id, align: "start" })
+    setOnDemand(row.area === "untracked" && !untrackedPaths.includes(row.path) ? row.path : null)
+    setRevealing({ id })
   }
 
   const rowsByItem = useMemo(() => {

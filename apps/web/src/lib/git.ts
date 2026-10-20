@@ -310,7 +310,7 @@ export const networkStateAtom = Atom.family((_repo: RepoId) =>
   Atom.make<NetworkState | null>(null).pipe(Atom.keepAlive),
 )
 
-const networkAtom = Atom.family((repo: RepoId) =>
+export const networkAtom = Atom.family((repo: RepoId) =>
   GitClient.runtime
     .fn((request: NetworkRequest, get) => {
       const state = networkStateAtom(repo)

@@ -744,7 +744,10 @@ export class Repo extends Context.Service<
         }),
         removeWorktree,
         pruneWorktrees: (repo) => run(repo, ["worktree", "prune"]),
-        fetch: (repo) => git.progress(repo, ["fetch", "--all", "--prune", "--progress"]),
+        fetch: (repo) =>
+          existsSync(join(repo, ".git"))
+            ? git.progress(repo, ["fetch", "--all", "--prune", "--progress"])
+            : Stream.fail(new GitError({ args: ["fetch"], exitCode: -1, stderr: `${repo} is no longer a repository` })),
         pull: (repo) =>
           Stream.unwrap(
             Effect.as(

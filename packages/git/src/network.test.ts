@@ -71,6 +71,22 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       }),
     )
 
+    it.effect("refuses to fetch a path that is no longer a repository instead of fetching its parent", () =>
+      Effect.gen(function* () {
+        const repo = withRemote()
+        repo.write("gone/a.txt", "a\n")
+        const r = yield* Repo
+
+        const nested = yield* Stream.runDrain(r.fetch(id(join(repo.root, "gone")))).pipe(Effect.flip)
+        const missing = yield* Stream.runDrain(r.fetch(id(join(repo.root, "missing")))).pipe(Effect.flip)
+
+        expect(nested.stderr).toBe(`${join(repo.root, "gone")} is no longer a repository`)
+        expect(missing.stderr).toBe(`${join(repo.root, "missing")} is no longer a repository`)
+        const [entries = []] = yield* (yield* CommandLog).entries(repo.root).pipe(Stream.take(1), Stream.runCollect)
+        expect(entries.filter((entry) => entry.args.includes("fetch"))).toEqual([])
+      }),
+    )
+
     it.effect("runs concurrent changes to one repository one at a time", () =>
       Effect.gen(function* () {
         const repo = makeRepo()

@@ -16,6 +16,7 @@ import { SettingsIcon, XIcon } from "lucide-react"
 import { type Ref, useEffect, useState } from "react"
 import { CommandPalette } from "@/components/command-palette"
 import { Loading } from "@/components/loading"
+import { useBackgroundFetch } from "@/components/network"
 import { RepoPicker } from "@/components/repo-picker"
 import { SettingsPage } from "@/components/settings-page"
 import { useTheme } from "@/components/theme-provider"
@@ -58,6 +59,7 @@ export function App() {
   const overlayOpen = useOverlayOpen()
   const setPaletteOpen = useAtomSet(paletteOpenAtom)
   useDesktopMenu()
+  useBackgroundFetch(tabs)
   useCommand("settings.open", () => {
     setPaletteOpen(false)
     navigateSettings("open")

@@ -1,36 +1,56 @@
-import { useAtomValue } from "@effect/atom-react"
+import { RegistryContext, useAtomValue } from "@effect/atom-react"
 import type { RepoId, Tracking } from "@gitui/contracts"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { ArrowDownIcon, ArrowUpIcon, CheckIcon, CircleAlertIcon, RefreshCwIcon } from "lucide-react"
-import { useEffect, useEffectEvent } from "react"
+import { useContext, useEffect, useEffectEvent } from "react"
 import { useCommand } from "@/lib/commands"
-import { networkDoneLabels, networkLabels, networkStateAtom, useNetwork } from "@/lib/git"
+import {
+  latest,
+  networkAtom,
+  networkDoneLabels,
+  networkLabels,
+  networkStateAtom,
+  repoInfoAtom,
+  useNetwork,
+} from "@/lib/git"
 import { settingsAtom } from "@/lib/settings"
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" })
 
 const commits = (count: number) => `${count} ${count === 1 ? "commit" : "commits"}`
 
+export function useBackgroundFetch(paths: ReadonlyArray<string>) {
+  const registry = useContext(RegistryContext)
+  const { backgroundFetch } = useAtomValue(settingsAtom)
+  const fetchAll = useEffectEvent(() => {
+    for (const path of paths) {
+      const repo = latest(registry.get(repoInfoAtom(path)))?.id
+      if (repo === undefined || registry.get(networkStateAtom(repo))?._tag === "Running") continue
+      registry.set(networkAtom(repo), { action: "Fetch" })
+    }
+  })
+  useEffect(() => {
+    if (backgroundFetch === "off") return
+    const timer = setInterval(fetchAll, Number(backgroundFetch) * 60_000)
+    return () => clearInterval(timer)
+  }, [backgroundFetch])
+}
+
+export function useNetworkCommands(repo: RepoId) {
+  const network = useNetwork(repo)
+  const idle = useAtomValue(networkStateAtom(repo))?._tag !== "Running"
+  useCommand("repo.fetch", () => void network.run({ action: "Fetch" }), { enabled: idle })
+  useCommand("repo.pull", () => void network.run({ action: "Pull" }), { enabled: idle })
+  useCommand("repo.push", () => void network.run({ action: "Push" }), { enabled: idle })
+}
+
 export function SyncButtons({ repo, upstream }: { repo: RepoId; upstream: Tracking | null }) {
   const network = useNetwork(repo)
   const state = useAtomValue(networkStateAtom(repo))
   const running = state?._tag === "Running" ? state : null
-  const idle = running === null
-  const { backgroundFetch } = useAtomValue(settingsAtom)
-  const fetchQuietly = useEffectEvent(() => {
-    if (idle) void network.run({ action: "Fetch" }, { quiet: true })
-  })
-  useEffect(() => {
-    if (backgroundFetch === "off") return
-    const timer = setInterval(fetchQuietly, Number(backgroundFetch) * 60_000)
-    return () => clearInterval(timer)
-  }, [backgroundFetch])
-  useCommand("repo.fetch", () => void network.run({ action: "Fetch" }), { enabled: idle })
-  useCommand("repo.pull", () => void network.run({ action: "Pull" }), { enabled: idle })
-  useCommand("repo.push", () => void network.run({ action: "Push" }), { enabled: idle })
   const behind = upstream?.behind ?? 0
   const ahead = upstream?.ahead ?? 0
   const from = upstream === null ? "" : ` from ${upstream.name}`

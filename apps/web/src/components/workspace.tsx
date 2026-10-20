@@ -12,6 +12,7 @@ import type { Selection } from "@/lib/selection"
 import { CommandLogDrawer } from "./command-log"
 import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
+import { useNetworkCommands } from "./network"
 import { Sidebar } from "./sidebar"
 import { WorkingCopy } from "./working-copy"
 import { WorktreePreview } from "./worktree-preview"
@@ -31,6 +32,7 @@ export function Workspace({
   onOpenWorktree: (path: string, family: ReadonlyArray<string>) => void
 }) {
   useAtomMount(watchAtom(repo))
+  useNetworkCommands(repo)
   const narrow = useNarrow()
   const [selection, setSelection] = useAtom(selectionAtom(repo))
   const [pane, setPane] = useAtom(paneAtom(repo))

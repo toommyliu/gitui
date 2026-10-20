@@ -10,7 +10,7 @@
     "lint": "vp lint",
     "format": "vp fmt",
     "format:check": "vp fmt --check",
-    "prepare": "effect-tsgo patch --typescript --oxlint && git config core.hooksPath .githooks",
+    "prepare": "effect-tsgo patch --typescript --oxlint",
     "test": "vp run -r test",
     "bench": "pnpm -F @gitui/server bench",
     "check": "vp fmt --check && vp lint --deny-warnings && vp run -r typecheck && vp run -r test",

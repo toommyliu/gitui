@@ -23,6 +23,7 @@ export const Settings = Schema.Struct({
   historyRemotes: withDefault(Schema.Boolean, true),
   ignoreWhitespace: withDefault(Schema.Boolean, false),
   backgroundFetch: withDefault(Schema.Literals(["off", "5", "15", "30"]), "off"),
+  lineCounts: withDefault(Schema.Literals(["all", "code"]), "all"),
 })
 export type Settings = typeof Settings.Type
 
@@ -45,6 +46,7 @@ export const settingsAtom = Atom.kvs({
     historyRemotes: true,
     ignoreWhitespace: false,
     backgroundFetch: "off",
+    lineCounts: "all",
   }),
 })
 

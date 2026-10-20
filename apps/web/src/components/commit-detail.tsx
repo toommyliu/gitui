@@ -1,4 +1,4 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
+import { useAtom, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { CommitDetail as Detail, FileChange, Oid, RepoId } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, HistoryIcon } from "lucide-react"
@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { usePanelRef } from "react-resizable-panels"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
 import { type ReactNode, useMemo, useRef, useState } from "react"
+import { FILE_KINDS, type FileKind, type LineCounts, changeBreakdown } from "@/lib/file-kind"
 import { longDate, shortOid } from "@/lib/format"
 import { commitAtom, diffAtom, diffKey, latest, loadError } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
@@ -27,19 +29,63 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function ChangeTotals({ files }: { files: Detail["files"] }) {
-  const additions = files.reduce((sum, file) => sum + (file.additions ?? 0), 0)
-  const deletions = files.reduce((sum, file) => sum + (file.deletions ?? 0), 0)
+type CountedFile = { path: string; additions: number | null; deletions: number | null }
+
+const KIND_LABELS: Record<FileKind, string> = { code: "Code", tests: "Tests", mocks: "Mocks", generated: "Generated" }
+
+export function ChangeTotals({ count, files }: { count: number; files: ReadonlyArray<CountedFile> }) {
+  const [settings, setSettings] = useAtom(settingsAtom)
+  const codeOnly = settings.lineCounts === "code"
+  const breakdown = changeBreakdown(files)
+  const total = {
+    additions: files.reduce((sum, file) => sum + (file.additions ?? 0), 0),
+    deletions: files.reduce((sum, file) => sum + (file.deletions ?? 0), 0),
+  }
+  const shown = codeOnly ? breakdown.code : total
   return (
     <>
       <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
-        {files.length.toLocaleString()}
+        {count.toLocaleString()}
       </Badge>
-      <span className="tabular-nums">
-        <span className="text-change-added">+{additions}</span>{" "}
-        <span className="text-change-deleted">−{deletions}</span>
-      </span>
+      <Tooltip disabled={total.additions === 0 && total.deletions === 0}>
+        <TooltipTrigger
+          closeOnClick={false}
+          render={<Button variant="ghost" size="xs" className="-mx-1 px-1 text-xs font-normal tabular-nums" />}
+          onClick={() => setSettings({ ...settings, lineCounts: codeOnly ? "all" : "code" })}
+        >
+          {codeOnly && <span>Code</span>}
+          <span className="text-change-added">+{shown.additions}</span>
+          <span className="text-change-deleted">−{shown.deletions}</span>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="start" className="flex-col items-stretch gap-1.5">
+          <div className="grid grid-cols-[auto_auto_auto] gap-x-3 gap-y-0.5 tabular-nums">
+            {FILE_KINDS.filter(
+              (kind) => kind === "code" || breakdown[kind].additions + breakdown[kind].deletions > 0,
+            ).map((kind) => (
+              <BreakdownRow
+                key={kind}
+                label={KIND_LABELS[kind]}
+                counts={breakdown[kind]}
+                shown={codeOnly && kind === "code"}
+              />
+            ))}
+            <div className="col-span-3 my-0.5 border-t border-background/20" />
+            <BreakdownRow label="Total" counts={total} shown={!codeOnly} />
+          </div>
+          <span className="opacity-60">{codeOnly ? "Click to show all files" : "Click to show code only"}</span>
+        </TooltipContent>
+      </Tooltip>
     </>
+  )
+}
+
+function BreakdownRow({ label, counts, shown }: { label: string; counts: LineCounts; shown: boolean }) {
+  return (
+    <div className={cn("contents", shown && "font-semibold")}>
+      <span>{label}</span>
+      <span className="text-right">+{counts.additions}</span>
+      <span className="text-right">−{counts.deletions}</span>
+    </div>
   )
 }
 
@@ -141,7 +187,7 @@ export function CommitDetail({
           )
         }
       >
-        <ChangeTotals files={detail.files} />
+        <ChangeTotals count={detail.files.length} files={detail.files} />
       </SectionBar>
       {diffError === undefined ? (
         <div className="min-h-0 flex-1">
@@ -264,7 +310,7 @@ function LargeCommit({
           )
         }
       >
-        <ChangeTotals files={detail.files} />
+        <ChangeTotals count={detail.files.length} files={detail.files} />
       </SectionBar>
       <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
         <ResizablePanel

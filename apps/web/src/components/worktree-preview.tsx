@@ -32,7 +32,7 @@ import {
   worktreeSummariesAtom,
 } from "@/lib/worktrees"
 import { ChangeLetter } from "./change-letter"
-import { HistoryButton, SectionBar } from "./commit-detail"
+import { ChangeTotals, HistoryButton, SectionBar } from "./commit-detail"
 import { DiffStack, patchItems, useCollapse } from "./diff-view"
 import { Loading, Nothing } from "./loading"
 
@@ -353,8 +353,6 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
     viewRef.current?.scrollTo({ type: "item", id, align: "start" })
   }
   const open = () => onOpen(path, refs?.worktrees.map((w) => w.path) ?? [])
-  const additions = [...counts.values()].reduce((sum, count) => sum + count.additions, 0)
-  const deletions = [...counts.values()].reduce((sum, count) => sum + count.deletions, 0)
 
   const fileList = (
     <ScrollArea className="h-full" viewportProps={{ className: "data-has-overflow-y:pr-2.5" }}>
@@ -425,15 +423,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
       </div>
       <SectionBar label="Uncommitted" actions={null}>
         {rows.length > 0 && (
-          <>
-            <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
-              {rows.length.toLocaleString()}
-            </Badge>
-            <span className="tabular-nums">
-              <span className="text-change-added">+{additions}</span>{" "}
-              <span className="text-change-deleted">−{deletions}</span>
-            </span>
-          </>
+          <ChangeTotals count={rows.length} files={[...counts].map(([path, count]) => ({ path, ...count }))} />
         )}
       </SectionBar>
       {rows.length === 0 ? (

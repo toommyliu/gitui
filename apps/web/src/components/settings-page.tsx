@@ -273,6 +273,20 @@ function DiffSettings() {
           onCheckedChange={(ignoreWhitespace: boolean) => update({ ignoreWhitespace })}
         />
       </Row>
+      <Row
+        label="Line counts"
+        description="Code only leaves out tests, mocks, and generated files such as lockfiles. Clicking the counts above a list of files also switches this."
+      >
+        <Choice
+          label="Line counts"
+          value={settings.lineCounts}
+          onChange={(lineCounts) => update({ lineCounts })}
+          options={[
+            ["all", "All files"],
+            ["code", "Code only"],
+          ]}
+        />
+      </Row>
     </>
   )
 }

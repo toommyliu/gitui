@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test"
-import { activeAfterClose, cycleTab } from "./tabs"
+import { activeAfterClose, cycleTab, tabNumber } from "./tabs"
 
 const tabs = ["/a", "/b", "/c", "/d"]
 
@@ -39,5 +39,18 @@ describe("cycleTab", () => {
   it("stays on the picker when no tabs are open", () => {
     expect(cycleTab([], null, 1)).toBe(null)
     expect(cycleTab([], null, -1)).toBe(null)
+  })
+})
+
+describe("tabNumber", () => {
+  const numbers = (count: number) => Array.from({ length: count }, (_, index) => tabNumber(count, index))
+
+  it("numbers every tab when nine or fewer are open", () => {
+    expect(numbers(3)).toEqual([1, 2, 3])
+    expect(numbers(9)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
+  })
+
+  it("gives 9 to the last tab and skips the ones between", () => {
+    expect(numbers(11)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, undefined, undefined, 9])
   })
 })

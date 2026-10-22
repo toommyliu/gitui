@@ -49,6 +49,7 @@ import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey }
 import { useConfirm } from "./confirm"
 import { SyncButtons } from "./network"
 import { usePrompt } from "./prompt"
+import { RemoveWorktreeDialog } from "./remove-worktree-dialog"
 import { useStashPrompt } from "./stash-prompt"
 
 type Section = "branches" | "remotes" | "tags" | "stashes" | "worktrees"
@@ -223,6 +224,7 @@ export function Sidebar({
   })
 
   const [deleting, setDeleting] = useState<{ branch: Branch; worktree: Worktree | undefined } | null>(null)
+  const [removing, setRemoving] = useState<{ worktree: Worktree; force: boolean } | null>(null)
 
   return (
     <div className="flex h-full flex-col">
@@ -255,6 +257,7 @@ export function Sidebar({
                     selectedWorktree={selection._tag === "Worktree" ? selection.path : null}
                     worktreeByBranch={worktreeByBranch}
                     onDelete={(branch) => setDeleting({ branch, worktree: worktreeByBranch.get(branch.name) })}
+                    onRemove={(worktree, force) => setRemoving({ worktree, force })}
                   />
                 </div>
                 {location !== null && state !== "inherited" && (
@@ -278,6 +281,7 @@ export function Sidebar({
           onClose={() => setDeleting(null)}
         />
       )}
+      {removing !== null && <RemoveWorktreeDialog repo={repo} {...removing} onClose={() => setRemoving(null)} />}
     </div>
   )
 }
@@ -412,6 +416,7 @@ function SidebarRow({
   selectedWorktree,
   worktreeByBranch,
   onDelete,
+  onRemove,
 }: {
   row: Row
   repo: RepoId
@@ -424,6 +429,7 @@ function SidebarRow({
   selectedWorktree: string | null
   worktreeByBranch: Map<string, Worktree>
   onDelete: (branch: Branch) => void
+  onRemove: (worktree: Worktree, force: boolean) => void
 }) {
   const git = useGitAction()
   const checkout = useCheckout()
@@ -715,20 +721,6 @@ function SidebarRow({
       const { worktree } = row
       const current = worktree.path === repo
       const openable = !current && worktree.head._tag !== "Bare" && worktree.prunable === null
-      const remove = (force: boolean) =>
-        confirm({
-          title: force ? "Force remove worktree?" : "Remove worktree?",
-          body: (
-            <div className="space-y-2">
-              <p className="font-mono text-xs break-all">{worktree.path}</p>
-              {force && <p>Uncommitted and untracked files in this worktree will be deleted.</p>}
-            </div>
-          ),
-          confirmLabel: force ? "Force remove" : "Remove",
-          destructive: true,
-          onConfirm: () =>
-            git("Remove worktree", repo, (c) => c("RemoveWorktree", { repo, path: worktree.path, force })),
-        })
       return (
         <ContextMenu>
           <ContextMenuTrigger className="block h-full">
@@ -776,10 +768,14 @@ function SidebarRow({
               Open in new tab
             </ContextMenuItem>
             <ContextMenuSeparator />
-            <ContextMenuItem disabled={worktree.isMain || current} onClick={() => remove(false)}>
+            <ContextMenuItem disabled={worktree.isMain || current} onClick={() => onRemove(worktree, false)}>
               Remove worktree…
             </ContextMenuItem>
-            <ContextMenuItem variant="destructive" disabled={worktree.isMain || current} onClick={() => remove(true)}>
+            <ContextMenuItem
+              variant="destructive"
+              disabled={worktree.isMain || current}
+              onClick={() => onRemove(worktree, true)}
+            >
               Force remove worktree…
             </ContextMenuItem>
           </ContextMenuContent>

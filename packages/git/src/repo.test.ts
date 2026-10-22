@@ -243,14 +243,64 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       mkdirSync(join(path, "node_modules", "pkg"), { recursive: true })
       writeFileSync(join(path, "node_modules", "pkg", "index.js"), "module.exports = 1\n")
 
-      yield* (yield* Repo).removeWorktree(id(repo.root), path, false)
+      yield* (yield* Repo).removeWorktree(id(repo.root), path, false, false)
       expect(existsSync(path)).toBe(false)
       expect(repo.git("worktree", "list", "--porcelain")).not.toContain(path)
+      expect(repo.git("branch", "--list", "--format=%(refname:short)", "clean")).toBe("clean")
       const leftovers = () => readdirSync(dirname(path)).filter((name) => name.startsWith(`.${basename(path)}.`))
       for (let i = 0; i < 100 && leftovers().length > 0; i++) {
         yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)))
       }
       expect(leftovers()).toEqual([])
+    }),
+  )
+
+  it.effect("removes a worktree and deletes its branch when requested", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.commit("base")
+      repo.git("worktree", "add", "-q", "-b", "finished", `${repo.root}-finished`)
+      const path = listedWorktree(repo.git("worktree", "list", "--porcelain"), "-finished")
+
+      yield* (yield* Repo).removeWorktree(id(repo.root), path, false, true)
+      expect(existsSync(path)).toBe(false)
+      expect(repo.git("worktree", "list", "--porcelain")).not.toContain(path)
+      expect(repo.git("branch", "--list", "finished")).toBe("")
+    }),
+  )
+
+  it.effect("keeps an unmerged branch and its worktree unless the removal is forced", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.commit("base")
+      repo.git("worktree", "add", "-q", "-b", "wip", `${repo.root}-wip`)
+      const path = listedWorktree(repo.git("worktree", "list", "--porcelain"), "-wip")
+      execFileSync("git", ["commit", "-q", "--allow-empty", "-m", "unmerged"], { cwd: path, env: fixtureEnv() })
+      writeFileSync(join(path, "notes.txt"), "keep me\n")
+
+      const error = yield* Effect.flip((yield* Repo).removeWorktree(id(repo.root), path, false, true))
+      expect(error.stderr).toBe("wip has 1 commit that HEAD doesn't contain. Nothing was deleted.")
+      expect(readFileSync(join(path, "notes.txt"), "utf8")).toBe("keep me\n")
+      expect(repo.git("branch", "--list", "wip")).toBe("+ wip")
+
+      yield* (yield* Repo).removeWorktree(id(repo.root), path, true, true)
+      expect(existsSync(path)).toBe(false)
+      expect(repo.git("branch", "--list", "wip")).toBe("")
+    }),
+  )
+
+  it.effect("keeps a dirty worktree and its branch unless the removal is forced", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.commit("base")
+      repo.git("worktree", "add", "-q", "-b", "dirty", `${repo.root}-dirty`)
+      const path = listedWorktree(repo.git("worktree", "list", "--porcelain"), "-dirty")
+      writeFileSync(join(path, "notes.txt"), "keep me\n")
+
+      const error = yield* Effect.flip((yield* Repo).removeWorktree(id(repo.root), path, false, true))
+      expect(error.summary).toBe(`'${path}' contains modified or untracked files, use --force to delete it`)
+      expect(readFileSync(join(path, "notes.txt"), "utf8")).toBe("keep me\n")
+      expect(repo.git("branch", "--list", "dirty")).toBe("+ dirty")
     }),
   )
 
@@ -263,10 +313,10 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       writeFileSync(join(path, "notes.txt"), "keep me\n")
       const r = yield* Repo
 
-      const error = yield* Effect.flip(r.removeWorktree(id(repo.root), path, false))
+      const error = yield* Effect.flip(r.removeWorktree(id(repo.root), path, false, false))
       expect(error.summary).toBe(`'${path}' contains modified or untracked files, use --force to delete it`)
       expect(readFileSync(join(path, "notes.txt"), "utf8")).toBe("keep me\n")
-      yield* r.removeWorktree(id(repo.root), path, true)
+      yield* r.removeWorktree(id(repo.root), path, true, false)
       expect(existsSync(path)).toBe(false)
     }),
   )
@@ -280,10 +330,10 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       repo.git("worktree", "lock", "--reason", "agent running", path)
       const r = yield* Repo
 
-      const error = yield* Effect.flip(r.removeWorktree(id(repo.root), path, false))
+      const error = yield* Effect.flip(r.removeWorktree(id(repo.root), path, false, false))
       expect(error.summary).toBe("Cannot remove a locked working tree, lock reason: agent running")
       expect(existsSync(join(path, ".git"))).toBe(true)
-      yield* r.removeWorktree(id(repo.root), path, true)
+      yield* r.removeWorktree(id(repo.root), path, true, false)
       expect(existsSync(path)).toBe(false)
     }),
   )
@@ -304,10 +354,10 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       })
       const r = yield* Repo
 
-      const error = yield* Effect.flip(r.removeWorktree(id(repo.root), path, false))
+      const error = yield* Effect.flip(r.removeWorktree(id(repo.root), path, false, false))
       expect(error.summary).toBe("Working trees containing submodules cannot be moved or removed")
       expect(existsSync(join(path, "lib", ".git"))).toBe(true)
-      yield* r.removeWorktree(id(repo.root), path, true)
+      yield* r.removeWorktree(id(repo.root), path, true, false)
       expect(existsSync(path)).toBe(false)
     }),
   )

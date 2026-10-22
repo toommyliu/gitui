@@ -54,7 +54,7 @@ const worktreeRemoval = (name: string, force: boolean): Scenario => ({
     const path = fx.worktree(`${name}-${n}`, `bench/${name}-${n}`, { create: true })
     if (force) appendFileSync(join(path, "README.md"), "uncommitted\n")
     return {
-      run: (client) => client.RemoveWorktree({ repo: fx.root, path, force }),
+      run: (client) => client.RemoveWorktree({ repo: fx.root, path, force, deleteBranch: false }),
       verify: () => {
         expect(!existsSync(path), `${path} still exists`)
         expect(!fx.git("worktree", "list", "--porcelain").includes(path), `${path} is still registered`)

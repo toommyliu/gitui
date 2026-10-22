@@ -311,21 +311,28 @@ function RepoTabHandle({
   )
 }
 
-function openFailure(path: string, cause: Cause.Cause<unknown>) {
+function openFailure(cause: Cause.Cause<unknown>) {
   const error = Cause.squash(cause)
-  const shown = <span className="font-mono break-all">{path}</span>
   if (error instanceof DirectoryNotFound)
-    return { title: "Folder not found", description: <>{shown} doesn't exist. It may have been moved or deleted.</> }
-  if (error instanceof RepoNotFound)
-    return { title: "Not a Git repository", description: <>{shown} isn't inside a Git repository.</> }
-  return {
-    title: "Couldn't open this repository",
-    description: (
-      <>
-        {shown}: {describeFailure(cause)}
-      </>
-    ),
-  }
+    return { title: "Folder not found", detail: "It may have been moved or deleted." }
+  if (error instanceof RepoNotFound) return { title: "Not a Git repository", detail: undefined }
+  return { title: "Couldn't open this repository", detail: describeFailure(cause) }
+}
+
+function OpenFailure({ path, cause }: { path: string; cause: Cause.Cause<unknown> }) {
+  const { title, detail } = openFailure(cause)
+  const segments = path.split(/(?<=\/)/).flatMap((segment, index) => [segment, <wbr key={index} />])
+  return (
+    <Nothing
+      title={title}
+      description={
+        <>
+          <span className="block font-mono break-words">{segments}</span>
+          {detail}
+        </>
+      }
+    />
+  )
 }
 
 function RepoTab({
@@ -338,6 +345,6 @@ function RepoTab({
   const info = useAtomValue(repoInfoAtom(path))
   if (info._tag === "Success")
     return <Workspace repo={info.value.id} commonDir={info.value.commonDir} onOpenWorktree={onOpenWorktree} />
-  if (info._tag === "Failure") return <Nothing {...openFailure(path, info.cause)} />
+  if (info._tag === "Failure") return <OpenFailure path={path} cause={info.cause} />
   return <Loading label={`Opening ${basename(path)}`} />
 }

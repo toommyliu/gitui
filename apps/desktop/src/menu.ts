@@ -83,6 +83,7 @@ export const buildMenu = ({ theme, shortcuts }: { theme: Theme; shortcuts: MenuS
         command("repo.open", "Open Repository…"),
         separator,
         command("tab.close", "Close Tab"),
+        command("tab.reopen", "Reopen Closed Tab"),
         { role: "close", label: "Close Window", accelerator: "CmdOrCtrl+Shift+W" },
         ...(mac ? [] : [separator, settings, separator, { role: "quit" } as const]),
       ],

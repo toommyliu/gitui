@@ -41,6 +41,10 @@ export const appHotkeys = defineAppHotkeys({
   },
   "repo.open": { hotkey: menuShortcuts["repo.open"], meta: { name: "Open a repository", group: "Tabs" } },
   "tab.close": { hotkey: desktopDefault(menuShortcuts["tab.close"]), meta: { name: "Close the tab", group: "Tabs" } },
+  "tab.reopen": {
+    hotkey: desktopDefault(menuShortcuts["tab.reopen"]),
+    meta: { name: "Reopen closed tab", group: "Tabs" },
+  },
   "tab.next": { hotkey: desktopDefault(menuShortcuts["tab.next"]), meta: { name: "Next tab", group: "Tabs" } },
   "tab.previous": {
     hotkey: desktopDefault(menuShortcuts["tab.previous"]),

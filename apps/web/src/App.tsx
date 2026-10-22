@@ -29,7 +29,7 @@ import { basename } from "@/lib/format"
 import { connectionAtom, keys, latest, repoInfoAtom, statusAtom } from "@/lib/git"
 import { addRecent, recentAtom } from "@/lib/places"
 import { settingsAtom, settingsViewAtom } from "@/lib/settings"
-import { activeAfterClose, cycleTab, tabNumber } from "@/lib/tabs"
+import { closeTab, cycleTab, openTab, reopenTab, type TabState, tabNumber } from "@/lib/tabs"
 import { repoNameOf, useRefreshOnFocus } from "@/lib/worktrees"
 import type { RepoInfo } from "@gitui/contracts"
 
@@ -54,8 +54,12 @@ const stored = <T,>(key: string, fallback: T): T => {
 }
 
 export function App() {
-  const [tabs, setTabs] = useState<ReadonlyArray<string>>(() => stored("gitui.tabs", []))
-  const [active, setActive] = useState<string | null>(() => stored("gitui.active", null))
+  const [{ tabs, active, closed }, setTabState] = useState<TabState>(() => ({
+    tabs: stored("gitui.tabs", []),
+    active: stored("gitui.active", null),
+    closed: [],
+  }))
+  const setActive = (active: string | null) => setTabState((current) => ({ ...current, active }))
   const connection = useAtomValue(connectionAtom)
   const navigateSettings = useAtomSet(settingsViewAtom)
   const overlayOpen = useOverlayOpen()
@@ -85,25 +89,15 @@ export function App() {
 
   const open = (path: string) => {
     remember(path)
-    setTabs((current) => (current.includes(path) ? current : [...current, path]))
-    setActive(path)
+    setTabState((current) => openTab(current, path))
   }
   const openWorktree = (path: string, family: ReadonlyArray<string>) => {
     remember(path)
-    setTabs((current) => {
-      if (current.includes(path)) return current
-      const parent = active === null ? -1 : current.indexOf(active)
-      if (parent === -1) return [...current, path]
-      let at = parent + 1
-      while (at < current.length && family.includes(current[at]!)) at++
-      return [...current.slice(0, at), path, ...current.slice(at)]
-    })
-    setActive(path)
+    setTabState((current) => openTab(current, path, family))
   }
   const close = (path: string) => {
     remember(path)
-    setTabs(tabs.filter((tab) => tab !== path))
-    setActive(activeAfterClose(tabs, active, path))
+    setTabState((current) => closeTab(current, path))
   }
 
   useCommand("repo.open", () => {
@@ -115,6 +109,15 @@ export function App() {
   useCommand("tab.close", () => {
     if (active !== null) close(active)
   })
+  useCommand(
+    "tab.reopen",
+    () => {
+      const tab = closed.at(-1)
+      if (tab !== undefined) remember(tab.path)
+      setTabState(reopenTab)
+    },
+    { enabled: closed.length > 0 },
+  )
   useCommand("tab.next", () => setActive(cycleTab(tabs, active, 1)))
   useCommand("tab.previous", () => setActive(cycleTab(tabs, active, -1)))
   useHotkeys(
@@ -146,7 +149,10 @@ export function App() {
               modifiers={tabModifiers}
               onDragEnd={({ canceled, operation: { source } }) => {
                 if (canceled || !isSortable(source)) return
-                setTabs((current) => arrayMove([...current], source.initialIndex, source.index))
+                setTabState((current) => ({
+                  ...current,
+                  tabs: arrayMove([...current.tabs], source.initialIndex, source.index),
+                }))
               }}
             >
               <div className="flex h-full shrink-0">

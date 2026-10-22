@@ -254,7 +254,12 @@ export class Repo extends Context.Service<
       force: boolean,
       removeWorktree: boolean,
     ) => Effect.Effect<void, GitError>
-    readonly removeWorktree: (repo: RepoId, path: string, force: boolean) => Effect.Effect<void, GitError>
+    readonly removeWorktree: (
+      repo: RepoId,
+      path: string,
+      force: boolean,
+      deleteBranch: boolean,
+    ) => Effect.Effect<void, GitError>
     readonly pruneWorktrees: (repo: RepoId) => Effect.Effect<void, GitError>
     readonly fetch: (repo: RepoId) => Stream.Stream<Progress, GitError>
     readonly pull: (repo: RepoId) => Stream.Stream<Progress, GitError>
@@ -693,10 +698,18 @@ export class Repo extends Context.Service<
         yield* Effect.sync(() => deleteInBackground(trash))
       })
 
-      const removeWorktree = Effect.fn("Repo.removeWorktree")(function* (repo: RepoId, path: string, force: boolean) {
+      const removeWorktree = Effect.fn("Repo.removeWorktree")(function* (
+        repo: RepoId,
+        path: string,
+        force: boolean,
+        deleteBranch: boolean,
+      ) {
         const worktree = (yield* worktreesOf(repo)).find((candidate) => candidate.path === path)
         if (worktree === undefined) return yield* run(repo, removeWorktreeArgs(path, force))
+        const branch = deleteBranch && worktree.head._tag === "Branch" ? worktree.head.name : null
+        if (branch !== null && !force) yield* ensureMerged(repo, branch)
         yield* removeListedWorktree(repo, worktree, force)
+        if (branch !== null) yield* run(repo, ["branch", force ? "-D" : "-d", branch])
       })
 
       const pushArgs = Effect.fn("Repo.pushArgs")(function* (repo: RepoId) {

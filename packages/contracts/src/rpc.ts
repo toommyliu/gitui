@@ -149,7 +149,7 @@ export class GitRpcs extends RpcGroup.make(
     error: GitError,
   }),
   Rpc.make("RemoveWorktree", {
-    payload: { repo: RepoId, path: Schema.String, force: Schema.Boolean },
+    payload: { repo: RepoId, path: Schema.String, force: Schema.Boolean, deleteBranch: Schema.Boolean },
     error: GitError,
   }),
   Rpc.make("PruneWorktrees", { payload: repo, error: GitError }),

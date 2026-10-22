@@ -4,7 +4,6 @@ import { arrayMove } from "@dnd-kit/helpers"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/react"
 import { isSortable, useSortable } from "@dnd-kit/react/sortable"
 import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
@@ -16,7 +15,7 @@ import * as Cause from "effect/Cause"
 import { SettingsIcon, XIcon } from "lucide-react"
 import { type Ref, useEffect, useState } from "react"
 import { CommandPalette } from "@/components/command-palette"
-import { Loading } from "@/components/loading"
+import { Loading, Nothing } from "@/components/loading"
 import { useBackgroundFetch } from "@/components/network"
 import { RepoPicker } from "@/components/repo-picker"
 import { SettingsPage } from "@/components/settings-page"
@@ -26,12 +25,12 @@ import { Workspace } from "@/components/workspace"
 import { paletteOpenAtom, tabKeys, useCommand, useDesktopMenu, useOverlayOpen } from "@/lib/commands"
 import { desktop } from "@/lib/desktop"
 import { basename } from "@/lib/format"
-import { connectionAtom, keys, latest, repoInfoAtom, statusAtom } from "@/lib/git"
+import { connectionAtom, describeFailure, keys, latest, repoInfoAtom, statusAtom } from "@/lib/git"
 import { addRecent, recentAtom } from "@/lib/places"
 import { settingsAtom, settingsViewAtom } from "@/lib/settings"
 import { closeTab, cycleTab, openTab, reopenTab, type TabState, tabNumber } from "@/lib/tabs"
 import { repoNameOf, useRefreshOnFocus } from "@/lib/worktrees"
-import type { RepoInfo } from "@gitui/contracts"
+import { DirectoryNotFound, type RepoInfo, RepoNotFound } from "@gitui/contracts"
 
 const PICKER = "\0picker"
 const tabClassName =
@@ -312,6 +311,30 @@ function RepoTabHandle({
   )
 }
 
+function openFailure(cause: Cause.Cause<unknown>) {
+  const error = Cause.squash(cause)
+  if (error instanceof DirectoryNotFound)
+    return { title: "Folder not found", detail: "It may have been moved or deleted." }
+  if (error instanceof RepoNotFound) return { title: "Not a Git repository", detail: undefined }
+  return { title: "Couldn't open this repository", detail: describeFailure(cause) }
+}
+
+function OpenFailure({ path, cause }: { path: string; cause: Cause.Cause<unknown> }) {
+  const { title, detail } = openFailure(cause)
+  const segments = path.split(/(?<=\/)/).flatMap((segment, index) => [segment, <wbr key={index} />])
+  return (
+    <Nothing
+      title={title}
+      description={
+        <>
+          <span className="block font-mono break-words">{segments}</span>
+          {detail}
+        </>
+      }
+    />
+  )
+}
+
 function RepoTab({
   path,
   onOpenWorktree,
@@ -322,15 +345,6 @@ function RepoTab({
   const info = useAtomValue(repoInfoAtom(path))
   if (info._tag === "Success")
     return <Workspace repo={info.value.id} commonDir={info.value.commonDir} onOpenWorktree={onOpenWorktree} />
-  if (info._tag === "Failure") {
-    return (
-      <div className="p-4">
-        <Alert variant="destructive">
-          <AlertTitle>Couldn't open {path}</AlertTitle>
-          <AlertDescription>{Cause.pretty(info.cause).split("\n")[0]}</AlertDescription>
-        </Alert>
-      </div>
-    )
-  }
+  if (info._tag === "Failure") return <OpenFailure path={path} cause={info.cause} />
   return <Loading label={`Opening ${basename(path)}`} />
 }

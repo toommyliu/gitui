@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
+import type { ReactNode } from "react"
 
 export function Loading({ label }: { label: string }) {
   return (
@@ -21,7 +22,7 @@ export function Nothing({
   onRetry,
 }: {
   title: string
-  description?: string
+  description?: ReactNode
   onRetry?: () => void
 }) {
   return (

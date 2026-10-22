@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
-import { existsSync } from "node:fs"
+import { existsSync, statSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import {
   type CommitDetail,
@@ -21,6 +21,7 @@ import {
   type Status,
   type Worktree,
   allRefsVisible,
+  DirectoryNotFound,
   GitError,
   LogExpired,
   RepoNotFound,
@@ -198,7 +199,7 @@ const find = (session: LogSession, oid: Oid, from: number): Effect.Effect<number
 export class Repo extends Context.Service<
   Repo,
   {
-    readonly open: (path: string) => Effect.Effect<RepoInfo, RepoNotFound>
+    readonly open: (path: string) => Effect.Effect<RepoInfo, RepoNotFound | DirectoryNotFound>
     readonly status: (repo: RepoId) => Effect.Effect<Status, GitError>
     readonly refs: (repo: RepoId) => Effect.Effect<Refs, GitError>
     readonly openLog: (
@@ -306,6 +307,8 @@ export class Repo extends Context.Service<
           .pipe(Effect.map((out) => out.trim() !== ""))
 
       const open = Effect.fn("Repo.open")(function* (path: string) {
+        if (statSync(resolve(path), { throwIfNoEntry: false })?.isDirectory() !== true)
+          return yield* new DirectoryNotFound({ path })
         const out = yield* git
           .text(resolve(path), [
             "rev-parse",

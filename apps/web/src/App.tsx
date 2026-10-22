@@ -7,9 +7,10 @@ import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useHotkeys } from "@tanstack/react-hotkeys"
+import { useHotkeyHint, useHotkeys } from "@tanstack/react-hotkeys"
 import { cn } from "cn"
 import * as Cause from "effect/Cause"
 import { SettingsIcon, XIcon } from "lucide-react"
@@ -28,7 +29,7 @@ import { basename } from "@/lib/format"
 import { connectionAtom, keys, latest, repoInfoAtom, statusAtom } from "@/lib/git"
 import { addRecent, recentAtom } from "@/lib/places"
 import { settingsAtom, settingsViewAtom } from "@/lib/settings"
-import { activeAfterClose, cycleTab } from "@/lib/tabs"
+import { activeAfterClose, cycleTab, tabNumber } from "@/lib/tabs"
 import { repoNameOf, useRefreshOnFocus } from "@/lib/worktrees"
 import type { RepoInfo } from "@gitui/contracts"
 
@@ -126,6 +127,7 @@ export function App() {
     })),
     { enabled: !overlayOpen },
   )
+  const showTabNumbers = useHotkeyHint(tabKeys[0]) && !overlayOpen
 
   return (
     <div className="flex h-full flex-col">
@@ -149,7 +151,13 @@ export function App() {
             >
               <div className="flex h-full shrink-0">
                 {tabs.map((path, index) => (
-                  <SortableRepoTab key={path} path={path} index={index} onClose={() => close(path)} />
+                  <SortableRepoTab
+                    key={path}
+                    path={path}
+                    index={index}
+                    shortcut={showTabNumbers ? tabNumber(tabs.length, index) : undefined}
+                    onClose={() => close(path)}
+                  />
                 ))}
               </div>
             </DragDropProvider>
@@ -197,15 +205,32 @@ export function App() {
   )
 }
 
-function SortableRepoTab({ path, index, onClose }: { path: string; index: number; onClose: () => void }) {
+function SortableRepoTab({
+  path,
+  index,
+  shortcut,
+  onClose,
+}: {
+  path: string
+  index: number
+  shortcut: number | undefined
+  onClose: () => void
+}) {
   const { ref, handleRef } = useSortable({ id: path, index })
   const info = latest(useAtomValue(repoInfoAtom(path)))
   return (
     <div ref={ref} className={cn(tabFrameClassName, "group/repo-tab pr-1")}>
       {info === undefined ? (
-        <RepoTabHandle handleRef={handleRef} path={path} label={basename(path)} dirty={false} onClose={onClose} />
+        <RepoTabHandle
+          handleRef={handleRef}
+          path={path}
+          label={basename(path)}
+          dirty={false}
+          shortcut={shortcut}
+          onClose={onClose}
+        />
       ) : (
-        <OpenRepoTabHandle handleRef={handleRef} path={path} info={info} onClose={onClose} />
+        <OpenRepoTabHandle handleRef={handleRef} path={path} info={info} shortcut={shortcut} onClose={onClose} />
       )}
     </div>
   )
@@ -218,6 +243,7 @@ function OpenRepoTabHandle({
   handleRef: Ref<HTMLButtonElement>
   path: string
   info: RepoInfo
+  shortcut: number | undefined
   onClose: () => void
 }) {
   useRefreshOnFocus([keys.status(info.id)])
@@ -240,6 +266,7 @@ function RepoTabHandle({
   repo,
   label,
   dirty,
+  shortcut,
   onClose,
 }: {
   handleRef: Ref<HTMLButtonElement>
@@ -247,6 +274,7 @@ function RepoTabHandle({
   repo?: string | undefined
   label: string
   dirty: boolean
+  shortcut: number | undefined
   onClose: () => void
 }) {
   return (
@@ -261,12 +289,18 @@ function RepoTabHandle({
         aria-label={dirty ? `Close ${label}, which has uncommitted changes` : `Close ${label}`}
         title={dirty ? "Uncommitted changes" : undefined}
         onClick={onClose}
-        className={cn("group/close", !dirty && "opacity-50 group-hover/repo-tab:opacity-100")}
+        className={cn("group/close", !dirty && shortcut === undefined && "opacity-50 group-hover/repo-tab:opacity-100")}
       >
-        {dirty && (
-          <span className="size-2 rounded-full bg-current group-hover/close:hidden group-focus-visible/close:hidden" />
+        {shortcut !== undefined ? (
+          <Kbd>{shortcut}</Kbd>
+        ) : (
+          <>
+            {dirty && (
+              <span className="size-2 rounded-full bg-current group-hover/close:hidden group-focus-visible/close:hidden" />
+            )}
+            <XIcon className={cn(dirty && "hidden group-hover/close:block group-focus-visible/close:block")} />
+          </>
         )}
-        <XIcon className={cn(dirty && "hidden group-hover/close:block group-focus-visible/close:block")} />
       </Button>
     </>
   )

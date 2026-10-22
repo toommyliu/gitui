@@ -9,3 +9,6 @@ export const cycleTab = (tabs: ReadonlyArray<string>, active: string | null, del
   const index = active === null ? (delta === 1 ? -1 : 0) : tabs.indexOf(active)
   return tabs[(index + delta + tabs.length) % tabs.length]!
 }
+
+export const tabNumber = (count: number, index: number): number | undefined =>
+  index === count - 1 ? Math.min(count, 9) : index < 8 ? index + 1 : undefined

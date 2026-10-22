@@ -1,8 +1,36 @@
-export const logRevArgs = (hasHead: boolean, remotes = true) => [
+import { allRefsVisible, type RefVisibility } from "@gitui/contracts"
+
+const excludes = (hidden: ReadonlyArray<string>) =>
+  hidden.flatMap((name) => [`--exclude=${name}`, `--exclude=${name}/*`])
+
+export const logRevArgs = (
+  hasHead: boolean,
+  refs: RefVisibility = allRefsVisible,
+  stashes: ReadonlyArray<string> = [],
+) => [
   ...(hasHead ? ["HEAD"] : []),
+  ...(refs.branches ? excludes(refs.hiddenBranches) : ["--exclude=*"]),
   "--branches",
-  ...(remotes ? ["--remotes"] : []),
+  ...(refs.remotes ? [...excludes(refs.hiddenRemotes), "--remotes"] : []),
+  ...(refs.tags ? ["--tags"] : []),
+  ...stashes,
 ]
+
+export interface StashCommit {
+  readonly oid: string
+  readonly parents: ReadonlyArray<string>
+}
+
+export const stashParentsArgs = ["stash", "list", "--format=%H %P"]
+
+export const parseStashParents = (text: string): Array<StashCommit> =>
+  text
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => {
+      const [oid = "", ...parents] = line.split(" ")
+      return { oid, parents }
+    })
 
 export interface LogQuery {
   readonly words: ReadonlyArray<string>

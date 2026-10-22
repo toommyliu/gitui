@@ -1,5 +1,6 @@
 import type { CommitRow, GraphRow, Oid } from "@gitui/contracts"
 import { GraphLayout, type GraphState } from "./graph.ts"
+import type { StashCommit } from "./log.ts"
 import { NulSplitter } from "./nul.ts"
 
 const FIELDS = 5
@@ -62,9 +63,13 @@ export class LogStore {
   private readonly authorIds = new NumberColumn()
   private readonly authors: Array<string> = []
   private readonly authorIndex = new Map<string, number>()
+  private readonly stashes: ReadonlySet<string>
+  private readonly stashInternals: ReadonlySet<string>
 
-  constructor(graph: boolean) {
+  constructor(graph: boolean, stashes: ReadonlyArray<StashCommit> = []) {
     this.layout = graph ? new GraphLayout() : null
+    this.stashes = new Set(stashes.map((stash) => stash.oid))
+    this.stashInternals = new Set(stashes.flatMap((stash) => stash.parents.slice(1)))
   }
 
   get length() {
@@ -119,7 +124,9 @@ export class LogStore {
     let i = 0
     for (; i + FIELDS <= all.length; i += FIELDS) {
       const oid = all[i]!.replace(/^\n/, "")
-      const parents = all[i + 1] === "" ? [] : all[i + 1]!.split(" ")
+      if (this.stashInternals.has(oid)) continue
+      const listed = all[i + 1] === "" ? [] : all[i + 1]!.split(" ")
+      const parents = this.stashes.has(oid) ? listed.slice(0, 1) : listed
       if (this.layout !== null) {
         if (this.length % CHECKPOINT_ROWS === 0) this.checkpoints.push(this.layout.state())
         this.layout.push(oid, parents)

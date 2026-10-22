@@ -288,17 +288,6 @@ function HistorySettings() {
   const [settings, update] = useSettings()
   return (
     <>
-      <Row
-        label="Include remote branches"
-        description="Shows commits that only remote branches reach."
-        htmlFor="history-remotes"
-      >
-        <Switch
-          id="history-remotes"
-          checked={settings.historyRemotes}
-          onCheckedChange={(historyRemotes: boolean) => update({ historyRemotes })}
-        />
-      </Row>
       <Row label="Dates" description="Exact shows the time today, the weekday this week, then the date.">
         <Choice
           label="Dates"

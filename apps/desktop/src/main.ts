@@ -20,8 +20,8 @@ import * as Schema from "effect/Schema"
 import { buildMenu } from "./menu.ts"
 import { APP_ORIGIN, BackendReady, SCHEME } from "./protocol.ts"
 
-const webDist = resolve(__dirname, "../../web/dist")
-const devUrl = process.env.GITUI_DEV_URL
+const webDist = app.isPackaged ? resolve(__dirname, "../web") : resolve(__dirname, "../../web/dist")
+const devUrl = app.isPackaged ? undefined : process.env.GITUI_DEV_URL
 const appOrigin = devUrl ?? APP_ORIGIN
 const icon = resolve(__dirname, "../resources", devUrl === undefined ? "icon.png" : "icon-dev.png")
 
@@ -42,7 +42,8 @@ const serveApp = (request: Request) => {
 
 const startBackend = () =>
   new Promise<{ readonly child: ChildProcess; readonly port: number }>((resolveStart, rejectStart) => {
-    const child = spawn(process.execPath, [join(__dirname, "backend.mjs")], {
+    const entry = join(app.isPackaged ? process.resourcesPath : __dirname, "backend.mjs")
+    const child = spawn(process.execPath, [entry], {
       stdio: ["ignore", "inherit", "inherit", "ipc"],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
       // Keeps a terminal's Ctrl+C away from the server. Electron stops it on quit.

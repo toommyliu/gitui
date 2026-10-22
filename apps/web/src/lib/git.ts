@@ -280,11 +280,16 @@ const useFailureToast = () => {
   }
 }
 
-export const useGitAction = () => {
+export const useRunGitAction = () => {
   const run = useAtomSet(actionAtom, { mode: "promiseExit" })
+  return (repo: RepoId, action: Action) => run({ repo, run: action })
+}
+
+export const useGitAction = () => {
+  const run = useRunGitAction()
   const fail = useFailureToast()
   return async (label: string, repo: RepoId, action: Action) => {
-    const exit = await run({ repo, run: action })
+    const exit = await run(repo, action)
     if (Exit.isSuccess(exit)) return true
     fail(label, exit.cause)
     return false

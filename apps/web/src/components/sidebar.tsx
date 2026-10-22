@@ -26,7 +26,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -36,13 +36,24 @@ import {
 } from "@/components/ui/context-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
+import * as Exit from "effect/Exit"
 import { ChevronRightIcon, EyeIcon, EyeOffIcon, GitBranchIcon } from "lucide-react"
 import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "react"
 import { useHistoryDate } from "@/lib/dates"
 import { basename, shortOid } from "@/lib/format"
-import { latest, refsAtom, statusAtom, useCheckout, useGitAction, useNetwork } from "@/lib/git"
+import {
+  describeFailure,
+  latest,
+  refsAtom,
+  statusAtom,
+  useCheckout,
+  useGitAction,
+  useNetwork,
+  useRunGitAction,
+} from "@/lib/git"
 import type { Selection } from "@/lib/selection"
 import { type Location, type LocationState, locationState, toggleLocation } from "@/lib/visibility"
 import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
@@ -880,10 +891,12 @@ function DeleteBranchDialog({
   worktree: Worktree | undefined
   onClose: () => void
 }) {
-  const git = useGitAction()
+  const run = useRunGitAction()
   const [force, setForce] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   return (
-    <AlertDialog open onOpenChange={(open) => open || onClose()}>
+    <AlertDialog open onOpenChange={(open) => open || busy || onClose()}>
       <AlertDialogContent className="data-[size=default]:sm:max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle>Delete {branch.name}?</AlertDialogTitle>
@@ -895,19 +908,26 @@ function DeleteBranchDialog({
                 Delete even if it has commits that aren't merged anywhere
               </FieldLabel>
             </Field>
+            {error !== null && <FieldError className="whitespace-pre-line">{error}</FieldError>}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
+            disabled={busy}
             onClick={() => {
-              onClose()
-              void git("Delete branch", repo, (c) =>
+              setBusy(true)
+              void run(repo, (c) =>
                 c("DeleteBranch", { repo, name: branch.name, force, removeWorktree: worktree !== undefined }),
-              )
+              ).then((exit) => {
+                if (Exit.isSuccess(exit)) return onClose()
+                setError(describeFailure(exit.cause))
+                setBusy(false)
+              })
             }}
           >
+            {busy && <Spinner data-icon="inline-start" />}
             {worktree === undefined ? "Delete branch" : "Delete branch and worktree"}
           </AlertDialogAction>
         </AlertDialogFooter>

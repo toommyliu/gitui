@@ -104,8 +104,6 @@ export const buildMenu = ({ theme, shortcuts }: { theme: Theme; shortcuts: MenuS
         { role: "resetZoom" },
         { role: "zoomIn" },
         { role: "zoomOut" },
-        separator,
-        { role: "togglefullscreen" },
       ],
     },
     {

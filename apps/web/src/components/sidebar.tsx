@@ -44,7 +44,7 @@ import { useHistoryDate } from "@/lib/dates"
 import { basename, shortOid } from "@/lib/format"
 import { latest, refsAtom, statusAtom, useCheckout, useGitAction, useNetwork } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
-import { type Location, type LocationState, locationState, toggleLocation } from "@/lib/visibility"
+import { type Location, type LocationState, focusLocation, locationState, toggleLocation } from "@/lib/visibility"
 import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
 import { useConfirm } from "./confirm"
 import { SyncButtons } from "./network"
@@ -262,7 +262,13 @@ export function Sidebar({
                     hidden={state === "hidden"}
                     label={location.name ?? location.section}
                     header={row.kind === "section"}
-                    onToggle={() => onVisibilityChange(toggleLocation(visibility, location))}
+                    onToggle={(focus) =>
+                      onVisibilityChange(
+                        focus && refs !== undefined
+                          ? focusLocation(refs, location)
+                          : toggleLocation(visibility, location),
+                      )
+                    }
                   />
                 )}
               </div>
@@ -371,22 +377,25 @@ function VisibilityToggle({
   hidden: boolean
   label: string
   header: boolean
-  onToggle: () => void
+  onToggle: (focus: boolean) => void
 }) {
   const action = `${hidden ? "Show" : "Hide"} ${label} in history`
+  const shortcut = "Alt-click or Alt+Enter to focus"
   return (
-    <span
-      className={cn(
-        "absolute inset-y-0 right-0 bg-background",
-        hidden ? "flex" : "hidden group-focus-within/row:flex group-hover/row:flex",
-      )}
-    >
+    <span className="absolute inset-y-0 right-0 hidden bg-background group-focus-within/row:flex group-hover/row:flex">
       <span className={cn("flex items-center px-1", !header && "group-hover/row:bg-muted/60")}>
         <button
           type="button"
           aria-label={action}
-          title={action}
-          onClick={onToggle}
+          aria-description={shortcut}
+          title={`${action}\n${shortcut}`}
+          onClick={(event) => onToggle(event.altKey)}
+          onKeyDown={(event) => {
+            if (event.altKey && (event.key === "Enter" || event.key === " ")) {
+              event.preventDefault()
+              onToggle(true)
+            }
+          }}
           className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
         >
           {hidden ? <EyeOffIcon className="size-3.5" /> : <EyeIcon className="size-3.5" />}

@@ -1,5 +1,5 @@
 import * as BrowserKeyValueStore from "@effect/platform-browser/BrowserKeyValueStore"
-import { allRefsVisible, RefVisibility } from "@gitui/contracts"
+import { allRefsVisible, type Refs, RefVisibility } from "@gitui/contracts"
 import * as Atom from "effect/reactivity/Atom"
 
 const storage = Atom.runtime(BrowserKeyValueStore.layerLocalStorage)
@@ -38,5 +38,19 @@ export const toggleLocation = (visibility: RefVisibility, location: Location): R
     [key]: hidden.includes(location.name)
       ? hidden.filter((entry) => entry !== location.name)
       : [...hidden, location.name],
+  }
+}
+
+export const focusLocation = (refs: Refs, location: Location): RefVisibility => {
+  const outside = (name: string) =>
+    location.name !== undefined && name !== location.name && !name.startsWith(`${location.name}/`)
+  return {
+    branches: location.section === "branches",
+    remotes: location.section === "remotes",
+    tags: location.section === "tags",
+    stashes: location.section === "stashes",
+    hiddenBranches: location.section === "branches" ? refs.branches.map((branch) => branch.name).filter(outside) : [],
+    hiddenRemotes:
+      location.section === "remotes" ? refs.remoteBranches.map((branch) => branch.name).filter(outside) : [],
   }
 }

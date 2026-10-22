@@ -75,7 +75,11 @@ export class GitRpcs extends RpcGroup.make(
   }),
   Rpc.make("FilterRepos", { payload: { paths: Schema.Array(Schema.String) }, success: Schema.Array(Schema.String) }),
   Rpc.make("CommandLog", { payload: repo, success: Schema.Array(CommandEntry), stream: true }),
-  Rpc.make("OpenRepo", { payload: { path: Schema.String }, success: RepoInfo, error: RepoNotFound }),
+  Rpc.make("OpenRepo", {
+    payload: { path: Schema.String },
+    success: RepoInfo,
+    error: Schema.Union([RepoNotFound, DirectoryNotFound]),
+  }),
   Rpc.make("WatchRepo", { payload: repo, success: RepoEvent, error: GitError, stream: true }),
   Rpc.make("GetStatus", { payload: repo, success: Status, error: GitError }),
   Rpc.make("GetRefs", { payload: repo, success: Refs, error: GitError }),

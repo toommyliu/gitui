@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process"
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
@@ -147,6 +148,15 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       const info = yield* (yield* Repo).open(join(repo.root, "deep", "er"))
       expect(info.commonDir).toBe(join(info.id, ".git"))
       expect(info.gitDir).toBe(info.commonDir)
+    }),
+  )
+
+  it.effect("tells a missing folder apart from a folder outside any repository", () =>
+    Effect.gen(function* () {
+      const r = yield* Repo
+      const plain = mkdtempSync(join(tmpdir(), "gitui-plain-"))
+      expect((yield* Effect.flip(r.open(join(plain, "gone"))))._tag).toBe("DirectoryNotFound")
+      expect((yield* Effect.flip(r.open(plain)))._tag).toBe("RepoNotFound")
     }),
   )
 

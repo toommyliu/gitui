@@ -320,7 +320,8 @@ function RepoTab({
   onOpenWorktree: (path: string, family: ReadonlyArray<string>) => void
 }) {
   const info = useAtomValue(repoInfoAtom(path))
-  if (info._tag === "Success") return <Workspace repo={info.value.id} onOpenWorktree={onOpenWorktree} />
+  if (info._tag === "Success")
+    return <Workspace repo={info.value.id} commonDir={info.value.commonDir} onOpenWorktree={onOpenWorktree} />
   if (info._tag === "Failure") {
     return (
       <div className="p-4">

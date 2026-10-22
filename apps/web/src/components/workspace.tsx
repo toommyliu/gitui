@@ -9,6 +9,7 @@ import { useCommand } from "@/lib/commands"
 import { pathQuery, watchAtom } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
+import { visibilityAtom } from "@/lib/visibility"
 import { CommandLogDrawer } from "./command-log"
 import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
@@ -26,9 +27,11 @@ const queryAtom = Atom.family((_repo: RepoId) => Atom.make("").pipe(Atom.keepAli
 
 export function Workspace({
   repo,
+  commonDir,
   onOpenWorktree,
 }: {
   repo: RepoId
+  commonDir: string
   onOpenWorktree: (path: string, family: ReadonlyArray<string>) => void
 }) {
   useAtomMount(watchAtom(repo))
@@ -37,6 +40,7 @@ export function Workspace({
   const [selection, setSelection] = useAtom(selectionAtom(repo))
   const [pane, setPane] = useAtom(paneAtom(repo))
   const [query, setQuery] = useAtom(queryAtom(repo))
+  const [visibility, setVisibility] = useAtom(visibilityAtom(commonDir))
   const searchRef = useRef<HTMLInputElement>(null)
   useCommand("history.search", () => {
     if (narrow) flushSync(() => setPane("history"))
@@ -68,12 +72,22 @@ export function Workspace({
     ) : (
       <WorkingCopy repo={repo} onHistory={showHistory} />
     )
-  const sidebar = <Sidebar repo={repo} selection={selection} onSelect={select} onOpen={onOpenWorktree} />
+  const sidebar = (
+    <Sidebar
+      repo={repo}
+      selection={selection}
+      onSelect={select}
+      onOpen={onOpenWorktree}
+      visibility={visibility}
+      onVisibilityChange={setVisibility}
+    />
+  )
   const history = (
     <CommitList
       repo={repo}
       selection={selection}
       onSelect={select}
+      visibility={visibility}
       query={query}
       onQueryChange={setQuery}
       searchRef={searchRef}

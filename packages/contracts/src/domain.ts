@@ -155,6 +155,25 @@ export const CommitRow = Schema.Struct({
 })
 export type CommitRow = typeof CommitRow.Type
 
+export const RefVisibility = Schema.Struct({
+  branches: Schema.Boolean,
+  remotes: Schema.Boolean,
+  tags: Schema.Boolean,
+  stashes: Schema.Boolean,
+  hiddenBranches: Schema.Array(Schema.String),
+  hiddenRemotes: Schema.Array(Schema.String),
+})
+export type RefVisibility = typeof RefVisibility.Type
+
+export const allRefsVisible: RefVisibility = {
+  branches: true,
+  remotes: true,
+  tags: true,
+  stashes: true,
+  hiddenBranches: [],
+  hiddenRemotes: [],
+}
+
 export const LogHandle = Schema.Struct({
   logId: Schema.String,
   loaded: Schema.Int,

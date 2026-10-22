@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema"
 import * as Rpc from "effect/rpc/Rpc"
 import * as RpcGroup from "effect/rpc/RpcGroup"
 import {
+  allRefsVisible,
   CommandEntry,
   CommitDetail,
   CommitRow,
@@ -16,6 +17,7 @@ import {
   Oid,
   Progress,
   Refs,
+  RefVisibility,
   RepoEvent,
   RepoId,
   RepoInfo,
@@ -81,7 +83,7 @@ export class GitRpcs extends RpcGroup.make(
     payload: {
       repo: RepoId,
       query: Schema.String,
-      remotes: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
+      refs: RefVisibility.pipe(Schema.withDecodingDefaultKey(Effect.succeed(allRefsVisible))),
     },
     success: LogHandle,
     error: Schema.Union([GitError, LogExpired]),

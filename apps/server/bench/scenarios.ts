@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
-import { type GitError, GitRpcs, type LogExpired, type RepoId, type RepoPath } from "@gitui/contracts"
+import { allRefsVisible, type GitError, GitRpcs, type LogExpired, type RepoId, type RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Stream from "effect/Stream"
@@ -25,7 +25,7 @@ export interface Scenario {
 
 export const firstLogPage = (client: Client, repo: RepoId) =>
   Effect.gen(function* () {
-    const handle = yield* Stream.runHead(client.OpenLog({ repo, query: "", remotes: true }))
+    const handle = yield* Stream.runHead(client.OpenLog({ repo, query: "", refs: allRefsVisible }))
     const { logId } = Option.getOrThrow(handle)
     return yield* client.GetLogPage({ repo, logId, start: 0, count: 200 })
   })

@@ -14,11 +14,13 @@ import {
   type Operation,
   type Progress,
   type Refs,
+  type RefVisibility,
   type RepoId,
   type RepoInfo,
   type RepoPath,
   type Status,
   type Worktree,
+  allRefsVisible,
   GitError,
   LogExpired,
   RepoNotFound,
@@ -38,7 +40,15 @@ import * as Semaphore from "effect/Semaphore"
 import * as Stream from "effect/Stream"
 import { diffTreeArgs, parseCommit, parseFileChanges, showArgs } from "./commit.ts"
 import { Git, nulList } from "./git.ts"
-import { hasGraph, logArgs, logRevArgs, parseLogQuery, shaCandidate } from "./log.ts"
+import {
+  hasGraph,
+  logArgs,
+  logRevArgs,
+  parseLogQuery,
+  parseStashParents,
+  shaCandidate,
+  stashParentsArgs,
+} from "./log.ts"
 import { LogStore } from "./log-store.ts"
 import {
   forEachRefArgs,
@@ -194,7 +204,7 @@ export class Repo extends Context.Service<
     readonly openLog: (
       repo: RepoId,
       query: string,
-      remotes?: boolean,
+      refs?: RefVisibility,
     ) => Stream.Stream<LogHandle, GitError | LogExpired>
     readonly logPage: (
       repo: RepoId,
@@ -388,7 +398,7 @@ export class Repo extends Context.Service<
           return Scope.close(session.scope, Exit.void)
         })
 
-      const logSession = Effect.fn("Repo.logSession")(function* (repo: RepoId, search: string, remotes: boolean) {
+      const logSession = Effect.fn("Repo.logSession")(function* (repo: RepoId, search: string, refs: RefVisibility) {
         const parsed = parseLogQuery(search)
         const head = yield* hasHead(repo)
         const sha = shaCandidate(parsed)
@@ -399,7 +409,15 @@ export class Repo extends Context.Service<
                 okExitCodes: [1, 128],
               })).trim()
         const query = commit === "" ? parsed : parseLogQuery("")
-        const revs = commit === "" ? logRevArgs(head, remotes) : ["--no-walk", commit]
+        const stashes = commit === "" && refs.stashes ? parseStashParents(yield* git.text(repo, stashParentsArgs)) : []
+        const revs =
+          commit === ""
+            ? logRevArgs(
+                head,
+                refs,
+                stashes.map((stash) => stash.oid),
+              )
+            : ["--no-walk", commit]
         const tips = commit || (yield* git.text(repo, ["rev-parse", ...revs], { okExitCodes: [128] }))
         const logId = createHash("sha1")
           .update(`${tips}\0${JSON.stringify(query)}`)
@@ -421,7 +439,7 @@ export class Repo extends Context.Service<
         const scope = yield* Scope.make()
         const pull = yield* Stream.toPull(git.stream(repo, logArgs(revs, query))).pipe(Scope.provide(scope))
         const session: LogSession = {
-          store: new LogStore(hasGraph(query)),
+          store: new LogStore(hasGraph(query), stashes),
           scope,
           wanted: Latch.makeUnsafe(false),
           readers: 0,
@@ -443,10 +461,10 @@ export class Repo extends Context.Service<
         return { logId, session }
       })
 
-      const openLog = (repo: RepoId, search: string, remotes = true) =>
+      const openLog = (repo: RepoId, search: string, refs = allRefsVisible) =>
         Stream.unwrap(
           Effect.gen(function* () {
-            const { logId, session } = yield* logSession(repo, search, remotes)
+            const { logId, session } = yield* logSession(repo, search, refs)
             yield* want(session)
             const handle = (): LogHandle => ({
               logId,

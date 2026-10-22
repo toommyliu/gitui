@@ -1,5 +1,17 @@
 import { useAtomValue } from "@effect/atom-react"
-import type { Branch, Head, Oid, Refs, RemoteBranch, RepoId, Stash, Status, Tag, Worktree } from "@gitui/contracts"
+import type {
+  Branch,
+  Head,
+  Oid,
+  Refs,
+  RefVisibility,
+  RemoteBranch,
+  RepoId,
+  Stash,
+  Status,
+  Tag,
+  Worktree,
+} from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import {
   AlertDialog,
@@ -28,7 +40,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
 import * as Exit from "effect/Exit"
-import { ChevronRightIcon, GitBranchIcon } from "lucide-react"
+import { ChevronRightIcon, EyeIcon, EyeOffIcon, GitBranchIcon } from "lucide-react"
 import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "react"
 import { useHistoryDate } from "@/lib/dates"
 import { basename, shortOid } from "@/lib/format"
@@ -43,6 +55,7 @@ import {
   useRunGitAction,
 } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
+import { type Location, type LocationState, locationState, toggleLocation } from "@/lib/visibility"
 import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
 import { useConfirm } from "./confirm"
 import { SyncButtons } from "./network"
@@ -101,16 +114,50 @@ const flattenTree = <T,>(
   for (const { label, value } of tree.leaves) out.push(leaf(label, value, depth))
 }
 
+const rowVisibility = (
+  row: Row,
+  visibility: RefVisibility,
+  head: Head | undefined,
+): { state: LocationState; location: Location | null } => {
+  const at = (location: Location) => ({ state: locationState(visibility, location), location })
+  const within = (shown: boolean) => ({ state: shown ? ("shown" as const) : ("inherited" as const), location: null })
+  switch (row.kind) {
+    case "section":
+      return row.id === "worktrees" ? within(true) : at({ section: row.id })
+    case "folder": {
+      const [section = "", ...name] = row.id.split("/")
+      if (section === "tags") return within(visibility.tags)
+      return at({ section: section === "remotes" ? "remotes" : "branches", name: name.join("/") })
+    }
+    case "branch":
+      return head?._tag === "Branch" && head.name === row.branch.name
+        ? within(true)
+        : at({ section: "branches", name: row.branch.name })
+    case "remote":
+      return at({ section: "remotes", name: row.ref.name })
+    case "tag":
+      return within(visibility.tags)
+    case "stash":
+      return within(visibility.stashes)
+    case "worktree":
+      return within(true)
+  }
+}
+
 export function Sidebar({
   repo,
   selection,
   onSelect,
   onOpen,
+  visibility,
+  onVisibilityChange,
 }: {
   repo: RepoId
   selection: Selection
   onSelect: (selection: Selection) => void
   onOpen: (path: string, family: ReadonlyArray<string>) => void
+  visibility: RefVisibility
+  onVisibilityChange: (visibility: RefVisibility) => void
 }) {
   useRefreshOnFocus([worktreesKey(repo)])
   const refs = latest(useAtomValue(refsAtom(repo)))
@@ -197,27 +244,41 @@ export function Sidebar({
         viewportProps={{ className: "py-1 [contain:strict] data-has-overflow-y:pr-2.5" }}
       >
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-          {virtualizer.getVirtualItems().map((item) => (
-            <div
-              key={item.key}
-              className="absolute top-0 left-0 w-full"
-              style={{ height: ROW, transform: `translateY(${item.start}px)` }}
-            >
-              <SidebarRow
-                row={rows[item.index]!}
-                repo={repo}
-                refs={refs}
-                head={head}
-                collapsed={collapsed}
-                toggle={toggle}
-                onSelect={onSelect}
-                onOpen={(path) => onOpen(path, refs?.worktrees.map((worktree) => worktree.path) ?? [])}
-                selectedWorktree={selection._tag === "Worktree" ? selection.path : null}
-                worktreeByBranch={worktreeByBranch}
-                onDelete={(branch) => setDeleting({ branch, worktree: worktreeByBranch.get(branch.name) })}
-              />
-            </div>
-          ))}
+          {virtualizer.getVirtualItems().map((item) => {
+            const row = rows[item.index]!
+            const { state, location } = rowVisibility(row, visibility, head)
+            return (
+              <div
+                key={item.key}
+                className="group/row absolute top-0 left-0 w-full"
+                style={{ height: ROW, transform: `translateY(${item.start}px)` }}
+              >
+                <div className={cn("h-full", state !== "shown" && "opacity-50")}>
+                  <SidebarRow
+                    row={row}
+                    repo={repo}
+                    refs={refs}
+                    head={head}
+                    collapsed={collapsed}
+                    toggle={toggle}
+                    onSelect={onSelect}
+                    onOpen={(path) => onOpen(path, refs?.worktrees.map((worktree) => worktree.path) ?? [])}
+                    selectedWorktree={selection._tag === "Worktree" ? selection.path : null}
+                    worktreeByBranch={worktreeByBranch}
+                    onDelete={(branch) => setDeleting({ branch, worktree: worktreeByBranch.get(branch.name) })}
+                  />
+                </div>
+                {location !== null && state !== "inherited" && (
+                  <VisibilityToggle
+                    hidden={state === "hidden"}
+                    label={location.name ?? location.section}
+                    header={row.kind === "section"}
+                    onToggle={() => onVisibilityChange(toggleLocation(visibility, location))}
+                  />
+                )}
+              </div>
+            )
+          })}
         </div>
       </ScrollArea>
       {deleting !== null && (
@@ -309,6 +370,40 @@ function Line({
     >
       {children}
     </button>
+  )
+}
+
+function VisibilityToggle({
+  hidden,
+  label,
+  header,
+  onToggle,
+}: {
+  hidden: boolean
+  label: string
+  header: boolean
+  onToggle: () => void
+}) {
+  const action = `${hidden ? "Show" : "Hide"} ${label} in history`
+  return (
+    <span
+      className={cn(
+        "absolute inset-y-0 right-0 bg-background",
+        hidden ? "flex" : "hidden group-focus-within/row:flex group-hover/row:flex",
+      )}
+    >
+      <span className={cn("flex items-center px-1", !header && "group-hover/row:bg-muted/60")}>
+        <button
+          type="button"
+          aria-label={action}
+          title={action}
+          onClick={onToggle}
+          className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
+        >
+          {hidden ? <EyeOffIcon className="size-3.5" /> : <EyeIcon className="size-3.5" />}
+        </button>
+      </span>
+    </span>
   )
 }
 

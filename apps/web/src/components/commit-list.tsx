@@ -1,5 +1,5 @@
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react"
-import type { CommitRow, Head, Oid, Refs, RepoId, Status } from "@gitui/contracts"
+import type { CommitRow, Head, Oid, Refs, RefVisibility, RepoId, Status } from "@gitui/contracts"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
@@ -39,30 +39,33 @@ import {
   statusAtom,
 } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
-import { settingsAtom } from "@/lib/settings"
+import { locationState } from "@/lib/visibility"
 import { useTallList } from "@/lib/tall-list"
 import { CommitMenuItems } from "./commit-menu"
 import { Nothing } from "./loading"
 import { GraphCell, LANE_WIDTH, ROW_HEIGHT, VISIBLE_LANES, lanesUsed } from "./graph"
 
 export type RefLabel = {
-  readonly kind: "head" | "branch" | "remote" | "tag"
+  readonly kind: "head" | "branch" | "remote" | "tag" | "stash"
   readonly name: string
   readonly upstream?: string | undefined
 }
 
-export const refLabels = (refs: Refs | undefined, head: Head | undefined) => {
+export const refLabels = (refs: Refs | undefined, head: Head | undefined, visibility: RefVisibility) => {
   const labels = new Map<string, Array<RefLabel>>()
   const add = (oid: string, label: RefLabel) => {
     const list = labels.get(oid)
     if (list === undefined) labels.set(oid, [label])
     else list.push(label)
   }
+  const shown = (section: "branches" | "remotes", name: string) =>
+    locationState(visibility, { section, name }) === "shown"
   if (head?._tag === "Detached") add(head.oid, { kind: "head", name: "HEAD" })
   const remoteOids = new Map(refs?.remoteBranches.map((remote) => [remote.name, remote.oid]))
   const merged = new Set<string>()
   for (const branch of refs?.branches ?? []) {
     const isHead = head?._tag === "Branch" && head.name === branch.name
+    if (!isHead && !shown("branches", branch.name)) continue
     const upstream =
       branch.upstream?._tag === "Tracking" && remoteOids.get(branch.upstream.name) === branch.oid
         ? branch.upstream.name
@@ -71,14 +74,17 @@ export const refLabels = (refs: Refs | undefined, head: Head | undefined) => {
     add(branch.oid, { kind: isHead ? "head" : "branch", name: branch.name, upstream })
   }
   for (const remote of refs?.remoteBranches ?? []) {
-    if (!merged.has(remote.name)) add(remote.oid, { kind: "remote", name: remote.name })
+    if (!merged.has(remote.name) && shown("remotes", remote.name))
+      add(remote.oid, { kind: "remote", name: remote.name })
   }
-  for (const tag of refs?.tags ?? []) add(tag.oid, { kind: "tag", name: tag.name })
+  if (visibility.tags) for (const tag of refs?.tags ?? []) add(tag.oid, { kind: "tag", name: tag.name })
+  if (visibility.stashes)
+    refs?.stashes.forEach((stash, index) => add(stash.oid, { kind: "stash", name: `stash@{${index}}` }))
   for (const list of labels.values()) list.sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind])
   return labels
 }
 
-const kindOrder: Record<RefLabel["kind"], number> = { head: 0, branch: 1, remote: 2, tag: 3 }
+const kindOrder: Record<RefLabel["kind"], number> = { head: 0, branch: 1, remote: 2, tag: 3, stash: 4 }
 
 export function RefBadge({ label, className }: { label: RefLabel; className?: string }) {
   return (
@@ -87,7 +93,7 @@ export function RefBadge({ label, className }: { label: RefLabel; className?: st
       className={cn(
         "h-4 rounded-sm px-1 text-[11px] [&>svg]:size-3!",
         label.kind !== "head" && "bg-foreground/8",
-        label.kind === "remote" && "text-muted-foreground",
+        (label.kind === "remote" || label.kind === "stash") && "text-muted-foreground",
         label.kind === "tag" && "pr-0.5 italic",
         className,
       )}
@@ -152,6 +158,7 @@ export function CommitList({
   repo,
   selection,
   onSelect,
+  visibility,
   query,
   onQueryChange,
   searchRef,
@@ -159,22 +166,27 @@ export function CommitList({
   repo: RepoId
   selection: Selection
   onSelect: (selection: Selection) => void
+  visibility: RefVisibility
   query: string
   onQueryChange: (query: string) => void
   searchRef: React.RefObject<HTMLInputElement | null>
 }) {
   const search = useDebounced(query.trim(), 250)
-  const { historyRemotes } = useAtomValue(settingsAtom)
-  const result = useAtomValue(logAtom(logKey(repo, search, historyRemotes)))
-  const refreshLog = useAtomRefresh(logAtom(logKey(repo, search, historyRemotes)))
-  const current = latest(result)
-  const [shown, setShown] = useState(current)
-  if (current !== undefined && current !== shown) setShown(current)
-  const log = current ?? shown
+  const result = useAtomValue(logAtom(logKey(repo, search, visibility)))
+  const refreshLog = useAtomRefresh(logAtom(logKey(repo, search, visibility)))
+  const fresh = latest(result)
+  const [log, setLog] = useState(fresh)
+  if (
+    fresh !== undefined &&
+    fresh !== log &&
+    (log === undefined || (fresh.key === log.key && fresh.logId === log.logId))
+  )
+    setLog(fresh)
+  const current = fresh !== undefined && fresh === log ? fresh : undefined
   const filtering = search !== ""
   const status = latest(useAtomValue(statusAtom(repo)))
   const refs = latest(useAtomValue(refsAtom(repo)))
-  const labels = useMemo(() => refLabels(refs, status?.head), [refs, status?.head])
+  const labels = useMemo(() => refLabels(refs, status?.head, visibility), [refs, status?.head, visibility])
   const headOid = status?.head._tag === "Unborn" ? undefined : status?.head.oid
   const hasChanges = !filtering && (status?.entries.length ?? 0) > 0
   const offset = hasChanges ? 1 : 0
@@ -183,9 +195,31 @@ export function CommitList({
 
   const list = useTallList({ count, rowHeight: ROW_HEIGHT, overscan: 30, resetKey: search })
 
+  const next = fresh !== undefined && fresh !== log ? fresh : undefined
+  const pageOf = (row: number | undefined) =>
+    Math.floor(Math.min(Math.max(0, (row ?? 0) - offset), (next?.loaded ?? 1) - 1) / LOG_PAGE_SIZE)
+  const firstPage = pageOf(list.rows[0]?.index)
+  const lastPage = pageOf(list.rows.at(-1)?.index)
+  const nextPageAtom = (page: number) =>
+    next === undefined || next.loaded === 0 ? idle : logPageAtom(logPageKey(next.key, next.logId, page))
+  const nextFirstRows = useAtomValue(nextPageAtom(firstPage))
+  const nextLastRows = useAtomValue(nextPageAtom(lastPage))
+
   const [lanes, setLanes] = useState(1)
   const [lanesLog, setLanesLog] = useState(log?.logId)
-  if (lanesLog !== log?.logId) {
+  if (
+    next !== undefined &&
+    (next.loaded === 0 ? next.done : nextFirstRows._tag !== "Initial" && nextLastRows._tag !== "Initial")
+  ) {
+    const rows = [...(latest(nextFirstRows) ?? []), ...(lastPage === firstPage ? [] : (latest(nextLastRows) ?? []))]
+    const used = list.rows.flatMap(({ index }) => {
+      const row = rows[index - offset - firstPage * LOG_PAGE_SIZE]
+      return row === undefined ? [] : [lanesUsed(row.graph)]
+    })
+    setLog(next)
+    setLanesLog(next.logId)
+    setLanes(Math.min(VISIBLE_LANES, Math.max(1, ...used)))
+  } else if (lanesLog !== log?.logId) {
     setLanesLog(log?.logId)
     setLanes(1)
   }
@@ -321,7 +355,10 @@ export function CommitList({
           onRetry={refreshLog}
         />
       ) : filtering && log?.done === true && loaded === 0 && !pending ? (
-        <Nothing title="No matching commits" description="Search looks at branches, remotes and HEAD." />
+        <Nothing
+          title="No matching commits"
+          description="Search looks at HEAD and the locations shown in the sidebar."
+        />
       ) : (
         <ScrollArea
           className="@container min-h-0 flex-1"

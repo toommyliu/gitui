@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { basename, dirname, join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
-import type { Oid, RepoId, RepoPath } from "@gitui/contracts"
+import { allRefsVisible, type Oid, type RefVisibility, type RepoId, type RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
@@ -438,25 +438,68 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
     }),
   )
 
-  it.effect("leaves commits only a remote branch reaches out of the log when remotes are off", () =>
+  it.effect("walks only the refs left visible", () =>
     Effect.gen(function* () {
       const repo = makeRepo()
       repo.commit("base")
-      repo.git("checkout", "-q", "-b", "feature")
-      const remoteOnly = repo.commit("remote only")
+      for (const branch of ["feature/a", "feature/b", "solo"]) {
+        repo.git("checkout", "-q", "-b", branch, "main")
+        repo.commit(branch)
+      }
+      repo.git("checkout", "-q", "-b", "remote", "main")
+      repo.git("update-ref", "refs/remotes/origin/team/x", repo.commit("origin/team/x"))
+      repo.git("checkout", "-q", "-b", "tagged", "main")
+      repo.git("tag", "v1", repo.commit("v1"))
       repo.git("checkout", "-q", "main")
-      repo.git("update-ref", "refs/remotes/origin/feature", remoteOnly)
-      repo.git("branch", "-q", "-D", "feature")
+      repo.git("branch", "-q", "-D", "remote", "tagged")
       const r = yield* Repo
 
-      const subjects = (remotes: boolean) =>
+      const subjects = (refs: Partial<RefVisibility>) =>
         Effect.gen(function* () {
-          const handle = Option.getOrThrow(yield* Stream.runLast(r.openLog(id(repo.root), "", remotes)))
-          const rows = yield* r.logPage(id(repo.root), handle.logId, 0, 10)
-          return rows.map((row) => row.subject)
+          const handle = Option.getOrThrow(
+            yield* Stream.runLast(r.openLog(id(repo.root), "", { ...allRefsVisible, ...refs })),
+          )
+          const rows = yield* r.logPage(id(repo.root), handle.logId, 0, 20)
+          return rows.map((row) => row.subject).sort()
         })
-      expect(yield* subjects(true)).toEqual(["remote only", "base"])
-      expect(yield* subjects(false)).toEqual(["base"])
+      expect(yield* subjects({})).toEqual(["base", "feature/a", "feature/b", "origin/team/x", "solo", "v1"])
+      expect(yield* subjects({ hiddenBranches: ["feature", "solo"] })).toEqual(["base", "origin/team/x", "v1"])
+      expect(yield* subjects({ hiddenBranches: ["feature/a"] })).toEqual([
+        "base",
+        "feature/b",
+        "origin/team/x",
+        "solo",
+        "v1",
+      ])
+      expect(yield* subjects({ branches: false, hiddenRemotes: ["origin/team"] })).toEqual(["base", "v1"])
+      expect(yield* subjects({ remotes: false, tags: false })).toEqual(["base", "feature/a", "feature/b", "solo"])
+    }),
+  )
+
+  it.effect("shows each stash as one commit on its base, without its index and untracked commits", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      const base = repo.commit("base")
+      repo.write("tracked.txt", "change\n")
+      repo.git("add", ".")
+      repo.write("untracked.txt", "new\n")
+      repo.git("stash", "push", "-q", "--include-untracked", "-m", "work")
+      const stash = repo.git("rev-parse", "stash@{0}")
+      const r = yield* Repo
+
+      const rows = (stashes: boolean) =>
+        Effect.gen(function* () {
+          const handle = Option.getOrThrow(
+            yield* Stream.runLast(r.openLog(id(repo.root), "", { ...allRefsVisible, stashes })),
+          )
+          const page = yield* r.logPage(id(repo.root), handle.logId, 0, 10)
+          return page.map((row) => [row.oid, row.parents])
+        })
+      expect(yield* rows(true)).toEqual([
+        [stash, [base]],
+        [base, []],
+      ])
+      expect(yield* rows(false)).toEqual([[base, []]])
     }),
   )
 

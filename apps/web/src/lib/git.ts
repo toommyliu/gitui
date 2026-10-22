@@ -9,6 +9,7 @@ import {
   GitRpcs,
   type Oid,
   type Progress,
+  type RefVisibility,
   type RepoId,
   type RepoPath,
 } from "@gitui/contracts"
@@ -121,15 +122,15 @@ export const saveDraftAtom = GitClient.runtime.fn(
   { concurrent: true },
 )
 
-export const logKey = (repo: RepoId, query: string, remotes: boolean) => JSON.stringify([repo, query, remotes])
+export const logKey = (repo: RepoId, query: string, refs: RefVisibility) => JSON.stringify([repo, query, refs])
 
 export const logAtom = Atom.family((key: string) => {
-  const [repo, query, remotes] = JSON.parse(key) as [RepoId, string, boolean]
+  const [repo, query, refs] = JSON.parse(key) as [RepoId, string, RefVisibility]
   return GitClient.runtime
     .atom(
       Effect.gen(function* () {
         const client = yield* GitClient
-        return client("OpenLog", { repo, query, remotes })
+        return client("OpenLog", { repo, query, refs })
       }).pipe(
         Stream.unwrap,
         Stream.map((handle) => ({ ...handle, key })),
@@ -147,14 +148,14 @@ export const LOG_PAGE_SIZE = 200
 
 export const logPageAtom = Atom.family((key: string) => {
   const [log, logId, page] = key.split("\n") as [string, string, string]
-  const [repo, query, remotes] = JSON.parse(log) as [RepoId, string, boolean]
+  const [repo, query, refs] = JSON.parse(log) as [RepoId, string, RefVisibility]
   const request = { repo, logId, start: Number(page) * LOG_PAGE_SIZE, count: LOG_PAGE_SIZE }
   return GitClient.runtime.atom(
     Effect.gen(function* () {
       const client = yield* GitClient
       return yield* client("GetLogPage", request).pipe(
         Effect.catchTag("LogExpired", () =>
-          Effect.andThen(Stream.runHead(client("OpenLog", { repo, query, remotes })), client("GetLogPage", request)),
+          Effect.andThen(Stream.runHead(client("OpenLog", { repo, query, refs })), client("GetLogPage", request)),
         ),
       )
     }).pipe(Effect.retry({ while: (error) => error._tag === "RpcClientError", schedule: Schedule.spaced("1 second") })),

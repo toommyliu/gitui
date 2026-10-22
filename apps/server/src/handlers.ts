@@ -23,7 +23,7 @@ export const handlers = GitRpcs.toLayer(
         ),
       GetStatus: ({ repo: id }) => repo.status(id),
       GetRefs: ({ repo: id }) => repo.refs(id),
-      OpenLog: ({ repo: id, query, remotes }) => repo.openLog(id, query, remotes),
+      OpenLog: ({ repo: id, query, refs }) => repo.openLog(id, query, refs),
       GetLogPage: ({ repo: id, logId, start, count }) => repo.logPage(id, logId, start, count),
       GetLogIndex: ({ repo: id, logId, oid }) => repo.logIndex(id, logId, oid),
       GetCommit: ({ repo: id, oid }) => repo.commit(id, oid),

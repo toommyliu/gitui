@@ -1,7 +1,13 @@
 import { useAtom, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { CommitDetail as Detail, FileChange, Oid, RepoId } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { ChevronsDownUpIcon, ChevronsUpDownIcon, HistoryIcon } from "lucide-react"
+import {
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
+  FlaskConicalIcon,
+  FlaskConicalOffIcon,
+  HistoryIcon,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
@@ -10,7 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
 import { type ReactNode, useMemo, useRef, useState } from "react"
-import { FILE_KINDS, type FileKind, type LineCounts, changeBreakdown } from "@/lib/file-kind"
+import { FILE_KINDS, type FileKind, type LineCounts, changeBreakdown, isTestFile } from "@/lib/file-kind"
 import { longDate, shortOid } from "@/lib/format"
 import { commitAtom, diffAtom, diffKey, latest, loadError } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
@@ -144,13 +150,16 @@ export function CommitDetail({
   const commitResult = useAtomValue(commit)
   const refreshCommit = useAtomRefresh(commit)
   const detail = latest(commitResult)
-  const { ignoreWhitespace } = useAtomValue(settingsAtom)
+  const { ignoreWhitespace, hideTests } = useAtomValue(settingsAtom)
   const patch = diffAtom(diffKey(repo, { _tag: "Commit", oid }, [], ignoreWhitespace))
   const diffResult = useAtomValue(patch)
   const refreshDiff = useAtomRefresh(patch)
   const diff = latest(diffResult)
   const diffError = loadError(diffResult)
-  const items = useMemo(() => (diff?._tag === "Patch" ? patchItems(oid, diff.patch) : []), [diff, oid])
+  const items = useMemo(() => {
+    const all = diff?._tag === "Patch" ? patchItems(oid, diff.patch) : []
+    return hideTests ? all.filter((item) => !isTestFile(item.fileDiff.name)) : all
+  }, [diff, oid, hideTests])
   const collapse = useCollapse()
   const expandable = useMemo(() => expandableIds(items), [items])
   const allCollapsed = expandable.every((id) => collapse.ids.has(id))
@@ -179,12 +188,15 @@ export function CommitDetail({
       <SectionBar
         label="Files"
         actions={
-          expandable.length > 1 && (
-            <BarButton onClick={() => collapse.set(expandable, !allCollapsed)}>
-              {allCollapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-              {allCollapsed ? "Expand all" : "Collapse all"}
-            </BarButton>
-          )
+          <>
+            <TestsToggle paths={detail.files.map((file) => file.path)} />
+            {expandable.length > 1 && (
+              <BarButton onClick={() => collapse.set(expandable, !allCollapsed)}>
+                {allCollapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+                {allCollapsed ? "Expand all" : "Collapse all"}
+              </BarButton>
+            )}
+          </>
         }
       >
         <ChangeTotals count={detail.files.length} files={detail.files} />
@@ -239,6 +251,25 @@ export function SectionBar({ label, actions, children }: { label: string; action
   )
 }
 
+export function TestsToggle({ paths }: { paths: ReadonlyArray<string> }) {
+  const [settings, setSettings] = useAtom(settingsAtom)
+  const tests = paths.filter(isTestFile).length
+  if (tests === 0) return null
+  const files = tests === 1 ? "1 test file" : `${tests.toLocaleString()} test files`
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      aria-pressed={settings.hideTests}
+      title={settings.hideTests ? `${files} hidden` : `Hide ${files}, including fixtures, mocks, and snapshots`}
+      onClick={() => setSettings({ ...settings, hideTests: !settings.hideTests })}
+    >
+      {settings.hideTests ? <FlaskConicalIcon /> : <FlaskConicalOffIcon />}
+      {settings.hideTests ? `Show ${files}` : "Hide tests"}
+    </Button>
+  )
+}
+
 function BarButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
     <Button size="sm" variant="ghost" onClick={onClick}>
@@ -265,9 +296,14 @@ function LargeCommit({
   const files = usePanelRef()
   const diff = usePanelRef()
   const narrow = useNarrow()
+  const { hideTests } = useAtomValue(settingsAtom)
+  const listed = useMemo(
+    () => (hideTests ? detail.files.filter((file) => !isTestFile(file.path)) : detail.files),
+    [detail.files, hideTests],
+  )
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
-    count: detail.files.length,
+    count: listed.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => FILE_ROW,
     overscan: 20,
@@ -291,6 +327,7 @@ function LargeCommit({
         actions={
           filesShown ? (
             <>
+              <TestsToggle paths={detail.files.map((file) => file.path)} />
               {diffShown ? (
                 <BarButton onClick={() => diff.current?.collapse()}>Expand</BarButton>
               ) : (
@@ -327,7 +364,7 @@ function LargeCommit({
           >
             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
               {virtualizer.getVirtualItems().map((item) => {
-                const file = detail.files[item.index]!
+                const file = listed[item.index]!
                 return (
                   <button
                     key={item.key}

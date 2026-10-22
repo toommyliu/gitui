@@ -48,7 +48,7 @@ export class GitError extends Schema.TaggedError<GitError>()("GitError", {
     })
     const shown = (problems.length > 0 ? problems : lines).slice(0, 2).join("\n")
     if (shown === "") return `git ${this.args[0] ?? ""} exited with ${this.exitCode}`
-    return shown.charAt(0).toUpperCase() + shown.slice(1)
+    return problems.length > 0 ? shown.charAt(0).toUpperCase() + shown.slice(1) : shown
   }
 }
 

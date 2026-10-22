@@ -227,6 +227,7 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
 
       const result = yield* Effect.flip((yield* Repo).deleteBranch(id(repo.root), "wip", false, true))
       expect(result.stderr).toBe("wip has 1 commit that HEAD doesn't contain. Nothing was deleted.")
+      expect(result.summary).toBe("wip has 1 commit that HEAD doesn't contain. Nothing was deleted.")
       expect(readFileSync(join(linked, "dirty.txt"), "utf8")).toBe("keep me\n")
       expect(repo.git("branch", "--list", "wip")).toBe("+ wip")
     }),

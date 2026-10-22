@@ -269,6 +269,17 @@ function DiffSettings() {
           ]}
         />
       </Row>
+      <Row
+        label="Hide tests"
+        description="Leaves tests, fixtures, mocks, and snapshots out of commit and worktree diffs."
+        htmlFor="hide-tests"
+      >
+        <Switch
+          id="hide-tests"
+          checked={settings.hideTests}
+          onCheckedChange={(hideTests: boolean) => update({ hideTests })}
+        />
+      </Row>
     </>
   )
 }

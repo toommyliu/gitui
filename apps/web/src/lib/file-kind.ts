@@ -58,6 +58,11 @@ export function fileKind(path: string): FileKind {
   return "code"
 }
 
+export function isTestFile(path: string): boolean {
+  const kind = fileKind(path)
+  return kind === "tests" || kind === "mocks"
+}
+
 export type LineCounts = { additions: number; deletions: number }
 
 export function changeBreakdown(

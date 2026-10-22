@@ -20,8 +20,10 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
+import { isTestFile } from "@/lib/file-kind"
 import { basename, dirname, shortDate, shortOid } from "@/lib/format"
 import { describeFailure, latest, refsAtom, watchAtom } from "@/lib/git"
+import { settingsAtom } from "@/lib/settings"
 import type { Selection } from "@/lib/selection"
 import {
   mergeCheckAtom,
@@ -32,7 +34,7 @@ import {
   worktreeSummariesAtom,
 } from "@/lib/worktrees"
 import { ChangeLetter } from "./change-letter"
-import { ChangeTotals, HistoryButton, SectionBar } from "./commit-detail"
+import { ChangeTotals, HistoryButton, SectionBar, TestsToggle } from "./commit-detail"
 import { DiffStack, patchItems, useCollapse } from "./diff-view"
 import { Loading, Nothing } from "./loading"
 
@@ -305,7 +307,12 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
   const diff = latest(diffResult)
   const refs = latest(useAtomValue(refsAtom(repo)))
   const summaries = latest(useAtomValue(worktreeSummariesAtom(repo)))
+  const { hideTests } = useAtomValue(settingsAtom)
   const items = useMemo(() => (diff?._tag === "Patch" ? patchItems(SECTION, diff.patch) : []), [diff])
+  const shownItems = useMemo(
+    () => (hideTests ? items.filter((item) => !isTestFile(item.fileDiff.name)) : items),
+    [items, hideTests],
+  )
   const collapse = useCollapse()
   const viewRef = useRef<CodeViewHandle<undefined, undefined>>(null)
 
@@ -336,6 +343,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
     return byPath
   }, [refs, summaries, path])
   const rows = useMemo(() => (detail?.entries ?? []).map(fileRow), [detail])
+  const shownRows = useMemo(() => (hideTests ? rows.filter((row) => !isTestFile(row.path)) : rows), [rows, hideTests])
   const tracked = useMemo(() => new Set(rows.filter((row) => row.tracked).map((row) => row.path)), [rows])
 
   if (detail === undefined) {
@@ -357,7 +365,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
   const fileList = (
     <ScrollArea className="h-full" viewportProps={{ className: "data-has-overflow-y:pr-2.5" }}>
       <ul className="py-1">
-        {rows.slice(0, MAX_ROWS).map((row) => {
+        {shownRows.slice(0, MAX_ROWS).map((row) => {
           const count = counts.get(row.path)
           const others = overlaps.get(row.path) ?? []
           return (
@@ -396,8 +404,8 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
             </li>
           )
         })}
-        {rows.length > MAX_ROWS && (
-          <li className="px-3 py-1 text-muted-foreground">and {plural(rows.length - MAX_ROWS, "more file")}</li>
+        {shownRows.length > MAX_ROWS && (
+          <li className="px-3 py-1 text-muted-foreground">and {plural(shownRows.length - MAX_ROWS, "more file")}</li>
         )}
       </ul>
     </ScrollArea>
@@ -421,7 +429,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
           <Facts worktree={worktree} detail={detail} onSelect={onSelect} onReveal={reveal} />
         </dl>
       </div>
-      <SectionBar label="Uncommitted" actions={null}>
+      <SectionBar label="Uncommitted" actions={<TestsToggle paths={rows.map((row) => row.path)} />}>
         {rows.length > 0 && (
           <ChangeTotals count={rows.length} files={[...counts].map(([path, count]) => ({ path, ...count }))} />
         )}
@@ -448,10 +456,12 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
               />
             ) : items.length === 0 ? (
               <Nothing title="Nothing to diff" />
+            ) : shownItems.length === 0 ? (
+              <Nothing title="Only tests changed" description="Show tests to see their diffs." />
             ) : (
               <DiffStack
                 repo={worktree}
-                items={items}
+                items={shownItems}
                 collapse={collapse}
                 viewRef={viewRef}
                 actions={(meta) =>

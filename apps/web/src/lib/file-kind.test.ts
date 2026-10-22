@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test"
-import { changeBreakdown, fileKind } from "./file-kind"
+import { changeBreakdown, fileKind, isTestFile } from "./file-kind"
 
 describe("sorting a changed file by its path", () => {
   it.each([
@@ -54,5 +54,17 @@ describe("splitting a change's line counts by file kind", () => {
       mocks: { additions: 0, deletions: 0 },
       generated: { additions: 300, deletions: 120 },
     })
+  })
+})
+
+describe("hiding tests from a diff", () => {
+  it.each([
+    ["src/a.test.ts", true],
+    ["test/fixtures/pr.json", true],
+    ["src/__snapshots__/view.test.ts.snap", true],
+    ["src/a.ts", false],
+    ["pnpm-lock.yaml", false],
+  ] as const)("%s is hidden: %s", (path, hidden) => {
+    expect(isTestFile(path)).toBe(hidden)
   })
 })

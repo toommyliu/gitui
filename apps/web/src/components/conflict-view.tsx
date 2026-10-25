@@ -42,7 +42,7 @@ import {
   toDisplay,
   withText,
 } from "@/lib/conflict-blocks"
-import { type Draft, isDirty, type Resolved, type SessionUpdate } from "@/lib/conflict-session"
+import { type Draft, dropDraft, isDirty, type Resolved, type SessionUpdate } from "@/lib/conflict-session"
 import { conflictMarkers, describeConflict, type Sides, sideNames } from "@/lib/conflicts"
 import { basename, dirname, shortOid } from "@/lib/format"
 import {
@@ -207,30 +207,25 @@ function FileHeader({
   )
 }
 
-const dropDraft = (path: RepoPath) => (session: Parameters<Parameters<SessionUpdate>[0]>[0]) => {
-  const drafts = new Map(session.drafts)
-  drafts.delete(path)
-  return { ...session, drafts }
-}
-
 function useWholeFile({
   repo,
   detail,
   names,
-  dirty,
+  draft,
   update,
   onResolved,
 }: {
   repo: RepoId
   detail: ConflictDetail
   names: Sides
-  dirty: boolean
+  draft: Draft | undefined
   update: SessionUpdate
   onResolved: (path: RepoPath, resolved: Resolved, advance: boolean) => void
 }) {
   const { busy, keep, markResolved } = useConflictActions(repo)
   const confirm = useConfirm()
   const { path } = detail
+  const dirty = draft !== undefined && isDirty(draft)
   const guard = (title: string, run: () => void) =>
     dirty
       ? confirm({
@@ -245,7 +240,7 @@ function useWholeFile({
     guard(`Use ${names[side].toLowerCase()} for the whole file?`, async () => {
       if (!(await keep([path], side))) return
       const file = detail[side]
-      update(dropDraft(path))
+      update(dropDraft(path, draft))
       onResolved(
         path,
         { how: file._tag === "Missing" ? "deleted" : side, content: file._tag === "Text" ? file.content : null },
@@ -255,7 +250,7 @@ function useWholeFile({
   const asIs = () =>
     guard(`Stage ${basename(path)} as it is on disk?`, () =>
       markResolved(path, () => {
-        update(dropDraft(path))
+        update(dropDraft(path, draft))
         const result = detail.result
         onResolved(
           path,
@@ -396,7 +391,7 @@ function TextResolver({
   const save = useAtomSet(saveConflictAtom, { mode: "promiseExit" })
   const fail = useFailureToast()
   const confirm = useConfirm()
-  const whole = useWholeFile({ repo, detail, names, dirty, update, onResolved })
+  const whole = useWholeFile({ repo, detail, names, draft: stored, update, onResolved })
   const locked = saving || whole.running
   const headers = useRef(new Map<number, HTMLElement>())
   const boxes = useRef(new Map<number, HTMLTextAreaElement>())
@@ -406,7 +401,7 @@ function TextResolver({
       ...session,
       drafts: new Map(session.drafts).set(path, { version: draft.version, baseline: draft.baseline, segments }),
     }))
-  const discard = () => update(dropDraft(path))
+  const discard = () => update(dropDraft(path, stored))
   const acceptDisk = () =>
     update((session) => ({
       ...session,
@@ -427,7 +422,7 @@ function TextResolver({
       update((session) => {
         const saved = new Set(session.saved)
         saved.delete(path)
-        return { ...dropDraft(path)(session), saved }
+        return { ...dropDraft(path, stored)(session), saved }
       })
       onResolved(path, { how: "edited", content }, mode === "next")
       return true
@@ -435,7 +430,7 @@ function TextResolver({
     const atom = conflictAtom(conflictKey(repo, path))
     registry.refresh(atom)
     await Effect.runPromiseExit(AtomRegistry.getResult(registry, atom, { suspendOnWaiting: true }))
-    update((session) => ({ ...dropDraft(path)(session), saved: new Set(session.saved).add(path) }))
+    update((session) => ({ ...dropDraft(path, stored)(session), saved: new Set(session.saved).add(path) }))
     setSaving(false)
     return true
   }
@@ -964,8 +959,7 @@ function Decision({
   update: SessionUpdate
   onResolved: (path: RepoPath, resolved: Resolved, advance: boolean) => void
 }) {
-  const dirty = draft !== undefined && isDirty(draft)
-  const whole = useWholeFile({ repo, detail, names, dirty, update, onResolved })
+  const whole = useWholeFile({ repo, detail, names, draft, update, onResolved })
   const submodule = [detail.base, detail.ours, detail.theirs, detail.result].some((file) => file._tag === "Submodule")
   const textSides = detail.ours._tag === "Text" && detail.theirs._tag === "Text" && detail.result._tag === "Text"
   const note = submodule

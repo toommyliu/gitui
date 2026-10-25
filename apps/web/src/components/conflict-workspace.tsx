@@ -1,8 +1,8 @@
-import { useAtom, useAtomRefresh, useAtomValue } from "@effect/atom-react"
+import { RegistryContext, useAtom, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { ConflictCode, Operation, RepoId, RepoPath, Status } from "@gitui/contracts"
 import { cn } from "cn"
 import { ArrowLeftIcon, CircleAlertIcon, CircleCheckIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react"
-import { type KeyboardEvent, useEffect, useMemo, useRef } from "react"
+import { type KeyboardEvent, useContext, useEffect, useMemo, useRef } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -14,6 +14,7 @@ import {
   dirtyPaths,
   emptySession,
   nextUnresolved,
+  operationPendingAtom,
   railOpenAtom,
   sessionsAtom,
   type Resolved,
@@ -43,19 +44,32 @@ export function useOperationActions(repo: RepoId, operation: Operation | null) {
   const git = useGitAction()
   const confirm = useConfirm()
   const [session, update] = useConflictSession(repo)
+  const registry = useContext(RegistryContext)
+  const pending = operationPendingAtom(repo)
+  const busy = useAtomValue(pending)
   const unsaved = dirtyPaths(session)
   const name = operation === null ? "" : operationNames[operation].toLowerCase()
 
-  const continueOperation = async () => {
+  const perform = async (
+    method: "ContinueOperation" | "SkipOperation" | "AbortOperation",
+    label: string,
+    onDone: (current: ConflictSession) => ConflictSession,
+  ) => {
+    if (registry.get(pending)) return
+    registry.set(pending, true)
+    try {
+      if (await git(label, repo, (c) => c(method, { repo }))) update(onDone)
+    } finally {
+      registry.set(pending, false)
+    }
+  }
+  const continueOperation = () => {
     if (unsaved.length > 0) return
-    await git(`Continue ${name}`, repo, (c) => c("ContinueOperation", { repo }))
-    update(afterOperationStep)
+    void perform("ContinueOperation", `Continue ${name}`, afterOperationStep)
   }
   const skip = () => {
-    const run = async () => {
-      if (await git("Skip", repo, (c) => c("SkipOperation", { repo })))
-        update((current) => ({ ...afterOperationStep(current), drafts: new Map() }))
-    }
+    const run = () =>
+      perform("SkipOperation", "Skip", (current) => ({ ...afterOperationStep(current), drafts: new Map() }))
     if (unsaved.length === 0) return void run()
     confirm({
       title: "Skip this commit?",
@@ -76,11 +90,9 @@ export function useOperationActions(repo: RepoId, operation: Operation | null) {
       ),
       confirmLabel: "Abort",
       destructive: true,
-      onConfirm: async () => {
-        if (await git(`Abort ${name}`, repo, (c) => c("AbortOperation", { repo }))) update(() => emptySession)
-      },
+      onConfirm: () => void perform("AbortOperation", `Abort ${name}`, () => emptySession),
     })
-  return { continueOperation: () => void continueOperation(), skip, abort, unsaved, session, update }
+  return { continueOperation, skip, abort, busy, unsaved, session, update }
 }
 
 export const openConflicts = (path: RepoPath | null) => (session: ConflictSession) => ({
@@ -91,7 +103,7 @@ export const openConflicts = (path: RepoPath | null) => (session: ConflictSessio
 
 export function OperationBanner({ repo, status, conflicts }: { repo: RepoId; status: Status; conflicts: number }) {
   const { operation } = status
-  const { continueOperation, skip, abort, unsaved, update } = useOperationActions(repo, operation)
+  const { continueOperation, skip, abort, busy, unsaved, update } = useOperationActions(repo, operation)
   const name = operation === null ? null : operationNames[operation]
   const description =
     conflicts > 0
@@ -117,19 +129,19 @@ export function OperationBanner({ repo, status, conflicts }: { repo: RepoId; sta
           <Button
             size="sm"
             variant={conflicts > 0 ? "outline" : "default"}
-            disabled={conflicts > 0 || unsaved.length > 0}
+            disabled={busy || conflicts > 0 || unsaved.length > 0}
             onClick={continueOperation}
           >
             Continue
           </Button>
         )}
         {canSkip(operation) && (
-          <Button size="sm" variant="outline" onClick={skip}>
+          <Button size="sm" variant="outline" disabled={busy} onClick={skip}>
             Skip this commit
           </Button>
         )}
         {operation !== null && (
-          <Button size="sm" variant="destructive" onClick={abort}>
+          <Button size="sm" variant="destructive" disabled={busy} onClick={abort}>
             Abort
           </Button>
         )}
@@ -264,7 +276,13 @@ function Resolver({ repo, status }: { repo: RepoId; status: Status }) {
             tool: busy.has(path),
           })}
         />
-        <main ref={mainRef} aria-label="Conflict" className="flex min-w-0 flex-1 flex-col">
+        <main
+          ref={mainRef}
+          aria-label="Conflict"
+          aria-busy={actions.busy}
+          inert={actions.busy}
+          className="flex min-w-0 flex-1 flex-col"
+        >
           {selected !== null && code !== undefined && unresolved(selected) ? (
             <ConflictFilePane
               key={selected}
@@ -329,12 +347,12 @@ function OperationBar({
       </span>
       <span className="ml-auto flex items-center gap-1">
         {canSkip(operation) && (
-          <Button size="sm" variant="ghost" onClick={actions.skip}>
+          <Button size="sm" variant="ghost" disabled={actions.busy} onClick={actions.skip}>
             Skip this commit
           </Button>
         )}
         {operation !== null && (
-          <Button size="sm" variant="destructive" onClick={actions.abort}>
+          <Button size="sm" variant="destructive" disabled={actions.busy} onClick={actions.abort}>
             Abort {name?.toLowerCase()}
           </Button>
         )}
@@ -342,7 +360,7 @@ function OperationBar({
           <Button
             size="sm"
             variant={ready ? "default" : "outline"}
-            disabled={!ready}
+            disabled={actions.busy || !ready}
             title={ready ? undefined : "Resolve and stage every file, and review any unsaved drafts first"}
             onClick={actions.continueOperation}
           >

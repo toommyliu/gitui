@@ -69,6 +69,57 @@ const conflictedSubmodule = () => {
 }
 
 layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeServices.layer)))("Conflicts", (it) => {
+  for (const backend of ["merge", "apply"] as const) {
+    for (const step of ["continue", "skip"] as const) {
+      it.effect(`${step} advances a ${backend} rebase to the next conflict without reporting failure`, () =>
+        Effect.gen(function* () {
+          const repo = makeRepo()
+          repo.write(file, "base\n")
+          repo.git("add", ".")
+          repo.commit("base")
+          repo.git("switch", "-q", "-c", "topic")
+          repo.write(file, "first commit\n")
+          repo.git("add", ".")
+          repo.commit("first")
+          repo.write(file, "second commit\n")
+          repo.git("add", ".")
+          repo.commit("second")
+          repo.git("switch", "-q", "main")
+          repo.write(file, "upstream\n")
+          repo.git("add", ".")
+          repo.commit("upstream")
+          repo.git("switch", "-q", "topic")
+          expect(() => repo.git("rebase", `--${backend}`, "main")).toThrow()
+          const r = yield* Repo
+          if (step === "continue") {
+            repo.write(file, "resolved first\n")
+            yield* r.stage(id(repo.root), [file])
+            yield* r.continueOperation(id(repo.root))
+          } else yield* r.skipOperation(id(repo.root))
+          expect((yield* r.conflict(id(repo.root), file)).theirs).toEqual({ _tag: "Text", content: "second commit\n" })
+          expect((yield* r.status(id(repo.root))).operation).toBe("rebase")
+          yield* r.resolveConflict(id(repo.root), [file], "theirs")
+          yield* r.continueOperation(id(repo.root))
+          expect((yield* r.status(id(repo.root))).operation).toBeNull()
+          expect(repo.git("show", `HEAD:${file}`)).toBe("second commit")
+        }),
+      )
+    }
+  }
+
+  it.effect("still rejects continuing a rebase whose current conflict is unresolved", () =>
+    Effect.gen(function* () {
+      const repo = conflicted()
+      repo.git("merge", "--abort")
+      repo.git("switch", "-q", "topic")
+      expect(() => repo.git("rebase", "main")).toThrow()
+      const r = yield* Repo
+      const before = yield* r.conflict(id(repo.root), file)
+      expect(Exit.isFailure(yield* Effect.exit(r.continueOperation(id(repo.root))))).toBe(true)
+      expect((yield* r.conflict(id(repo.root), file)).version).toBe(before.version)
+    }),
+  )
+
   it.effect("reads and stages a submodule conflict after resolving it in the submodule", () =>
     Effect.gen(function* () {
       const { repo, nested, base, ours, theirs } = conflictedSubmodule()

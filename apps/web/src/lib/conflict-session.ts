@@ -36,6 +36,13 @@ export const emptySession: ConflictSession = {
 
 export const isDirty = (draft: Draft) => joinSegments(draft.segments) !== draft.baseline
 
+export const dropDraft = (path: RepoPath, expected: Draft | undefined) => (session: ConflictSession) => {
+  if (session.drafts.get(path) !== expected) return session
+  const drafts = new Map(session.drafts)
+  drafts.delete(path)
+  return { ...session, drafts }
+}
+
 export const dirtyPaths = (session: ConflictSession) =>
   [...session.drafts].flatMap(([path, draft]) => (isDirty(draft) ? [path] : []))
 
@@ -65,6 +72,8 @@ export const afterOperationStep = (session: ConflictSession): ConflictSession =>
 export const sessionsAtom = Atom.make<ReadonlyMap<RepoId, ConflictSession>>(new Map()).pipe(Atom.keepAlive)
 
 export const railOpenAtom = Atom.make(true).pipe(Atom.keepAlive)
+
+export const operationPendingAtom = Atom.family((_repo: RepoId) => Atom.make(false).pipe(Atom.keepAlive))
 
 export type SessionUpdate = (update: (session: ConflictSession) => ConflictSession) => void
 

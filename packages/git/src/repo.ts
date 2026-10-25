@@ -373,9 +373,29 @@ export class Repo extends Context.Service<
         }
       })
 
+      const operationPosition = (gitDir: string) =>
+        Effect.forEach(
+          ["rebase-merge/msgnum", "rebase-apply/next", "sequencer/todo", "CHERRY_PICK_HEAD", "REVERT_HEAD"],
+          (path) => fs.readFileString(join(gitDir, path)).pipe(Effect.orElseSucceed(() => null)),
+        ).pipe(Effect.map(JSON.stringify))
+
       const stepOperation = (step: "continue" | "skip" | "abort") =>
         Effect.fn("Repo.stepOperation")(function* (repo: RepoId) {
-          yield* run(repo, yield* operationCommand(repo, step))
+          const gitDir = yield* gitDirOf(repo)
+          const before = yield* operationPosition(gitDir)
+          yield* run(repo, yield* operationCommand(repo, step)).pipe(
+            Effect.catchTag("GitError", (error) =>
+              Effect.gen(function* () {
+                if (
+                  step !== "abort" &&
+                  before !== (yield* operationPosition(gitDir)) &&
+                  (yield* status(repo)).entries.some((entry) => entry._tag === "Conflicted")
+                )
+                  return
+                return yield* error
+              }),
+            ),
+          )
         })
 
       const tracks = new Map<RepoId, ReadonlyMap<string, string>>()

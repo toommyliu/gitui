@@ -46,3 +46,7 @@ vp run dev:desktop
 ## Checks
 
 `pnpm check` runs oxfmt, oxlint with the Effect language service rules, `tsc` on TypeScript 7, and the vitest suite. The git tests build real repositories in temp directories.
+
+## License
+
+[MIT](LICENSE).

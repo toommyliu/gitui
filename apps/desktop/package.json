@@ -2,6 +2,7 @@
   "name": "@gitui/desktop",
   "version": "0.0.0",
   "description": "A desktop Git client",
+  "license": "MIT",
   "type": "module",
   "private": true,
   "main": "dist/main.cjs",

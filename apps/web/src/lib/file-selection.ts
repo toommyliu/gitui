@@ -14,7 +14,7 @@ export interface FileSelection {
 export type ClickMode = "only" | "toggle" | "extend"
 
 type Lists<R> = Readonly<Record<Side, ReadonlyArray<R>>>
-type Row = { readonly path: RepoPath }
+type Row = { readonly path: RepoPath; readonly area: string }
 
 const make = (
   side: Side,
@@ -23,9 +23,10 @@ const make = (
   anchor: RepoPath,
   leadIndex: number,
 ): FileSelection => {
-  const unselected = (row: Row) => !paths.has(row.path)
+  const lead = list[leadIndex]!
+  const unselected = (row: Row) => !paths.has(row.path) && (lead.area !== "conflicted" || row.area === "conflicted")
   const next = list.slice(leadIndex + 1).find(unselected) ?? list.slice(0, leadIndex).findLast(unselected)
-  return { side, paths, anchor, lead: list[leadIndex]!.path, leadIndex, next: next?.path ?? null }
+  return { side, paths, anchor, lead: lead.path, leadIndex, next: next?.path ?? null }
 }
 
 const single = (side: Side, list: ReadonlyArray<Row>, index: number): FileSelection | null => {

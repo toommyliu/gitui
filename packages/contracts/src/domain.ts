@@ -223,6 +223,38 @@ export const FileDiff = Schema.Union([
 ])
 export type FileDiff = typeof FileDiff.Type
 
+export const ConflictFile = Schema.Union([
+  Schema.TaggedStruct("Text", { content: Schema.String }),
+  Schema.TaggedStruct("Submodule", { oid: Schema.NullOr(Oid) }),
+  Schema.TaggedStruct("Binary", { bytes: Schema.Int }),
+  Schema.TaggedStruct("TooLarge", { bytes: Schema.Int }),
+  Schema.TaggedStruct("Missing", {}),
+])
+export type ConflictFile = typeof ConflictFile.Type
+
+export const ConflictRef = Schema.Struct({
+  name: Schema.NullOr(Schema.String),
+  oid: Oid,
+  subject: Schema.String,
+})
+export type ConflictRef = typeof ConflictRef.Type
+
+export const ConflictDetail = Schema.Struct({
+  path: RepoPath,
+  base: ConflictFile,
+  ours: ConflictFile,
+  theirs: ConflictFile,
+  result: ConflictFile,
+  mergeTool: Schema.NullOr(Schema.String),
+  version: Schema.String,
+  editable: Schema.Boolean,
+  labels: Schema.Struct({
+    ours: Schema.NullOr(ConflictRef),
+    theirs: Schema.NullOr(ConflictRef),
+  }),
+})
+export type ConflictDetail = typeof ConflictDetail.Type
+
 export const ChangeScope = Schema.Literals(["worktree", "index", "refs", "draft"])
 export type ChangeScope = typeof ChangeScope.Type
 

@@ -16,6 +16,7 @@ export interface ConfirmRequest {
   readonly confirmLabel: string
   readonly destructive?: boolean
   readonly onConfirm: () => void
+  readonly alternative?: { readonly label: string; readonly onClick: () => void }
 }
 
 const ConfirmContext = createContext<(request: ConfirmRequest) => void>(() => {})
@@ -36,6 +37,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
+            {request?.alternative !== undefined && (
+              <AlertDialogAction
+                variant="outline"
+                onClick={() => {
+                  request.alternative?.onClick()
+                  setRequest(null)
+                }}
+              >
+                {request.alternative.label}
+              </AlertDialogAction>
+            )}
             <AlertDialogAction
               variant={request?.destructive ? "destructive" : "default"}
               onClick={() => {

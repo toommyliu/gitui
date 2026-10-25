@@ -39,6 +39,10 @@ export const handlers = GitRpcs.toLayer(
       SkipOperation: ({ repo: id }) => repo.skipOperation(id),
       AbortOperation: ({ repo: id }) => repo.abortOperation(id),
       ResolveConflict: ({ repo: id, paths, side }) => repo.resolveConflict(id, paths, side),
+      GetConflict: ({ repo: id, path }) => repo.conflict(id, path),
+      SaveConflictResult: ({ repo: id, path, content, expectedVersion, stage }) =>
+        repo.saveConflictResult(id, path, content, expectedVersion, stage),
+      RunMergeTool: ({ repo: id, path }) => repo.runMergeTool(id, path),
       Checkout: ({ repo: id, branch }) => repo.checkout(id, branch),
       CreateBranch: ({ repo: id, name, startPoint, checkout }) => repo.createBranch(id, name, startPoint, checkout),
       DeleteBranch: ({ repo: id, name, force, removeWorktree }) => repo.deleteBranch(id, name, force, removeWorktree),

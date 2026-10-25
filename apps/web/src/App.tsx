@@ -21,6 +21,7 @@ import { RepoPicker } from "@/components/repo-picker"
 import { SettingsPage } from "@/components/settings-page"
 import { useTheme } from "@/components/theme-provider"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useUnsavedConflictGuard } from "@/components/conflict-workspace"
 import { Workspace } from "@/components/workspace"
 import { paletteOpenAtom, tabKeys, useCommand, useDesktopMenu, useOverlayOpen } from "@/lib/commands"
 import { desktop } from "@/lib/desktop"
@@ -65,6 +66,7 @@ export function App() {
   const setPaletteOpen = useAtomSet(paletteOpenAtom)
   useDesktopMenu()
   useBackgroundFetch(tabs)
+  useUnsavedConflictGuard()
   useCommand("settings.open", () => {
     setPaletteOpen(false)
     navigateSettings("open")

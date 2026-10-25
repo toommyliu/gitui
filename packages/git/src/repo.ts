@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from "node:path"
 import {
   type CommitDetail,
   type CommitRow,
+  type ConflictDetail,
   type DiffTarget,
   type FileDiff,
   type LineAction,
@@ -40,6 +41,7 @@ import * as Scope from "effect/Scope"
 import * as Semaphore from "effect/Semaphore"
 import * as Stream from "effect/Stream"
 import { diffTreeArgs, parseCommit, parseFileChanges, showArgs } from "./commit.ts"
+import { makeConflicts } from "./conflict.ts"
 import { Git, nulList } from "./git.ts"
 import {
   hasGraph,
@@ -241,6 +243,15 @@ export class Repo extends Context.Service<
       paths: ReadonlyArray<RepoPath>,
       side: "ours" | "theirs",
     ) => Effect.Effect<void, GitError>
+    readonly conflict: (repo: RepoId, path: RepoPath) => Effect.Effect<ConflictDetail, GitError>
+    readonly saveConflictResult: (
+      repo: RepoId,
+      path: RepoPath,
+      content: string,
+      expectedVersion: string,
+      stage: boolean,
+    ) => Effect.Effect<string, GitError>
+    readonly runMergeTool: (repo: RepoId, path: RepoPath) => Effect.Effect<void, GitError>
     readonly checkout: (repo: RepoId, branch: string) => Effect.Effect<void, GitError>
     readonly createBranch: (
       repo: RepoId,
@@ -291,6 +302,7 @@ export class Repo extends Context.Service<
     Effect.gen(function* () {
       const git = yield* Git
       const fs = yield* FileSystem.FileSystem
+      const conflicts = makeConflicts(git, fs)
       const sessions = new Map<RepoId, Map<string, LogSession>>()
       const locks = new Map<RepoId, Semaphore.Semaphore>()
       const lockFor = (repo: RepoId) => {
@@ -788,10 +800,10 @@ export class Repo extends Context.Service<
         continueOperation: stepOperation("continue"),
         skipOperation: stepOperation("skip"),
         abortOperation: stepOperation("abort"),
-        resolveConflict: Effect.fn("Repo.resolveConflict")(function* (repo, paths, side) {
-          yield* withPaths(repo, ["checkout", `--${side}`], paths)
-          yield* withPaths(repo, ["add"], paths)
-        }),
+        conflict: conflicts.detail,
+        saveConflictResult: conflicts.save,
+        resolveConflict: conflicts.resolve,
+        runMergeTool: conflicts.runTool,
         checkout: (repo, branch) => run(repo, ["switch", branch]),
         createBranch: (repo, name, startPoint, checkout) =>
           run(repo, checkout ? ["switch", "-c", name, startPoint] : ["branch", name, startPoint]),
@@ -875,6 +887,8 @@ export class Repo extends Context.Service<
         skipOperation: locked(service.skipOperation),
         abortOperation: locked(service.abortOperation),
         resolveConflict: locked(service.resolveConflict),
+        saveConflictResult: locked(service.saveConflictResult),
+        runMergeTool: locked(service.runMergeTool),
         checkout: locked(service.checkout),
         createBranch: locked(service.createBranch),
         deleteBranch: locked(service.deleteBranch),

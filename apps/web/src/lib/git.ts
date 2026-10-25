@@ -198,6 +198,32 @@ export const diffAtom = Atom.family((key: string) => {
   )
 })
 
+export const conflictKey = (repo: RepoId, path: RepoPath) => JSON.stringify([repo, path])
+
+export const conflictAtom = Atom.family((key: string) => {
+  const [repo, path] = JSON.parse(key) as [RepoId, RepoPath]
+  return GitClient.query("GetConflict", { repo, path }, { reactivityKeys: [keys.worktree(repo)] })
+})
+
+export const mergeToolsAtom = Atom.family((_repo: RepoId) =>
+  Atom.make<ReadonlySet<RepoPath>>(new Set<RepoPath>()).pipe(Atom.keepAlive),
+)
+
+export const saveConflictAtom = GitClient.runtime.fn(
+  (request: {
+    readonly repo: RepoId
+    readonly path: RepoPath
+    readonly content: string
+    readonly expectedVersion: string
+    readonly stage: boolean
+  }) =>
+    Effect.gen(function* () {
+      const client = yield* GitClient
+      return yield* Reactivity.mutation(client("SaveConflictResult", request), scopeKeys(request.repo, "index"))
+    }),
+  { concurrent: true },
+)
+
 export const watchAtom = Atom.family((repo: RepoId) =>
   GitClient.runtime.atom(
     Effect.gen(function* () {
@@ -253,7 +279,7 @@ const actionAtom = GitClient.runtime.fn(
   { concurrent: true },
 )
 
-const useFailureToast = () => {
+export const useFailureToast = () => {
   const setLogOpen = useAtomSet(logOpenAtom)
   return (
     label: string,

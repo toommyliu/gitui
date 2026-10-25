@@ -4,7 +4,6 @@ import type {
   CommitDetail,
   LineAction,
   LineSelection,
-  Operation,
   RepoId,
   RepoPath,
   Status,
@@ -14,7 +13,6 @@ import type { CodeViewDiffItem, CodeViewLineSelection } from "@pierre/diffs"
 import type { CodeViewHandle } from "@pierre/diffs/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -41,12 +39,16 @@ import { settingsAtom } from "@/lib/settings"
 import { hunkChanges, selectedChanges } from "@/lib/lines"
 import { type CommandId, type KeyBinding, useCommand, useCommandKeys } from "@/lib/commands"
 import { ChangeLetter } from "./change-letter"
+import { useConflictActions } from "./conflict-view"
+import { OperationBanner, openConflicts } from "./conflict-workspace"
 import { HistoryButton } from "./commit-detail"
 import { useConfirm } from "./confirm"
 import { Loading, Nothing } from "./loading"
 import { Shortcut } from "./shortcut"
 import { useStashPrompt } from "./stash-prompt"
 import { useDraft } from "@/lib/draft"
+import { describeConflict, keepLabels, type Sides, sideNames } from "@/lib/conflicts"
+import { dirtyPaths, useConflictSession } from "@/lib/conflict-session"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Atom from "effect/reactivity/Atom"
 import { ChevronDownIcon, ChevronRightIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from "lucide-react"
@@ -109,76 +111,6 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
   return { unstaged, staged }
 }
 
-type SideLabels = { readonly ours: string; readonly theirs: string }
-
-const sideLabels: Record<Operation, SideLabels> = {
-  merge: { ours: "Keep mine", theirs: "Take theirs" },
-  rebase: { ours: "Keep upstream", theirs: "Keep my commit" },
-  "cherry-pick": { ours: "Keep mine", theirs: "Take picked" },
-  revert: { ours: "Keep mine", theirs: "Take revert" },
-  bisect: { ours: "Keep mine", theirs: "Take theirs" },
-}
-
-const operationNames: Record<Operation, string> = {
-  merge: "Merge",
-  rebase: "Rebase",
-  "cherry-pick": "Cherry-pick",
-  revert: "Revert",
-  bisect: "Bisect",
-}
-
-function OperationBanner({ repo, operation, conflicts }: { repo: RepoId; operation: Operation; conflicts: number }) {
-  const git = useGitAction()
-  const confirm = useConfirm()
-  const name = operationNames[operation]
-  const canSkip = operation === "rebase" || operation === "cherry-pick" || operation === "revert"
-  return (
-    <Alert className="m-2 w-auto">
-      <AlertTitle>{name} in progress</AlertTitle>
-      <AlertDescription>
-        {conflicts > 0
-          ? `${conflicts} ${conflicts === 1 ? "file has" : "files have"} conflicts. Resolve them, then continue.`
-          : "No conflicts left. Continue to finish."}
-      </AlertDescription>
-      <div className="col-span-full mt-1 flex gap-1">
-        {operation !== "bisect" && (
-          <Button
-            size="xs"
-            disabled={conflicts > 0}
-            onClick={() => void git(`Continue ${name.toLowerCase()}`, repo, (c) => c("ContinueOperation", { repo }))}
-          >
-            Continue
-          </Button>
-        )}
-        {canSkip && (
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={() => void git(`Skip`, repo, (c) => c("SkipOperation", { repo }))}
-          >
-            Skip this commit
-          </Button>
-        )}
-        <Button
-          size="xs"
-          variant="destructive"
-          onClick={() =>
-            confirm({
-              title: `Abort ${name.toLowerCase()}?`,
-              body: <p>The branch goes back to where it was before the {name.toLowerCase()} started.</p>,
-              confirmLabel: "Abort",
-              destructive: true,
-              onConfirm: () => void git(`Abort ${name.toLowerCase()}`, repo, (c) => c("AbortOperation", { repo })),
-            })
-          }
-        >
-          Abort
-        </Button>
-      </div>
-    </Alert>
-  )
-}
-
 function DiffToggle({ side, ids, collapse }: { side: Side; ids: ReadonlyArray<string>; collapse: Collapse }) {
   if (ids.length === 0) return null
   const expanded = ids.some((id) => !collapse.ids.has(id))
@@ -190,15 +122,7 @@ function DiffToggle({ side, ids, collapse }: { side: Side; ids: ReadonlyArray<st
   )
 }
 
-function EmptyDiff({ conflicts, files }: { conflicts: boolean; files: number }) {
-  if (conflicts) {
-    return (
-      <Nothing
-        title="Resolve conflicts"
-        description="Keep one side with the buttons in the file list, or edit the file and mark it resolved."
-      />
-    )
-  }
+function EmptyDiff({ files }: { files: number }) {
   if (files > 0)
     return <Nothing title="No text diff" description="These changes are binary or only change file modes." />
   return <Nothing title="No changes" description="The working tree matches HEAD." />
@@ -215,6 +139,17 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
   const refreshStatus = useAtomRefresh(statusAtom(repo))
   const status = latest(statusResult)
   const { unstaged, staged } = useMemo(() => classify(status?.entries ?? []), [status])
+  const conflicts = useMemo(
+    () => (status?.entries ?? []).flatMap((entry) => (entry._tag === "Conflicted" ? [entry] : [])),
+    [status],
+  )
+  const conflictPaths = useMemo(() => conflicts.map((entry) => entry.path), [conflicts])
+  const lists = useMemo(() => ({ unstaged, staged }), [unstaged, staged])
+  const [storedFileSelection, setFileSelection] = useState<FileSelection | null>(null)
+  const fileSelection = reconcile(storedFileSelection, lists)
+  if (fileSelection !== storedFileSelection) setFileSelection(fileSelection)
+  const lead = fileSelection === null ? undefined : lists[fileSelection.side][fileSelection.leadIndex]
+  const inspected = lead?.area === "conflicted" && fileSelection?.paths.has(lead.path) === true ? lead.path : null
   const untrackedPaths = useMemo(
     () =>
       unstaged
@@ -274,6 +209,8 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
 
   const git = useGitAction()
   const confirm = useConfirm()
+  const conflictActions = useConflictActions(repo)
+  const [conflictSession, openSession] = useConflictSession(repo)
   const stage = (paths: ReadonlyArray<RepoPath>) => git("Stage", repo, (c) => c("Stage", { repo, paths }))
   const unstage = (paths: ReadonlyArray<RepoPath>) => git("Unstage", repo, (c) => c("Unstage", { repo, paths }))
   const discard = (rows: ReadonlyArray<FileRow>) =>
@@ -350,6 +287,7 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     requestAnimationFrame(() => viewRef.current?.scrollTo({ type: "item", id: revealing.id, align: "start" }))
   }, [revealing, itemsById])
   const reveal = (row: FileRow) => {
+    if (row.area === "conflicted") return
     const section = row.area === "staged" ? "staged" : row.area === "untracked" ? "untracked" : "unstaged"
     const id = `${section}\n${row.path}`
     collapse.set([id], false)
@@ -397,38 +335,58 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     )
   }
 
+  const firstConflict = conflictPaths[0]
+  const shownConflict =
+    inspected ??
+    (firstConflict !== undefined && !diffsLoading && diffError === undefined && items.length === 0
+      ? firstConflict
+      : null)
+  const conflictIndex = shownConflict === null ? -1 : conflictPaths.indexOf(shownConflict)
+  const conflictEntry = conflicts[conflictIndex]
+
   return (
     <ResizablePanelGroup orientation="vertical">
       <ResizablePanel defaultSize="42%" minSize="20%">
         <div className="flex h-full flex-col">
-          {status.operation !== null && (
-            <OperationBanner
-              repo={repo}
-              operation={status.operation}
-              conflicts={unstaged.filter((row) => row.area === "conflicted").length}
-            />
+          {(status.operation !== null || conflicts.length > 0 || dirtyPaths(conflictSession).length > 0) && (
+            <OperationBanner repo={repo} status={status} conflicts={conflicts.length} />
           )}
           <CommitBox repo={repo} status={status} stagedCount={staged.length} />
           <FileLists
-            unstaged={unstaged}
-            staged={staged}
+            lists={lists}
+            selection={fileSelection}
+            onSelectionChange={setFileSelection}
             onReveal={reveal}
             diffToggle={(side) => <DiffToggle side={side} ids={sectionIds[side]} collapse={collapse} />}
             onStage={(rows) => stage(rows.flatMap((r) => r.paths))}
             onUnstage={(rows) => unstage(rows.flatMap((r) => r.paths))}
             onDiscard={discard}
-            sides={status.operation === null ? null : sideLabels[status.operation]}
+            sides={keepLabels(status.operation)}
+            busy={conflictActions.busy}
             onResolve={(rows, side) =>
-              void git("Resolve conflict", repo, (c) =>
-                c("ResolveConflict", { repo, paths: rows.map((r) => r.path), side }),
+              conflictActions.keep(
+                rows.map((r) => r.path),
+                side,
               )
             }
+            onMarkResolved={(row) => conflictActions.markResolved(row.path)}
+            onOpenConflict={(row) => openSession(openConflicts(row.path))}
           />
         </div>
       </ResizablePanel>
       <ResizableHandle />
       <ResizablePanel minSize="20%">
-        {diffError !== undefined ? (
+        {conflictEntry !== undefined ? (
+          <Nothing
+            title={inspected === null ? "Resolve conflicts" : `${basename(conflictEntry.path)} has conflicts`}
+            description={
+              inspected === null
+                ? `${conflicts.length} ${conflicts.length === 1 ? "file has" : "files have"} conflicts. Open the resolver to work through them.`
+                : `${describeConflict(conflictEntry.code, sideNames(status.operation))}. Open it in the resolver, or press Enter.`
+            }
+            action={{ label: "Open in resolver", onClick: () => openSession(openConflicts(conflictEntry.path)) }}
+          />
+        ) : diffError !== undefined ? (
           <Nothing
             title="Couldn't load the diffs"
             description={diffError}
@@ -442,10 +400,7 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
             description="These changes are over 4 MB, so they aren't shown together."
           />
         ) : items.length === 0 ? (
-          <EmptyDiff
-            conflicts={unstaged.some((row) => row.area === "conflicted")}
-            files={unstaged.length + staged.length}
-          />
+          <EmptyDiff files={unstaged.length + staged.length} />
         ) : (
           <div className="relative h-full">
             <DiffStack
@@ -604,30 +559,21 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
 }
 
 function FileLists({
-  unstaged,
-  staged,
+  lists,
+  selection,
+  onSelectionChange: setSelection,
   onReveal,
   diffToggle,
-  onStage,
-  onUnstage,
-  onDiscard,
-  sides,
-  onResolve,
-}: {
-  unstaged: ReadonlyArray<FileRow>
-  staged: ReadonlyArray<FileRow>
+  ...actions
+}: RowActions & {
+  lists: Readonly<Record<Side, ReadonlyArray<FileRow>>>
+  selection: FileSelection | null
+  onSelectionChange: (selection: FileSelection | null) => void
   onReveal: (row: FileRow) => void
   diffToggle: (side: Side) => ReactNode
-  onStage: (rows: ReadonlyArray<FileRow>) => void
-  onUnstage: (rows: ReadonlyArray<FileRow>) => void
-  onDiscard: (rows: ReadonlyArray<FileRow>) => void
-  sides: SideLabels | null
-  onResolve: (rows: ReadonlyArray<FileRow>, side: "ours" | "theirs") => void
 }) {
-  const lists = useMemo(() => ({ unstaged, staged }), [unstaged, staged])
-  const [storedSelection, setSelection] = useState<FileSelection | null>(null)
-  const selection = reconcile(storedSelection, lists)
-  if (selection !== storedSelection) setSelection(selection)
+  const { unstaged, staged } = lists
+  const { onStage, onUnstage, onDiscard, onMarkResolved } = actions
   const selected = selectedRows(selection, lists)
   const unstagedViewport = useRef<HTMLDivElement>(null)
   const stagedViewport = useRef<HTMLDivElement>(null)
@@ -671,8 +617,11 @@ function FileLists({
         "files.stage",
         () => {
           if (current === null) return
+          const only = selected.length === 1 ? selected[0]! : null
           if (side === "staged") onUnstage(selected)
-          else onStage(selected.length === 1 ? selected : withoutConflicts(selected))
+          else if (only?.area === "conflicted") {
+            if (!actions.busy.has(only.path)) onMarkResolved(only)
+          } else onStage(withoutConflicts(selected))
         },
       ],
       [
@@ -713,12 +662,14 @@ function FileLists({
           selected={selection?.side === side ? selected : []}
           viewportRef={viewports[side]}
           onClick={(row, mode) => select(click(selection, lists, side, row.path, mode), mode === "only")}
+          onEnter={() => {
+            const lead = selection?.side === side ? lists[side][selection.leadIndex] : undefined
+            if (lead?.area !== "conflicted") return false
+            actions.onOpenConflict(lead)
+            return true
+          }}
           diffToggle={diffToggle}
-          sides={sides}
-          onStage={onStage}
-          onUnstage={onUnstage}
-          onDiscard={onDiscard}
-          onResolve={onResolve}
+          {...actions}
         />
       ))}
     </div>
@@ -726,11 +677,14 @@ function FileLists({
 }
 
 interface RowActions {
-  readonly sides: SideLabels | null
+  readonly sides: Sides
+  readonly busy: ReadonlySet<RepoPath>
   readonly onStage: (rows: ReadonlyArray<FileRow>) => void
   readonly onUnstage: (rows: ReadonlyArray<FileRow>) => void
   readonly onDiscard: (rows: ReadonlyArray<FileRow>) => void
   readonly onResolve: (rows: ReadonlyArray<FileRow>, side: "ours" | "theirs") => void
+  readonly onMarkResolved: (row: FileRow) => void
+  readonly onOpenConflict: (row: FileRow) => void
 }
 
 function FileSection({
@@ -742,6 +696,7 @@ function FileSection({
   selected,
   viewportRef,
   onClick,
+  onEnter,
   diffToggle,
   ...actions
 }: RowActions & {
@@ -753,6 +708,7 @@ function FileSection({
   selected: ReadonlyArray<FileRow>
   viewportRef: React.RefObject<HTMLDivElement | null>
   onClick: (row: FileRow, mode: ClickMode) => void
+  onEnter: () => boolean
   diffToggle: (side: Side) => ReactNode
 }) {
   const virtualizer = useVirtualizer({
@@ -793,6 +749,9 @@ function FileSection({
           role: "listbox",
           "aria-label": `${label} files`,
           "aria-multiselectable": true,
+          onKeyDown: (event) => {
+            if (event.key === "Enter" && event.target === event.currentTarget && onEnter()) event.preventDefault()
+          },
           className: "[contain:strict] focus-visible:ring-0 focus-visible:outline-none",
         }}
       >
@@ -829,6 +788,7 @@ function SectionHeader({
   selected,
   diffToggle,
   sides,
+  busy,
   onStage,
   onUnstage,
   onDiscard,
@@ -847,6 +807,7 @@ function SectionHeader({
   const count = (subset: ReadonlyArray<FileRow>) => (multi || subset.length < rows.length ? subset.length : "all")
   const changes = withoutConflicts(targets)
   const conflicted = targets.filter((r) => r.area === "conflicted")
+  const toolOpen = conflicted.some((r) => busy.has(r.path))
   return (
     <div className="flex h-7 shrink-0 items-center gap-2 bg-muted/40 px-2 text-muted-foreground">
       <button
@@ -870,12 +831,12 @@ function SectionHeader({
             </Button>
           ) : (
             <>
-              {multi && sides !== null && conflicted.length > 0 && (
+              {multi && conflicted.length > 0 && (
                 <>
-                  <Button size="sm" variant="ghost" onClick={() => onResolve(conflicted, "ours")}>
+                  <Button size="sm" variant="ghost" disabled={toolOpen} onClick={() => onResolve(conflicted, "ours")}>
                     {sides.ours} {conflicted.length}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => onResolve(conflicted, "theirs")}>
+                  <Button size="sm" variant="ghost" disabled={toolOpen} onClick={() => onResolve(conflicted, "theirs")}>
                     {sides.theirs} {conflicted.length}
                   </Button>
                 </>
@@ -903,15 +864,19 @@ function FileRowView({
   selected,
   onClick,
   sides,
+  busy,
   onStage,
   onUnstage,
   onDiscard,
   onResolve,
+  onMarkResolved,
+  onOpenConflict,
 }: RowActions & {
   row: FileRow
   selected: boolean
   onClick: (row: FileRow, mode: ClickMode) => void
 }) {
+  const toolOpen = busy.has(row.path)
   return (
     <div className={cn("group flex h-full items-center gap-2 px-2", selected ? "bg-selection" : "hover:bg-muted/60")}>
       <button
@@ -923,6 +888,7 @@ function FileRowView({
         onClick={(event) =>
           onClick(row, event.shiftKey ? "extend" : event.metaKey || event.ctrlKey ? "toggle" : "only")
         }
+        onDoubleClick={() => row.area === "conflicted" && onOpenConflict(row)}
         className="flex min-w-0 flex-1 items-center gap-3 text-left"
       >
         <ChangeLetter change={row.change} />
@@ -948,23 +914,28 @@ function FileRowView({
           </Button>
         ) : (
           <>
-            {row.area === "conflicted" && sides !== null ? (
+            {row.area === "conflicted" ? (
               <>
-                <Button size="sm" variant="ghost" onClick={() => onResolve([row], "ours")}>
+                <Button size="sm" variant="ghost" disabled={toolOpen} onClick={() => onResolve([row], "ours")}>
                   {sides.ours}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => onResolve([row], "theirs")}>
+                <Button size="sm" variant="ghost" disabled={toolOpen} onClick={() => onResolve([row], "theirs")}>
                   {sides.theirs}
+                </Button>
+                <Button size="sm" variant="ghost" disabled={toolOpen} onClick={() => onMarkResolved(row)}>
+                  Mark resolved
                 </Button>
               </>
             ) : (
-              <Button size="sm" variant="ghost" onClick={() => onDiscard([row])}>
-                Discard
-              </Button>
+              <>
+                <Button size="sm" variant="ghost" onClick={() => onDiscard([row])}>
+                  Discard
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => onStage([row])}>
+                  Stage
+                </Button>
+              </>
             )}
-            <Button size="sm" variant="ghost" onClick={() => onStage([row])}>
-              {row.area === "conflicted" ? "Mark resolved" : "Stage"}
-            </Button>
           </>
         )}
       </span>

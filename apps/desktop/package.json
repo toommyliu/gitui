@@ -1,12 +1,14 @@
 {
   "name": "@gitui/desktop",
   "version": "0.0.0",
+  "description": "A desktop Git client",
   "type": "module",
   "private": true,
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node scripts/build.ts",
     "dev": "node scripts/dev.ts",
+    "package": "vp run @gitui/web#build && vp run build && node scripts/package.ts && electron-builder --publish never",
     "start": "node scripts/start.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -20,6 +22,7 @@
   "devDependencies": {
     "@types/node": "^24",
     "electron": "44.7.0",
+    "electron-builder": "26.15.3",
     "esbuild": "0.28.2"
   }
 }

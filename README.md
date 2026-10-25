@@ -21,13 +21,9 @@ Anyone who can reach the port can run git in any directory the server's user can
 ## Desktop app
 
 ```sh
-pnpm install
-pnpm dev:desktop
+vp install
+vp run dev:desktop
 ```
-
-`pnpm dev:desktop` starts Vite and opens the app with the web client loaded from it, so client edits hot-reload. Edits to the main process, preload or server code rebuild the Electron bundles and restart the app. A packaged app loads the web app from a `gitui://app` scheme instead. Either way, the window talks to a server that Electron starts as a child process on a random local port. The repository picker also has **Choose a folder…**, which opens any folder through the system dialog.
-
-The server only accepts RPC connections from its own origin, from `gitui://app`, or from clients that send no `Origin` header, so websites open in a browser can't drive it.
 
 ## Layout
 

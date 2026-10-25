@@ -1,0 +1,27 @@
+appId: com.app.gitui
+productName: gitui
+directories:
+  app: dist/app
+  output: dist/package
+  buildResources: resources
+files:
+  - "!node_modules/**/*"
+  - dist/*.cjs
+  - resources/icon.png
+  - web/**/*
+extraResources:
+  - from: dist/backend.mjs
+    to: backend.mjs
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+npmRebuild: false
+mac:
+  category: public.app-category.developer-tools
+  icon: resources/icon.icon
+  target:
+    - dmg
+    - zip
+win:
+  target: nsis
+linux:
+  category: Development
+  target: AppImage

@@ -6,6 +6,7 @@
     "build": "vp run -r build",
     "dev": "node scripts/dev.ts --filter=@gitui/web --filter=@gitui/server",
     "dev:desktop": "node scripts/dev.ts --filter=@gitui/web --filter=@gitui/desktop",
+    "package:desktop": "vp run @gitui/desktop#package",
     "typecheck": "vp run -r typecheck",
     "lint": "vp lint",
     "format": "vp fmt",

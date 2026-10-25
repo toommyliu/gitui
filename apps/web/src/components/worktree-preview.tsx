@@ -34,6 +34,7 @@ import {
   worktreeSummariesAtom,
 } from "@/lib/worktrees"
 import { ChangeLetter } from "./change-letter"
+import { OpenInButton } from "./open-in"
 import { ChangeTotals, HistoryButton, SectionBar, TestsToggle } from "./commit-detail"
 import { DiffStack, patchItems, useCollapse } from "./diff-view"
 import { Loading, Nothing } from "./loading"
@@ -369,11 +370,11 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
           const count = counts.get(row.path)
           const others = overlaps.get(row.path) ?? []
           return (
-            <li key={row.path}>
+            <li key={row.path} className="flex items-center pr-2">
               <button
                 type="button"
                 onClick={() => reveal(row.path)}
-                className="flex h-6 w-full items-center gap-2 px-3 text-left whitespace-nowrap hover:bg-muted/60"
+                className="flex h-6 min-w-0 flex-1 items-center gap-2 px-3 text-left whitespace-nowrap hover:bg-muted/60"
               >
                 <ChangeLetter change={row.change} />
                 <span className="min-w-0 truncate">
@@ -401,6 +402,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
                   )}
                 </span>
               </button>
+              <OpenInButton repo={worktree} file={{ path: row.path }} compact disabled={row.change === "deleted"} />
             </li>
           )
         })}
@@ -420,6 +422,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
             Open in new tab
             <ArrowUpRightIcon data-icon="inline-end" />
           </Button>
+          <OpenInButton repo={worktree} compact />
         </div>
         <p className="truncate text-muted-foreground">
           <span className="font-mono text-xs select-text">{path}</span>

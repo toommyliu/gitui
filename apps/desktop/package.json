@@ -11,7 +11,8 @@
     "dev": "node scripts/dev.ts",
     "package": "vp run @gitui/web#build && vp run build && node scripts/package.ts && electron-builder --publish never",
     "start": "node scripts/start.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vp test run"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.4",

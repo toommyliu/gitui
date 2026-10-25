@@ -41,6 +41,7 @@ import { settingsAtom } from "@/lib/settings"
 import { hunkChanges, selectedChanges } from "@/lib/lines"
 import { type CommandId, type KeyBinding, useCommand, useCommandKeys } from "@/lib/commands"
 import { ChangeLetter } from "./change-letter"
+import { OpenInButton } from "./open-in"
 import { HistoryButton } from "./commit-detail"
 import { useConfirm } from "./confirm"
 import { Loading, Nothing } from "./loading"
@@ -410,6 +411,7 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
           )}
           <CommitBox repo={repo} status={status} stagedCount={staged.length} />
           <FileLists
+            repo={repo}
             unstaged={unstaged}
             staged={staged}
             onReveal={reveal}
@@ -604,6 +606,7 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
 }
 
 function FileLists({
+  repo,
   unstaged,
   staged,
   onReveal,
@@ -614,6 +617,7 @@ function FileLists({
   sides,
   onResolve,
 }: {
+  repo: RepoId
   unstaged: ReadonlyArray<FileRow>
   staged: ReadonlyArray<FileRow>
   onReveal: (row: FileRow) => void
@@ -704,6 +708,7 @@ function FileLists({
     <div className="flex min-h-0 flex-1 flex-col">
       {(["unstaged", "staged"] as const).map((side) => (
         <FileSection
+          repo={repo}
           key={side}
           side={side}
           rows={lists[side]}
@@ -734,6 +739,7 @@ interface RowActions {
 }
 
 function FileSection({
+  repo,
   side,
   rows,
   open,
@@ -745,6 +751,7 @@ function FileSection({
   diffToggle,
   ...actions
 }: RowActions & {
+  repo: RepoId
   side: Side
   rows: ReadonlyArray<FileRow>
   open: boolean
@@ -806,6 +813,7 @@ function FileSection({
                 style={{ height: ROW, transform: `translateY(${item.start}px)` }}
               >
                 <FileRowView
+                  repo={repo}
                   row={row}
                   selected={selection?.paths.has(row.path) === true}
                   onClick={onClick}
@@ -899,6 +907,7 @@ function SectionHeader({
 }
 
 function FileRowView({
+  repo,
   row,
   selected,
   onClick,
@@ -908,6 +917,7 @@ function FileRowView({
   onDiscard,
   onResolve,
 }: RowActions & {
+  repo: RepoId
   row: FileRow
   selected: boolean
   onClick: (row: FileRow, mode: ClickMode) => void
@@ -942,6 +952,7 @@ function FileRowView({
         )}
       </button>
       <span className="flex shrink-0 gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
+        <OpenInButton repo={repo} file={{ path: row.path }} compact disabled={row.change === "deleted"} />
         {row.area === "staged" ? (
           <Button size="sm" variant="ghost" onClick={() => onUnstage([row])}>
             Unstage

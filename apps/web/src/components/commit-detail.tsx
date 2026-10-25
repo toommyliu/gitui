@@ -24,6 +24,7 @@ import type { Selection } from "@/lib/selection"
 import { settingsAtom } from "@/lib/settings"
 import { DiffStack, expandableIds, patchItems, useCollapse } from "./diff-view"
 import { ChangeLetter } from "./change-letter"
+import { OpenInButton } from "./open-in"
 import { Loading, Nothing } from "./loading"
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -366,23 +367,28 @@ function LargeCommit({
               {virtualizer.getVirtualItems().map((item) => {
                 const file = listed[item.index]!
                 return (
-                  <button
+                  <div
                     key={item.key}
-                    type="button"
-                    onClick={() => {
-                      setOpen(file)
-                      diff.current?.expand()
-                      if (narrow) files.current?.collapse()
-                    }}
                     className={cn(
                       "absolute top-0 left-0 flex w-full items-center gap-2 px-3 text-left hover:bg-muted/60",
                       open?.path === file.path && "bg-selection",
                     )}
                     style={{ height: FILE_ROW, transform: `translateY(${item.start}px)` }}
                   >
-                    <ChangeLetter change={file.change} />
-                    <span className="truncate">{file.path}</span>
-                  </button>
+                    <button
+                      type="button"
+                      className="flex h-full min-w-0 flex-1 items-center gap-2 text-left"
+                      onClick={() => {
+                        setOpen(file)
+                        diff.current?.expand()
+                        if (narrow) files.current?.collapse()
+                      }}
+                    >
+                      <ChangeLetter change={file.change} />
+                      <span className="truncate">{file.path}</span>
+                    </button>
+                    <OpenInButton repo={repo} file={{ path: file.path }} compact disabled={file.change === "deleted"} />
+                  </div>
                 )
               })}
             </div>

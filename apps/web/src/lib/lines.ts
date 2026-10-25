@@ -56,3 +56,21 @@ export const hunkChanges = (file: FileDiffMetadata, line: number, side: Selectio
   const hit = all[rowAt(all, line, side)]
   return hit === undefined ? [] : all.filter((row) => row.hunk === hit.hunk).flatMap(toSelection)
 }
+
+export const editorLine = (file: FileDiffMetadata, range: SelectedLineRange): number => {
+  if (range.side !== "deletions") return range.start
+  for (const hunk of file.hunks) {
+    let oldLine = hunk.deletionStart
+    let newLine = hunk.additionStart
+    for (const content of hunk.hunkContent) {
+      const oldCount = content.type === "context" ? content.lines : content.deletions
+      const newCount = content.type === "context" ? content.lines : content.additions
+      if (range.start >= oldLine && range.start < oldLine + oldCount) {
+        return Math.max(1, newLine + (content.type === "context" ? range.start - oldLine : 0))
+      }
+      oldLine += oldCount
+      newLine += newCount
+    }
+  }
+  return 1
+}

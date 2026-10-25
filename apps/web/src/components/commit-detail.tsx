@@ -24,7 +24,7 @@ import type { Selection } from "@/lib/selection"
 import { settingsAtom } from "@/lib/settings"
 import { DiffStack, expandableIds, patchItems, useCollapse } from "./diff-view"
 import { ChangeLetter } from "./change-letter"
-import { Loading, Nothing } from "./loading"
+import { LargeDiff, Loading, Nothing } from "./loading"
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -146,12 +146,13 @@ export function CommitDetail({
   onSelect: (selection: Selection) => void
   onHistory: (path: string) => void
 }) {
+  const [allowLarge, setAllowLarge] = useState(false)
   const commit = commitAtom(`${repo}\n${oid}`)
   const commitResult = useAtomValue(commit)
   const refreshCommit = useAtomRefresh(commit)
   const detail = latest(commitResult)
   const { ignoreWhitespace, hideTests } = useAtomValue(settingsAtom)
-  const patch = diffAtom(diffKey(repo, { _tag: "Commit", oid }, [], ignoreWhitespace))
+  const patch = diffAtom(diffKey(repo, { _tag: "Commit", oid }, [], ignoreWhitespace, allowLarge))
   const diffResult = useAtomValue(patch)
   const refreshDiff = useAtomRefresh(patch)
   const diff = latest(diffResult)
@@ -178,6 +179,8 @@ export function CommitDetail({
         key={oid}
         repo={repo}
         detail={detail}
+        bytes={diff.bytes}
+        onShow={() => setAllowLarge(true)}
         summary={<Summary detail={detail} onSelect={onSelect} />}
         onHistory={onHistory}
       />
@@ -201,7 +204,9 @@ export function CommitDetail({
       >
         <ChangeTotals count={detail.files.length} files={detail.files} />
       </SectionBar>
-      {diffError === undefined ? (
+      {diff === undefined && diffError === undefined ? (
+        <Loading label="Loading diff" />
+      ) : diffError === undefined ? (
         <div className="min-h-0 flex-1">
           <DiffStack
             key={oid}
@@ -281,11 +286,15 @@ function BarButton({ onClick, children }: { onClick: () => void; children: React
 function LargeCommit({
   repo,
   detail,
+  bytes,
+  onShow,
   summary,
   onHistory,
 }: {
   repo: RepoId
   detail: Detail
+  bytes: number
+  onShow: () => void
   summary: ReactNode
   onHistory: (path: string) => void
 }) {
@@ -396,7 +405,7 @@ function LargeCommit({
           onResize={(size) => setDiffShown(size.asPercentage > 0)}
         >
           {open === null ? (
-            <Nothing title="Too large to show at once" description="Pick a file to see its diff." />
+            <LargeDiff bytes={bytes} onShow={onShow} hint="You can also select a file to view its diff." />
           ) : (
             <SingleFileDiff key={open.path} repo={repo} oid={detail.oid} file={open} onHistory={onHistory} />
           )}
@@ -417,9 +426,10 @@ function SingleFileDiff({
   file: FileChange
   onHistory: (path: string) => void
 }) {
+  const [allowLarge, setAllowLarge] = useState(false)
   const paths = file.from === null ? [file.path] : [file.from, file.path]
   const { ignoreWhitespace } = useAtomValue(settingsAtom)
-  const atom = diffAtom(diffKey(repo, { _tag: "Commit", oid }, paths, ignoreWhitespace))
+  const atom = diffAtom(diffKey(repo, { _tag: "Commit", oid }, paths, ignoreWhitespace, allowLarge))
   const result = useAtomValue(atom)
   const refresh = useAtomRefresh(atom)
   const diff = latest(result)
@@ -432,8 +442,7 @@ function SingleFileDiff({
       <Nothing title="Couldn't load the diff" description={error} onRetry={refresh} />
     )
   }
-  if (diff._tag === "TooLarge")
-    return <Nothing title="Too large to display" description="This file's diff is over 4 MB." />
+  if (diff._tag === "TooLarge") return <LargeDiff bytes={diff.bytes} onShow={() => setAllowLarge(true)} />
   return (
     <DiffStack repo={repo} items={items} actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />} />
   )

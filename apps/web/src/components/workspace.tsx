@@ -59,7 +59,7 @@ export function Workspace({
 
   const detail =
     selection._tag === "Commit" ? (
-      <CommitDetail repo={repo} oid={selection.oid} onSelect={select} onHistory={showHistory} />
+      <CommitDetail key={selection.oid} repo={repo} oid={selection.oid} onSelect={select} onHistory={showHistory} />
     ) : selection._tag === "Worktree" ? (
       <WorktreePreview
         key={selection.path}
@@ -70,7 +70,7 @@ export function Workspace({
         onHistory={showHistory}
       />
     ) : (
-      <WorkingCopy repo={repo} onHistory={showHistory} />
+      <WorkingCopy key={repo} repo={repo} onHistory={showHistory} />
     )
   const sidebar = (
     <Sidebar

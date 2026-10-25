@@ -30,13 +30,14 @@ import {
   mergeCheckKey,
   worktreeAtom,
   worktreeDiffAtom,
+  worktreeDiffKey,
   worktreeLabel,
   worktreeSummariesAtom,
 } from "@/lib/worktrees"
 import { ChangeLetter } from "./change-letter"
 import { ChangeTotals, HistoryButton, SectionBar, TestsToggle } from "./commit-detail"
 import { DiffStack, patchItems, useCollapse } from "./diff-view"
-import { Loading, Nothing } from "./loading"
+import { LargeDiff, Loading, Nothing } from "./loading"
 
 const MAX_ROWS = 500
 const SECTION = "worktree"
@@ -299,11 +300,12 @@ export function WorktreePreview(props: PreviewProps) {
 }
 
 function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
+  const [allowLarge, setAllowLarge] = useState(false)
   const worktree = path as RepoId
   useAtomMount(watchAtom(worktree))
   const result = useAtomValue(worktreeAtom(worktree))
   const detail = latest(result)
-  const diffResult = useAtomValue(worktreeDiffAtom(worktree))
+  const diffResult = useAtomValue(worktreeDiffAtom(worktreeDiffKey(worktree, allowLarge)))
   const diff = latest(diffResult)
   const refs = latest(useAtomValue(refsAtom(repo)))
   const summaries = latest(useAtomValue(worktreeSummariesAtom(repo)))
@@ -450,10 +452,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
                 <Loading label="Loading diff" />
               )
             ) : diff._tag === "TooLarge" ? (
-              <Nothing
-                title="Too large to diff"
-                description="These changes are over 4 MB, so they aren't shown together."
-              />
+              <LargeDiff bytes={diff.bytes} onShow={() => setAllowLarge(true)} />
             ) : items.length === 0 ? (
               <Nothing title="Nothing to diff" />
             ) : shownItems.length === 0 ? (

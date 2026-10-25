@@ -34,13 +34,16 @@ export const worktreeAtom = Atom.family((worktree: RepoId) =>
   ),
 )
 
-export const worktreeDiffAtom = Atom.family((worktree: RepoId) =>
-  GitClient.query(
+export const worktreeDiffKey = (worktree: RepoId, allowLarge: boolean) => JSON.stringify([worktree, allowLarge])
+
+export const worktreeDiffAtom = Atom.family((key: string) => {
+  const [worktree, allowLarge] = JSON.parse(key) as [RepoId, boolean]
+  return GitClient.query(
     "GetWorktreeDiff",
-    { repo: worktree },
+    { repo: worktree, allowLarge },
     { reactivityKeys: [keys.worktree(worktree)], timeToLive: "1 minute" },
-  ),
-)
+  )
+})
 
 export const mergeCheckKey = (worktree: RepoId, base: Oid, fingerprint: string) =>
   JSON.stringify([worktree, base, fingerprint])

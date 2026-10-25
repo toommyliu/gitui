@@ -110,6 +110,7 @@ export class GitRpcs extends RpcGroup.make(
       target: DiffTarget,
       paths: Schema.Array(RepoPath),
       ignoreWhitespace: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+      allowLarge: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
     },
     success: FileDiff,
     error: GitError,
@@ -190,6 +191,10 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("StashDrop", { payload: { repo: RepoId, oid: Oid }, error: GitError }),
   Rpc.make("GetWorktreeSummaries", { payload: repo, success: Schema.Array(WorktreeSummary), error: GitError }),
   Rpc.make("GetWorktree", { payload: repo, success: WorktreeDetail, error: GitError }),
-  Rpc.make("GetWorktreeDiff", { payload: repo, success: FileDiff, error: GitError }),
+  Rpc.make("GetWorktreeDiff", {
+    payload: { ...repo, allowLarge: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))) },
+    success: FileDiff,
+    error: GitError,
+  }),
   Rpc.make("CheckWorktreeMerge", { payload: { repo: RepoId, base: Oid }, success: MergeCheck, error: GitError }),
 ) {}

@@ -17,6 +17,7 @@ import {
   useNetwork,
 } from "@/lib/git"
 import { settingsAtom } from "@/lib/settings"
+import { usePublishing } from "./publishing"
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" })
 
@@ -41,20 +42,24 @@ export function useBackgroundFetch(paths: ReadonlyArray<string>) {
 
 export function useNetworkCommands(repo: RepoId) {
   const network = useNetwork(repo)
+  const publishing = usePublishing(repo)
   const idle = useAtomValue(networkStateAtom(repo))?._tag !== "Running"
   useCommand("repo.fetch", () => void network.run({ action: "Fetch" }), { enabled: idle })
-  useCommand("repo.pull", () => void network.run({ action: "Pull" }), { enabled: idle })
-  useCommand("repo.push", () => void network.run({ action: "Push" }), { enabled: idle })
+  useCommand("repo.pull", publishing.pull, { enabled: idle })
+  useCommand("repo.push", () => publishing.push(), { enabled: idle })
+  useCommand("repo.remotes", publishing.manageRemotes)
+  useCommand("repo.pushTags", () => publishing.pushTags(), { enabled: idle })
 }
 
 export function SyncButtons({ repo, upstream }: { repo: RepoId; upstream: Tracking | null }) {
   const network = useNetwork(repo)
+  const publishing = usePublishing(repo)
   const state = useAtomValue(networkStateAtom(repo))
   const running = state?._tag === "Running" ? state : null
   const behind = upstream?.behind ?? 0
   const ahead = upstream?.ahead ?? 0
   const from = upstream === null ? "" : ` from ${upstream.name}`
-  const to = upstream === null ? "" : ` to ${upstream.name}`
+
   const actions = [
     { action: "Fetch", Icon: RefreshCwIcon, count: 0, label: "Fetch" },
     {
@@ -63,7 +68,7 @@ export function SyncButtons({ repo, upstream }: { repo: RepoId; upstream: Tracki
       count: behind,
       label: `Pull${behind > 0 ? ` ${commits(behind)}` : ""}${from}`,
     },
-    { action: "Push", Icon: ArrowUpIcon, count: ahead, label: `Push${ahead > 0 ? ` ${commits(ahead)}` : ""}${to}` },
+    { action: "Push", Icon: ArrowUpIcon, count: ahead, label: "Push branch…" },
   ] as const
 
   return (
@@ -78,7 +83,13 @@ export function SyncButtons({ repo, upstream }: { repo: RepoId; upstream: Tracki
                 className="px-1.5 text-muted-foreground"
                 aria-label={label}
                 disabled={running !== null}
-                onClick={() => void network.run({ action })}
+                onClick={() =>
+                  action === "Fetch"
+                    ? void network.run({ action })
+                    : action === "Pull"
+                      ? publishing.pull()
+                      : publishing.push()
+                }
               />
             }
           >

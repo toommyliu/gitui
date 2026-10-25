@@ -76,8 +76,8 @@ export const Status = Schema.Struct({
 export type Status = typeof Status.Type
 
 export const Upstream = Schema.Union([
-  Schema.TaggedStruct("Tracking", { name: Schema.String, ahead: Schema.Int, behind: Schema.Int }),
-  Schema.TaggedStruct("Gone", { name: Schema.String }),
+  Schema.TaggedStruct("Tracking", { ref: Schema.String, name: Schema.String, ahead: Schema.Int, behind: Schema.Int }),
+  Schema.TaggedStruct("Gone", { ref: Schema.String, name: Schema.String }),
 ])
 export type Upstream = typeof Upstream.Type
 
@@ -123,9 +123,23 @@ export type Worktree = typeof Worktree.Type
 
 export const Remote = Schema.Struct({
   name: Schema.String,
-  url: Schema.String,
+  urls: Schema.Array(Schema.String),
+  pushUrls: Schema.Array(Schema.String),
 })
 export type Remote = typeof Remote.Type
+
+export const PushDestination = Schema.Struct({
+  branch: Schema.String,
+  remote: Schema.String,
+  remoteBranch: Schema.String,
+})
+export type PushDestination = typeof PushDestination.Type
+
+export const PullTarget = Schema.Struct({ branch: Schema.String, upstream: Schema.String })
+export type PullTarget = typeof PullTarget.Type
+
+export const PullStrategy = Schema.Literals(["configured", "ff-only", "merge", "rebase"])
+export type PullStrategy = typeof PullStrategy.Type
 
 export const Refs = Schema.Struct({
   branches: Schema.Array(Branch),

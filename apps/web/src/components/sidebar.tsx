@@ -52,6 +52,7 @@ import {
   useCheckout,
   useGitAction,
   useNetwork,
+  networkStateAtom,
   useRunGitAction,
 } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
@@ -59,6 +60,7 @@ import { type Location, type LocationState, focusLocation, locationState, toggle
 import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
 import { useConfirm } from "./confirm"
 import { SyncButtons } from "./network"
+import { usePublishing } from "./publishing"
 import { usePrompt } from "./prompt"
 import { RemoveWorktreeDialog } from "./remove-worktree-dialog"
 import { useStashPrompt } from "./stash-prompt"
@@ -457,6 +459,8 @@ function SidebarRow({
   const confirm = useConfirm()
   const prompt = usePrompt()
   const network = useNetwork(repo)
+  const publishing = usePublishing(repo)
+  const networkBusy = useAtomValue(networkStateAtom(repo))?._tag === "Running"
   const select = (oid: Oid) => onSelect({ _tag: "Commit", oid })
   const current = head?._tag === "Branch" ? head.name : "HEAD"
   const integrate = (ref: string, disabled: boolean) => (
@@ -488,9 +492,9 @@ function SidebarRow({
       const isHead = head?._tag === "Branch" && head.name === branch.name
       const worktree = worktreeByBranch.get(branch.name)
       const upstream = branch.upstream
-      const remoteOid =
+      const remoteBranch =
         upstream?._tag === "Tracking"
-          ? refs?.remoteBranches.find((remote) => remote.name === upstream.name)?.oid
+          ? refs?.remoteBranches.find((remote) => `refs/remotes/${remote.name}` === upstream.ref)
           : undefined
       const forcePush = (name: string, expected: Oid) =>
         confirm({
@@ -503,7 +507,17 @@ function SidebarRow({
           ),
           confirmLabel: "Force push",
           destructive: true,
-          onConfirm: () => void network.run({ action: "ForcePush", expected }),
+          onConfirm: () =>
+            remoteBranch !== undefined &&
+            void network.run({
+              action: "ForcePush",
+              expected,
+              destination: {
+                branch: branch.name,
+                remote: remoteBranch.remote,
+                remoteBranch: remoteBranch.name.slice(remoteBranch.remote.length + 1),
+              },
+            }),
         })
       const open = () => {
         if (isHead) return
@@ -591,11 +605,15 @@ function SidebarRow({
             >
               Rename…
             </ContextMenuItem>
+            <ContextMenuItem disabled={networkBusy} onClick={() => publishing.push(branch)}>
+              Push branch…
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => publishing.changeUpstream(branch)}>Change upstream…</ContextMenuItem>
             {isHead && upstream?._tag === "Tracking" && (
               <ContextMenuItem
                 variant="destructive"
-                disabled={remoteOid === undefined}
-                onClick={() => remoteOid !== undefined && forcePush(upstream.name, remoteOid)}
+                disabled={networkBusy || remoteBranch === undefined}
+                onClick={() => remoteBranch !== undefined && forcePush(upstream.name, remoteBranch.oid)}
               >
                 Force push to {upstream.name}…
               </ContextMenuItem>
@@ -635,9 +653,35 @@ function SidebarRow({
             <ContextMenuSeparator />
             <ContextMenuItem
               variant="destructive"
+              disabled={!configured || networkBusy}
               onClick={() =>
                 confirm({
-                  title: `Delete ${row.ref.name}?`,
+                  title: `Delete ${local} on ${row.ref.remote}?`,
+                  body: (
+                    <p>
+                      This deletes the branch on the remote server for everyone using it. Your local branches stay in
+                      place. Deletion stops if the remote branch has changed since your last fetch.
+                    </p>
+                  ),
+                  confirmLabel: "Delete on remote",
+                  destructive: true,
+                  onConfirm: () =>
+                    void network.run({
+                      action: "DeleteRemoteBranch",
+                      remote: row.ref.remote,
+                      branch: local,
+                      expected: row.ref.oid,
+                    }),
+                })
+              }
+            >
+              Delete branch on {row.ref.remote}…
+            </ContextMenuItem>
+            <ContextMenuItem
+              variant="destructive"
+              onClick={() =>
+                confirm({
+                  title: `Delete local reference ${row.ref.name}?`,
                   body: configured ? (
                     <p>
                       This deletes the local remote-tracking branch only. The branch on {row.ref.remote} stays, and the
@@ -650,12 +694,12 @@ function SidebarRow({
                   destructive: true,
                   onConfirm: () =>
                     void git("Delete remote-tracking branch", repo, (c) =>
-                      c("DeleteRemoteBranch", { repo, name: row.ref.name }),
+                      c("DeleteRemoteTrackingBranch", { repo, name: row.ref.name }),
                     ),
                 })
               }
             >
-              Delete remote-tracking branch…
+              Delete local tracking reference…
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
@@ -672,6 +716,9 @@ function SidebarRow({
             </Line>
           </ContextMenuTrigger>
           <ContextMenuContent>
+            <ContextMenuItem disabled={networkBusy} onClick={() => publishing.pushTags([tag.name])}>
+              Push tag…
+            </ContextMenuItem>
             <ContextMenuItem
               onClick={() => void git("Check out", repo, (c) => c("CheckoutDetached", { repo, oid: tag.oid }))}
             >
@@ -821,6 +868,8 @@ function SectionRow({
   const git = useGitAction()
   const prompt = usePrompt()
   const stash = useStashPrompt(repo)
+  const publishing = usePublishing(repo)
+  const networkBusy = useAtomValue(networkStateAtom(repo))?._tag === "Running"
   const header = (
     <button
       type="button"
@@ -842,6 +891,21 @@ function SectionRow({
       </ContextMenu>
     )
   }
+  if (row.id === "remotes" || row.id === "tags")
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger className="block h-full">{header}</ContextMenuTrigger>
+        <ContextMenuContent>
+          {row.id === "remotes" ? (
+            <ContextMenuItem onClick={publishing.manageRemotes}>Manage remotes…</ContextMenuItem>
+          ) : (
+            <ContextMenuItem disabled={networkBusy} onClick={() => publishing.pushTags()}>
+              Push tags…
+            </ContextMenuItem>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
+    )
   if (row.id !== "worktrees") return header
   return (
     <ContextMenu>

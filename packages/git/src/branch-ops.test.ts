@@ -41,7 +41,9 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         const { repo, remote } = withRemote()
         repo.git("switch", "-q", "-c", "feature")
         const tip = repo.commit("feature work")
-        yield* Stream.runDrain((yield* Repo).push(id(repo.root)))
+        yield* Stream.runDrain(
+          (yield* Repo).push(id(repo.root), { branch: "feature", remote: "origin", remoteBranch: "feature" }, true),
+        )
         expect(repo.git("rev-parse", "--abbrev-ref", "feature@{upstream}")).toBe("origin/feature")
         expect(execFileSync("git", ["--git-dir", remote, "rev-parse", "feature"], { encoding: "utf8" }).trim()).toBe(
           tip,
@@ -60,10 +62,14 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         repo.git("fetch", "-q", "origin")
 
         const r = yield* Repo
-        const error = yield* Effect.flip(Stream.runDrain(r.forcePush(id(repo.root), seen)))
+        const error = yield* Effect.flip(
+          Stream.runDrain(r.forcePush(id(repo.root), { branch: "main", remote: "origin", remoteBranch: "main" }, seen)),
+        )
         expect(error.stderr).toContain("stale info")
         const current = repo.git("rev-parse", "origin/main") as Oid
-        yield* Stream.runDrain(r.forcePush(id(repo.root), current))
+        yield* Stream.runDrain(
+          r.forcePush(id(repo.root), { branch: "main", remote: "origin", remoteBranch: "main" }, current),
+        )
         expect(
           execFileSync("git", ["--git-dir", remote, "log", "-1", "--format=%s", "main"], { encoding: "utf8" }).trim(),
         ).toBe("rewritten")
@@ -189,7 +195,7 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         const repo = makeRepo()
         const base = repo.commit("base")
         repo.git("update-ref", "refs/remotes/pr/274", base)
-        yield* (yield* Repo).deleteRemoteBranch(id(repo.root), "pr/274")
+        yield* (yield* Repo).deleteRemoteTrackingBranch(id(repo.root), "pr/274")
         expect(repo.git("for-each-ref", "refs/remotes")).toBe("")
       }),
     )

@@ -71,7 +71,7 @@ export class Git extends Context.Service<
     run(cwd: string, args: ReadonlyArray<string>, options?: RunOptions): Effect.Effect<Uint8Array, GitError>
     text(cwd: string, args: ReadonlyArray<string>, options?: RunOptions): Effect.Effect<string, GitError>
     stream(cwd: string, args: ReadonlyArray<string>): Stream.Stream<Uint8Array, GitError>
-    progress(cwd: string, args: ReadonlyArray<string>): Stream.Stream<Progress, GitError>
+    progress(cwd: string, args: ReadonlyArray<string>, options?: RunOptions): Stream.Stream<Progress, GitError>
   }
 >()("@gitui/git/Git") {
   static readonly layer = Layer.effect(
@@ -152,12 +152,12 @@ export class Git extends Context.Service<
               )
             }),
           ).pipe(Stream.mapError((error) => (error instanceof GitError ? error : spawnError(args)(error)))),
-        progress: (cwd, args) =>
+        progress: (cwd, args, options) =>
           Stream.unwrap(
             Effect.gen(function* () {
-              const options = { write: true }
-              const finish = yield* recorder(cwd, args, options)
-              const handle = yield* spawner.spawn(command(cwd, args, options))
+              const writeOptions = { ...options, write: true }
+              const finish = yield* recorder(cwd, args, writeOptions)
+              const handle = yield* spawner.spawn(command(cwd, args, writeOptions))
               const splitter = new ProgressSplitter()
               const lines = handle.stderr.pipe(
                 Stream.decodeText(),

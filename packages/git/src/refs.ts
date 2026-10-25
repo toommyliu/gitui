@@ -67,12 +67,12 @@ export const parseTracks = (bytes: Uint8Array): Map<string, string> => {
   return tracks
 }
 
-const parseUpstream = (name: string, track: string): Upstream | null => {
-  if (name === "") return null
-  if (track === "gone") return { _tag: "Gone", name }
+const parseUpstream = (ref: string, name: string, track: string): Upstream | null => {
+  if (ref === "") return null
+  if (track === "gone") return { _tag: "Gone", ref, name }
   const ahead = Number(track.match(/ahead (\d+)/)?.[1] ?? 0)
   const behind = Number(track.match(/behind (\d+)/)?.[1] ?? 0)
-  return { _tag: "Tracking", name, ahead, behind }
+  return { _tag: "Tracking", ref, name, ahead, behind }
 }
 
 export interface ParsedRefs {
@@ -97,7 +97,7 @@ export const parseRefs = (
     if (ref.startsWith("refs/heads/")) {
       const upstreamOid = oids.get(upstream)
       const track = upstreamOid === undefined ? "gone" : (tracks.get(pairKey(oid, upstreamOid)) ?? "")
-      branches.push({ name: ref.slice(11), oid: oid as Oid, upstream: parseUpstream(upstreamName, track) })
+      branches.push({ name: ref.slice(11), oid: oid as Oid, upstream: parseUpstream(upstream, upstreamName, track) })
     } else if (ref.startsWith("refs/remotes/")) {
       const name = ref.slice(13)
       const remote = remoteNames.find((r) => name.startsWith(`${r}/`)) ?? name.slice(0, name.indexOf("/"))
@@ -109,15 +109,25 @@ export const parseRefs = (
   return { branches, remoteBranches, tags }
 }
 
-export const remotesArgs = ["config", "-z", "--get-regexp", "^remote\\..*\\.url$"]
+export const remotesArgs = ["config", "-z", "--get-regexp", "^remote\\..*\\.(url|pushurl)$"]
 
-export const parseRemotes = (bytes: Uint8Array): Array<Remote> =>
-  splitNul(bytes).flatMap((entry) => {
+export const parseRemotes = (bytes: Uint8Array): Array<Remote> => {
+  const remotes = new Map<string, { name: string; urls: string[]; pushUrls: string[] }>()
+  for (const entry of splitNul(bytes)) {
     const newline = entry.indexOf("\n")
     const key = entry.slice(0, newline)
-    const name = key.slice("remote.".length, -".url".length)
-    return newline === -1 || name === "" ? [] : [{ name, url: entry.slice(newline + 1) }]
-  })
+    const push = key.endsWith(".pushurl")
+    const name = key.slice("remote.".length, push ? -".pushurl".length : -".url".length)
+    if (newline === -1 || name === "") continue
+    const remote = remotes.get(name) ?? { name, urls: [], pushUrls: [] }
+    const urls = remote[push ? "pushUrls" : "urls"]
+    const url = entry.slice(newline + 1)
+    if (url === "") urls.length = 0
+    else urls.push(url)
+    remotes.set(name, remote)
+  }
+  return [...remotes.values()]
+}
 
 export const stashArgs = ["stash", "list", "-z", "--format=%H%x00%gs%x00%ct"]
 

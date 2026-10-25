@@ -1,6 +1,7 @@
 {
   "name": "@gitui/contracts",
   "version": "0.0.0",
+  "license": "MIT",
   "type": "module",
   "private": true,
   "exports": {

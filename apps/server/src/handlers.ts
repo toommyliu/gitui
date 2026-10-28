@@ -27,6 +27,7 @@ export const handlers = GitRpcs.toLayer(
       GetLogPage: ({ repo: id, logId, start, count }) => repo.logPage(id, logId, start, count),
       GetLogIndex: ({ repo: id, logId, oid }) => repo.logIndex(id, logId, oid),
       GetCommit: ({ repo: id, oid }) => repo.commit(id, oid),
+      GetComparison: ({ repo: id, comparison }) => repo.comparison(id, comparison),
       GetDiff: ({ repo: id, target, paths, ignoreWhitespace, allowLarge }) =>
         repo.diff(id, target, paths, ignoreWhitespace, allowLarge),
       Stage: ({ repo: id, paths }) => repo.stage(id, paths),

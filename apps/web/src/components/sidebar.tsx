@@ -43,6 +43,7 @@ import { cn } from "cn"
 import * as Exit from "effect/Exit"
 import { ChevronRightIcon, EyeIcon, EyeOffIcon, GitBranchIcon } from "lucide-react"
 import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "react"
+import { useCompare } from "@/lib/comparison"
 import { useHistoryDate } from "@/lib/dates"
 import { basename, shortOid } from "@/lib/format"
 import {
@@ -455,6 +456,7 @@ function SidebarRow({
   onRemove: (worktree: Worktree, force: boolean) => void
 }) {
   const git = useGitAction()
+  const compare = useCompare(repo)
   const checkout = useCheckout()
   const date = useHistoryDate()
   const confirm = useConfirm()
@@ -552,6 +554,10 @@ function SidebarRow({
             </Line>
           </ContextMenuTrigger>
           <ContextMenuContent>
+            <ContextMenuItem onClick={() => compare({ head: `refs/heads/${branch.name}`, mode: "merge-base" })}>
+              Compare with…
+            </ContextMenuItem>
+            <ContextMenuSeparator />
             <ContextMenuItem
               disabled={isHead || worktree !== undefined}
               onClick={() => void checkout(repo, branch.name)}
@@ -648,6 +654,10 @@ function SidebarRow({
             </Line>
           </ContextMenuTrigger>
           <ContextMenuContent>
+            <ContextMenuItem onClick={() => compare({ head: `refs/remotes/${row.ref.name}`, mode: "merge-base" })}>
+              Compare with…
+            </ContextMenuItem>
+            <ContextMenuSeparator />
             <ContextMenuItem onClick={() => void checkout(repo, local)}>Check out as {local}</ContextMenuItem>
             <ContextMenuSeparator />
             {integrate(row.ref.name, head?._tag === "Unborn")}
@@ -717,6 +727,10 @@ function SidebarRow({
             </Line>
           </ContextMenuTrigger>
           <ContextMenuContent>
+            <ContextMenuItem onClick={() => compare({ head: `refs/tags/${tag.name}`, base: "HEAD", mode: "direct" })}>
+              Compare with…
+            </ContextMenuItem>
+            <ContextMenuSeparator />
             <ContextMenuItem disabled={networkBusy} onClick={() => publishing.pushTags([tag.name])}>
               Push tag…
             </ContextMenuItem>

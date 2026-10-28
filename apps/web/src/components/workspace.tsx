@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import * as Atom from "effect/reactivity/Atom"
 import { useRef } from "react"
 import { flushSync } from "react-dom"
+import { useCompare } from "@/lib/comparison"
 import { useCommand } from "@/lib/commands"
 import { useConflictSession } from "@/lib/conflict-session"
 import { pathQuery, watchAtom } from "@/lib/git"
@@ -12,6 +13,8 @@ import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
 import { visibilityAtom } from "@/lib/visibility"
 import { CommandLogDrawer } from "./command-log"
+import { ComparisonDetail } from "./comparison-detail"
+import { ComparisonDialog } from "./comparison-dialog"
 import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
 import { ConflictWorkspace } from "./conflict-workspace"
@@ -41,6 +44,13 @@ export function Workspace({
   useNetworkCommands(repo)
   const narrow = useNarrow()
   const [selection, setSelection] = useAtom(selectionAtom(repo))
+  const openCompare = useCompare(repo)
+  useCommand("history.compare", () =>
+    openCompare({
+      head: selection._tag === "Commit" ? selection.oid : "HEAD",
+      mode: selection._tag === "Commit" ? "direct" : "merge-base",
+    }),
+  )
   const [pane, setPane] = useAtom(paneAtom(repo))
   const [query, setQuery] = useAtom(queryAtom(repo))
   const [visibility, setVisibility] = useAtom(visibilityAtom(commonDir))
@@ -62,7 +72,15 @@ export function Workspace({
   }
 
   const detail =
-    selection._tag === "Commit" ? (
+    selection._tag === "Comparison" ? (
+      <ComparisonDetail
+        key={JSON.stringify([selection.comparison.base, selection.comparison.head])}
+        repo={repo}
+        comparison={selection.comparison}
+        onSelect={select}
+        onHistory={showHistory}
+      />
+    ) : selection._tag === "Commit" ? (
       <CommitDetail key={selection.oid} repo={repo} oid={selection.oid} onSelect={select} onHistory={showHistory} />
     ) : selection._tag === "Worktree" ? (
       <WorktreePreview
@@ -101,6 +119,7 @@ export function Workspace({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <RemotesDialog repo={repo} />
+      <ComparisonDialog repo={repo} onSelect={select} />
       <CommandLogDrawer repo={repo}>
         {conflictSession.open ? (
           <ConflictWorkspace repo={repo} />

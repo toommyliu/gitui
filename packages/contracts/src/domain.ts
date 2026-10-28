@@ -222,7 +222,26 @@ export const CommitDetail = Schema.Struct({
 })
 export type CommitDetail = typeof CommitDetail.Type
 
+export const ComparisonMode = Schema.Literals(["merge-base", "direct", "range"])
+export type ComparisonMode = typeof ComparisonMode.Type
+
+export const Comparison = Schema.Struct({
+  base: Schema.String,
+  head: Schema.String,
+  mode: ComparisonMode,
+})
+export type Comparison = typeof Comparison.Type
+
+export const ComparisonDetail = Schema.Struct({
+  base: Oid,
+  head: Oid,
+  start: Oid,
+  files: Schema.Array(FileChange),
+})
+export type ComparisonDetail = typeof ComparisonDetail.Type
+
 export const DiffTarget = Schema.Union([
+  Schema.TaggedStruct("Comparison", { base: Oid, head: Oid }),
   Schema.TaggedStruct("Commit", { oid: Oid }),
   Schema.TaggedStruct("Staged", {}),
   Schema.TaggedStruct("Unstaged", {}),

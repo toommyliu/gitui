@@ -87,7 +87,7 @@ function LoadPlan({
 
 function PlanEditor({
   repo,
-  plan,
+  plan: latestPlan,
   entry,
   onClose,
   onWorktree,
@@ -98,6 +98,7 @@ function PlanEditor({
   onClose: () => void
   onWorktree: () => void
 }) {
+  const [plan] = useState(latestPlan)
   const [steps, setSteps] = useState<ReadonlyArray<RewriteStep>>(() =>
     plan.commits.map((commit) => ({
       oid: commit.oid,

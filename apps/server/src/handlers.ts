@@ -27,7 +27,8 @@ export const handlers = GitRpcs.toLayer(
       GetLogPage: ({ repo: id, logId, start, count }) => repo.logPage(id, logId, start, count),
       GetLogIndex: ({ repo: id, logId, oid }) => repo.logIndex(id, logId, oid),
       GetCommit: ({ repo: id, oid }) => repo.commit(id, oid),
-      GetDiff: ({ repo: id, target, paths, ignoreWhitespace }) => repo.diff(id, target, paths, ignoreWhitespace),
+      GetDiff: ({ repo: id, target, paths, ignoreWhitespace, allowLarge }) =>
+        repo.diff(id, target, paths, ignoreWhitespace, allowLarge),
       Stage: ({ repo: id, paths }) => repo.stage(id, paths),
       Unstage: ({ repo: id, paths }) => repo.unstage(id, paths),
       Discard: ({ repo: id, paths }) => repo.discard(id, paths),
@@ -64,7 +65,7 @@ export const handlers = GitRpcs.toLayer(
       StashDrop: ({ repo: id, oid }) => repo.stashDrop(id, oid),
       GetWorktreeSummaries: ({ repo: id }) => worktrees.summaries(id),
       GetWorktree: ({ repo: id }) => worktrees.detail(id),
-      GetWorktreeDiff: ({ repo: id }) => worktrees.diff(id),
+      GetWorktreeDiff: ({ repo: id, allowLarge }) => worktrees.diff(id, allowLarge),
       CheckWorktreeMerge: ({ repo: id, base }) => worktrees.checkMerge(id, base),
     })
   }),

@@ -73,6 +73,7 @@ import {
 import { parseFilePatch, selectLines } from "./patch.ts"
 import { parseStatus, statusArgs } from "./status.ts"
 import { makePublishing } from "./publishing.ts"
+import { makeRewrite } from "./rewrite.ts"
 
 const chunks = <T>(items: ReadonlyArray<T>, size: number) =>
   Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size))
@@ -205,6 +206,10 @@ const find = (session: LogSession, oid: Oid, from: number): Effect.Effect<number
 export class Repo extends Context.Service<
   Repo,
   ReturnType<typeof makePublishing> & {
+    readonly rewritePlan: ReturnType<typeof makeRewrite>["plan"]
+    readonly startRewrite: ReturnType<typeof makeRewrite>["start"]
+    readonly rebaseState: ReturnType<typeof makeRewrite>["state"]
+    readonly splitRebaseCommit: ReturnType<typeof makeRewrite>["split"]
     readonly open: (path: string) => Effect.Effect<RepoInfo, RepoNotFound | DirectoryNotFound>
     readonly status: (repo: RepoId) => Effect.Effect<Status, GitError>
     readonly refs: (repo: RepoId) => Effect.Effect<Refs, GitError>
@@ -353,6 +358,8 @@ export class Repo extends Context.Service<
         return { ...parseStatus(bytes), operation: operationOf(gitDir) }
       })
 
+      const rewrite = makeRewrite(git, fs, status, gitDirOf)
+
       const operationCommand = Effect.fn("Repo.operationCommand")(function* (
         repo: RepoId,
         step: "continue" | "skip" | "abort",
@@ -385,7 +392,9 @@ export class Repo extends Context.Service<
         Effect.fn("Repo.stepOperation")(function* (repo: RepoId) {
           const gitDir = yield* gitDirOf(repo)
           const before = yield* operationPosition(gitDir)
-          yield* run(repo, yield* operationCommand(repo, step)).pipe(
+          if (step === "continue") yield* rewrite.checkContinue(repo)
+          const args = yield* operationCommand(repo, step)
+          yield* Effect.asVoid(git.run(repo, args, { write: true, env: yield* rewrite.environment(repo) })).pipe(
             Effect.catchTag("GitError", (error) =>
               Effect.gen(function* () {
                 if (
@@ -398,6 +407,7 @@ export class Repo extends Context.Service<
               }),
             ),
           )
+          yield* rewrite.cleanup(repo)
         })
 
       const tracks = new Map<RepoId, ReadonlyMap<string, string>>()
@@ -789,6 +799,7 @@ export class Repo extends Context.Service<
           )
         }),
         commitIndex: Effect.fn("Repo.commitIndex")(function* (repo, message, amend) {
+          yield* rewrite.checkCommit(repo, amend)
           yield* run(
             repo,
             ["commit", "--cleanup=strip", "-F", "-", ...(amend ? ["--amend"] : [])],
@@ -825,6 +836,10 @@ export class Repo extends Context.Service<
         renameBranch: (repo, from, to) => run(repo, ["branch", "-m", from, to]),
         merge: (repo, ref) => run(repo, ["merge", "--no-edit", ref]),
         rebase: (repo, onto) => run(repo, ["rebase", onto]),
+        rewritePlan: rewrite.plan,
+        startRewrite: rewrite.start,
+        rebaseState: rewrite.state,
+        splitRebaseCommit: rewrite.split,
         cherryPick: (repo, oid) => run(repo, ["cherry-pick", oid]),
         revert: (repo, oid) => run(repo, ["revert", "--no-edit", oid]),
         reset: (repo, oid, mode) => run(repo, ["reset", `--${mode}`, oid]),
@@ -885,6 +900,8 @@ export class Repo extends Context.Service<
         renameBranch: locked(service.renameBranch),
         merge: locked(service.merge),
         rebase: locked(service.rebase),
+        startRewrite: locked(service.startRewrite),
+        splitRebaseCommit: locked(service.splitRebaseCommit),
         cherryPick: locked(service.cherryPick),
         revert: locked(service.revert),
         reset: locked(service.reset),

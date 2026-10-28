@@ -23,6 +23,7 @@ import { Sidebar } from "./sidebar"
 import { RemotesDialog } from "./remotes"
 import { WorkingCopy } from "./working-copy"
 import { WorktreePreview } from "./worktree-preview"
+import { RewriteDialog } from "./rewrite-dialog"
 
 type Pane = "locations" | "history" | "detail"
 const paneLabels: Record<Pane, string> = { locations: "Locations", history: "History", detail: "Details" }
@@ -120,6 +121,7 @@ export function Workspace({
     <div className="flex min-h-0 flex-1 flex-col">
       <RemotesDialog repo={repo} />
       <ComparisonDialog repo={repo} onSelect={select} />
+      <RewriteDialog repo={repo} onWorktree={() => select({ _tag: "WorkingCopy" })} />
       <CommandLogDrawer repo={repo}>
         {conflictSession.open ? (
           <ConflictWorkspace repo={repo} />

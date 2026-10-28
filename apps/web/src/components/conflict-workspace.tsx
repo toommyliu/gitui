@@ -2,7 +2,7 @@ import { RegistryContext, useAtom, useAtomRefresh, useAtomValue } from "@effect/
 import type { ConflictCode, Operation, RepoId, RepoPath, Status } from "@gitui/contracts"
 import { cn } from "cn"
 import { ArrowLeftIcon, CircleAlertIcon, CircleCheckIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react"
-import { type KeyboardEvent, useContext, useEffect, useMemo, useRef } from "react"
+import { type KeyboardEvent, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -24,6 +24,7 @@ import {
 import { describeConflict, operationNames, type Sides, sideNames } from "@/lib/conflicts"
 import { basename, dirname } from "@/lib/format"
 import { latest, loadError, mergeToolsAtom, statusAtom, useGitAction } from "@/lib/git"
+import { rebaseStateAtom } from "@/lib/rewrite"
 import { ConflictFilePane, FileCode } from "./conflict-view"
 import { useConfirm } from "./confirm"
 import { Loading, Nothing } from "./loading"
@@ -70,10 +71,14 @@ export function useOperationActions(repo: RepoId, operation: Operation | null) {
   const skip = () => {
     const run = () =>
       perform("SkipOperation", "Skip", (current) => ({ ...afterOperationStep(current), drafts: new Map() }))
-    if (unsaved.length === 0) return void run()
     confirm({
       title: "Skip this commit?",
-      body: unsavedNote(unsaved),
+      body: (
+        <>
+          <p>The current commit and its uncommitted changes will be skipped.</p>
+          {unsavedNote(unsaved)}
+        </>
+      ),
       confirmLabel: "Skip",
       destructive: true,
       onConfirm: () => void run(),
@@ -104,22 +109,49 @@ export const openConflicts = (path: RepoPath | null) => (session: ConflictSessio
 export function OperationBanner({ repo, status, conflicts }: { repo: RepoId; status: Status; conflicts: number }) {
   const { operation } = status
   const { continueOperation, skip, abort, busy, unsaved, update } = useOperationActions(repo, operation)
+  const rebase = latest(useAtomValue(rebaseStateAtom(repo)))
+  const git = useGitAction()
+  const [splitting, setSplitting] = useState(false)
+  const editing = operation === "rebase" && rebase?._tag === "Rebase" && rebase.phase === "edit"
+  const split = editing && rebase.split
   const name = operation === null ? null : operationNames[operation]
   const description =
     conflicts > 0
       ? `${conflicts} ${conflicts === 1 ? "file has" : "files have"} conflicts.`
       : unsaved.length > 0
         ? "Review your unsaved resolver drafts."
-        : "No conflicts left. Continue to finish."
+        : editing
+          ? split
+            ? "Stage files or hunks and commit each part. Commit or discard all remaining changes, then continue."
+            : "Paused to edit this commit. Amend it below, split it into smaller commits, or continue."
+          : "No conflicts left. Continue to finish."
   return (
     <Alert className="m-2 w-auto text-xs">
-      <AlertTitle>{name === null ? "Conflicts" : `${name} in progress`}</AlertTitle>
+      <AlertTitle>
+        {editing ? "Rebase paused for editing" : name === null ? "Conflicts" : `${name} in progress`}
+      </AlertTitle>
       <AlertDescription className="text-xs">
         {description}
         {unsaved.length > 0 &&
           ` ${unsaved.length} ${unsaved.length === 1 ? "file has" : "files have"} unsaved edits in the resolver.`}
+        {operation === "rebase" && rebase?._tag === "Rebase" && rebase.backupRef !== null && (
+          <p className="mt-1 font-mono text-[11px] break-all">Original history: {rebase.backupRef}</p>
+        )}
       </AlertDescription>
-      <div className="col-span-full mt-1 flex gap-1">
+      <div className="col-span-full mt-1 flex flex-wrap gap-1">
+        {editing && !split && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || splitting || status.entries.length > 0}
+            onClick={() => {
+              setSplitting(true)
+              void git("Split commit", repo, (c) => c("SplitRebaseCommit", { repo })).finally(() => setSplitting(false))
+            }}
+          >
+            Split into new commits
+          </Button>
+        )}
         {(conflicts > 0 || unsaved.length > 0) && (
           <Button size="sm" onClick={() => update(openConflicts(null))}>
             {conflicts > 0 ? "Resolve conflicts" : "Review drafts"}
@@ -129,13 +161,15 @@ export function OperationBanner({ repo, status, conflicts }: { repo: RepoId; sta
           <Button
             size="sm"
             variant={conflicts > 0 ? "outline" : "default"}
-            disabled={busy || conflicts > 0 || unsaved.length > 0}
+            disabled={
+              busy || splitting || conflicts > 0 || unsaved.length > 0 || (editing && status.entries.length > 0)
+            }
             onClick={continueOperation}
           >
             Continue
           </Button>
         )}
-        {canSkip(operation) && (
+        {canSkip(operation) && !editing && (
           <Button size="sm" variant="outline" disabled={busy} onClick={skip}>
             Skip this commit
           </Button>
@@ -184,6 +218,8 @@ const resolvedText = (resolved: Resolved | undefined, names: Sides) => {
 
 function Resolver({ repo, status }: { repo: RepoId; status: Status }) {
   const { operation } = status
+  const rebase = latest(useAtomValue(rebaseStateAtom(repo)))
+  const editing = operation === "rebase" && rebase?._tag === "Rebase" && rebase.phase === "edit"
   const names = sideNames(operation)
   const actions = useOperationActions(repo, operation)
   const { session, update } = actions
@@ -210,6 +246,10 @@ function Resolver({ repo, status }: { repo: RepoId; status: Status }) {
   useEffect(() => {
     if (nothingLeft) update((current) => ({ ...current, open: false, path: null }))
   }, [nothingLeft, update])
+  useEffect(() => {
+    if (editing && conflictPaths.length === 0 && actions.unsaved.length === 0)
+      update((current) => ({ ...current, open: false, path: null }))
+  }, [editing, conflictPaths.length, actions.unsaved.length, update])
 
   const selected =
     session.path !== null && files.includes(session.path) ? session.path : (left[0] ?? actions.unsaved[0] ?? null)
@@ -254,6 +294,7 @@ function Resolver({ repo, status }: { repo: RepoId; status: Status }) {
         resolved={resolvedCount}
         total={files.length}
         ready={left.length === 0 && dirty.size === 0}
+        skippable={canSkip(operation) && !editing}
         onBack={back}
         actions={actions}
       />
@@ -324,6 +365,7 @@ function OperationBar({
   resolved,
   total,
   ready,
+  skippable,
   onBack,
   actions,
 }: {
@@ -331,6 +373,7 @@ function OperationBar({
   resolved: number
   total: number
   ready: boolean
+  skippable: boolean
   onBack: () => void
   actions: ReturnType<typeof useOperationActions>
 }) {
@@ -346,7 +389,7 @@ function OperationBar({
         {resolved} of {total} resolved
       </span>
       <span className="ml-auto flex items-center gap-1">
-        {canSkip(operation) && (
+        {skippable && (
           <Button size="sm" variant="ghost" disabled={actions.busy} onClick={actions.skip}>
             Skip this commit
           </Button>

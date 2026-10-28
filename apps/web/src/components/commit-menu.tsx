@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react"
+import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { CommitRow, RepoId } from "@gitui/contracts"
 import {
   ContextMenuItem,
@@ -11,6 +11,7 @@ import { useCompare } from "@/lib/comparison"
 import { copyWithToast } from "@/lib/clipboard"
 import { shortOid } from "@/lib/format"
 import { latest, statusAtom, useGitAction } from "@/lib/git"
+import { rewriteOpenAtom } from "@/lib/rewrite"
 import { useConfirm } from "./confirm"
 import { usePrompt } from "./prompt"
 
@@ -25,7 +26,9 @@ export function CommitMenuItems({ repo, row }: { repo: RepoId; row: CommitRow })
   const compare = useCompare(repo)
   const confirm = useConfirm()
   const prompt = usePrompt()
-  const head = latest(useAtomValue(statusAtom(repo)))?.head
+  const status = latest(useAtomValue(statusAtom(repo)))
+  const head = status?.head
+  const openRewrite = useAtomSet(rewriteOpenAtom(repo))
   const short = shortOid(row.oid)
   const merge = row.parents.length > 1
   const isHead = head !== undefined && head._tag !== "Unborn" && head.oid === row.oid
@@ -102,6 +105,43 @@ export function CommitMenuItems({ repo, row }: { repo: RepoId; row: CommitRow })
       <ContextMenuItem disabled={merge} onClick={() => void git("Revert", repo, (c) => c("Revert", { repo, oid }))}>
         Revert commit
       </ContextMenuItem>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger disabled={merge || head?._tag !== "Branch" || status?.operation !== null}>
+          Edit history
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent>
+          <ContextMenuItem onClick={() => openRewrite({ first: oid, target: oid, action: "pick" })}>
+            Edit commits from here…
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => openRewrite({ first: oid, target: oid, action: "reword" })}>
+            Reword commit…
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => openRewrite({ first: oid, target: oid, action: "edit" })}>
+            Edit or split commit…
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={row.parents[0] === undefined}
+            onClick={() => {
+              const first = row.parents[0]
+              if (first !== undefined) openRewrite({ first, target: oid, action: "squash" })
+            }}
+          >
+            Squash into previous commit…
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={row.parents[0] === undefined}
+            onClick={() => {
+              const first = row.parents[0]
+              if (first !== undefined) openRewrite({ first, target: oid, action: "fixup" })
+            }}
+          >
+            Fixup previous commit…
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => openRewrite({ first: oid, target: oid, action: "drop" })}>
+            Drop commit…
+          </ContextMenuItem>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
       <ContextMenuSub>
         <ContextMenuSubTrigger disabled={head?._tag === "Unborn"}>Reset {current} to here</ContextMenuSubTrigger>
         <ContextMenuSubContent>

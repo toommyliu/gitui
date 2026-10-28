@@ -37,9 +37,12 @@ import { cn } from "cn"
 import { copyText, copyWithToast } from "@/lib/clipboard"
 import { useCommandKeys, useOverlayOpen } from "@/lib/commands"
 import { diffThemes } from "@/lib/diff-themes"
+import { desktop } from "@/lib/desktop"
+import { editorLine } from "@/lib/lines"
 import { fileStepTarget } from "@/lib/file-step"
 import { type Settings, settingsAtom } from "@/lib/settings"
 import { ChangeLetter } from "./change-letter"
+import { OpenInButton, OpenInContextMenu } from "./open-in"
 import { useTheme } from "./theme-provider"
 
 const hash = (text: string) => {
@@ -265,6 +268,8 @@ function CopyPathButton({ path }: { path: string }) {
 }
 
 function FileHeader({
+  repo,
+  line,
   fileDiff,
   note,
   fullPath,
@@ -274,6 +279,8 @@ function FileHeader({
   onSetAll,
   actions,
 }: {
+  repo: RepoId
+  line: number | undefined
   fileDiff: FileDiffMetadata
   note: string | null
   fullPath: string
@@ -325,6 +332,12 @@ function FileHeader({
           {fileDiff.name}
         </div>
         <CopyPathButton path={fileDiff.name} />
+        <OpenInButton
+          repo={repo}
+          file={{ path: fileDiff.name, ...(line === undefined ? {} : { line }) }}
+          compact
+          disabled={fileDiff.type === "deleted"}
+        />
         {note === null ? (
           <span className="ml-auto shrink-0 tabular-nums">
             {deletions > 0 && <span className="text-change-deleted">-{deletions} </span>}
@@ -336,6 +349,11 @@ function FileHeader({
         {actions}
       </ContextMenuTrigger>
       <ContextMenuContent>
+        <OpenInContextMenu
+          repo={repo}
+          file={{ path: fileDiff.name, ...(line === undefined ? {} : { line }) }}
+          disabled={fileDiff.type === "deleted"}
+        />
         <ContextMenuItem onClick={() => void copyWithToast(fileDiff.name, "Path copied")}>Copy path</ContextMenuItem>
         <ContextMenuItem onClick={() => void copyWithToast(fullPath, "Full path copied")}>
           Copy full path
@@ -452,7 +470,10 @@ export function DiffStack({
   const expandable = useMemo(() => expandableIds(items), [items])
   const notes = useMemo(() => new Map(items.map((item) => [item.id, hasText(item) ? null : noTextNote(item)])), [items])
   const { options: look, style, lineHeight } = useDiffAppearance()
-  const selectable = lines !== undefined
+  const [ownSelection, setOwnSelection] = useState<CodeViewLineSelection | null>(null)
+  const selection = lines === undefined ? ownSelection : lines.selection
+  const lineActions = lines !== undefined
+  const selectable = lineActions || desktop !== undefined
   const options = useMemo(
     () => ({
       ...look,
@@ -469,9 +490,9 @@ export function DiffStack({
       layout: { paddingTop: 0, paddingBottom: 8, gap: 0 },
       hunkSeparators: "line-info" as const,
       enableLineSelection: selectable,
-      enableGutterUtility: selectable,
+      enableGutterUtility: lineActions,
     }),
-    [look, lineHeight, selectable],
+    [look, lineHeight, selectable, lineActions],
   )
   const [view, setView] = useState<CodeViewHandle<undefined, undefined> | null>(null)
   const attachView = useCallback(
@@ -508,6 +529,8 @@ export function DiffStack({
       renderCustomHeader={(item) =>
         item.type === "diff" ? (
           <FileHeader
+            repo={repo}
+            line={selection?.id === item.id ? editorLine(item.fileDiff, selection.range) : undefined}
             fileDiff={item.fileDiff}
             note={notes.get(item.id) ?? null}
             fullPath={`${repo}/${item.fileDiff.name}`}
@@ -519,11 +542,11 @@ export function DiffStack({
           />
         ) : null
       }
+      selectedLines={selection}
+      onSelectedLinesChange={lines?.onSelectionChange ?? setOwnSelection}
       {...(lines === undefined
         ? {}
         : {
-            selectedLines: lines.selection,
-            onSelectedLinesChange: lines.onSelectionChange,
             renderGutterUtility: (getHovered, item) => {
               const hovered = getHovered()
               if (hovered === undefined || item.type !== "diff" || !("side" in hovered)) return null

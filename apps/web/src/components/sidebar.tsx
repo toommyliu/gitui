@@ -34,6 +34,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { OpenInContextMenu } from "./open-in"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
@@ -787,6 +788,7 @@ function SidebarRow({
             <ContextMenuItem disabled={!openable} onClick={() => onOpen(worktree.path)}>
               Open in new tab
             </ContextMenuItem>
+            <OpenInContextMenu repo={worktree.path} disabled={worktree.prunable !== null} />
             <ContextMenuSeparator />
             <ContextMenuItem disabled={worktree.isMain || current} onClick={() => onRemove(worktree, false)}>
               Remove worktree…

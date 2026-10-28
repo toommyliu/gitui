@@ -1,4 +1,5 @@
 import * as BrowserKeyValueStore from "@effect/platform-browser/BrowserKeyValueStore"
+import { OpenAppId } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
@@ -10,6 +11,7 @@ const withDefault = <S extends Schema.Top>(schema: S, value: S["Encoded"]) =>
   schema.pipe(Schema.withDecodingDefaultKey(Effect.succeed(value)))
 
 export const Settings = Schema.Struct({
+  openApp: withDefault(OpenAppId, "file-manager"),
   diffStyle: Schema.Literals(["unified", "split"]),
   wrapLines: Schema.Boolean,
   changeMarkers: withDefault(Schema.Literals(["color", "signs", "both"]), "color"),
@@ -33,6 +35,7 @@ export const settingsAtom = Atom.kvs({
   key: "gitui.settings",
   schema: Settings,
   defaultValue: (): Settings => ({
+    openApp: "file-manager",
     diffStyle: "unified",
     wrapLines: false,
     changeMarkers: "color",

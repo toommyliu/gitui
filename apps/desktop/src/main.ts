@@ -18,6 +18,7 @@ import {
 } from "electron"
 import * as Schema from "effect/Schema"
 import { buildMenu } from "./menu.ts"
+import { getOpenApps, openIn } from "./open-in.ts"
 import { APP_ORIGIN, BackendReady, SCHEME } from "./protocol.ts"
 
 const webDist = app.isPackaged ? resolve(__dirname, "../web") : resolve(__dirname, "../../web/dist")
@@ -132,6 +133,14 @@ if (!app.requestSingleInstanceLock()) {
         if (!fromApp(event) || window === null) return null
         const result = await dialog.showOpenDialog(window, { properties: ["openDirectory"] })
         return result.canceled ? null : (result.filePaths[0] ?? null)
+      })
+      ipcMain.handle("gitui:open-apps", (event) => {
+        if (!fromApp(event)) throw new Error("Open apps is only available from gitui.")
+        return getOpenApps()
+      })
+      ipcMain.handle("gitui:open-in", (event, request: unknown) => {
+        if (!fromApp(event)) throw new Error("Open in is only available from gitui.")
+        return openIn(request)
       })
       let menu: Parameters<typeof buildMenu>[0] = { theme: nativeTheme.themeSource, shortcuts: menuShortcuts }
       const updateMenu = (change: Partial<typeof menu>) => {

@@ -19,7 +19,7 @@ layer(services)("Large diffs", (it) => {
       const fixture = makeRepo()
       fixture.write("large.txt", "base\n")
       fixture.git("add", ".")
-      fixture.commit("base")
+      const base = fixture.commit("base") as Oid
       const body = `${"large change with enough text to exceed the default display limit\n".repeat(70_000)}last line\n`
       fixture.write("large.txt", body)
       const repo = yield* Repo
@@ -45,6 +45,7 @@ layer(services)("Large diffs", (it) => {
       yield* check({ _tag: "Staged" })
       const oid = fixture.commit("large change") as Oid
       yield* check({ _tag: "Commit", oid })
+      yield* check({ _tag: "Comparison", base, head: oid })
       fixture.write("new.txt", body)
       const untracked = yield* repo.diff(id, { _tag: "Untracked" }, ["new.txt" as RepoPath])
       expect(untracked._tag).toBe("TooLarge")

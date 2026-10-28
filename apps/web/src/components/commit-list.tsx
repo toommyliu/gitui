@@ -1,5 +1,5 @@
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react"
-import type { CommitRow, Head, Oid, Refs, RefVisibility, RepoId, Status } from "@gitui/contracts"
+import type { Comparison, CommitRow, Head, Oid, Refs, RefVisibility, RepoId, Status } from "@gitui/contracts"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
@@ -20,6 +20,7 @@ import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Atom from "effect/reactivity/Atom"
 import * as AtomRegistry from "effect/reactivity/AtomRegistry"
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { useCompare } from "@/lib/comparison"
 import { copyWithToast } from "@/lib/clipboard"
 import { useCommandKeys } from "@/lib/commands"
 import { useHistoryDate } from "@/lib/dates"
@@ -171,6 +172,11 @@ export function CommitList({
   onQueryChange: (query: string) => void
   searchRef: React.RefObject<HTMLInputElement | null>
 }) {
+  const openCompare = useCompare(repo)
+  const [range, setRange] = useState<{ logId: string; anchor: number; cursor: number; comparison: Comparison } | null>(
+    null,
+  )
+  const selectionRequest = useRef(0)
   const search = useDebounced(query.trim(), 250)
   const result = useAtomValue(logAtom(logKey(repo, search, visibility)))
   const refreshLog = useAtomRefresh(logAtom(logKey(repo, search, visibility)))
@@ -245,22 +251,45 @@ export function CommitList({
       ? logIndexKey(repo, log.logId, selection.oid)
       : undefined
   const located = latest(useAtomValue(lookup === undefined ? idle : logIndexAtom(lookup)))
-  const selectedIndex = renderedIndex !== -1 ? renderedIndex : located == null ? -1 : located + offset
+  const activeRange =
+    selection._tag === "Comparison" &&
+    selection.comparison.mode === "range" &&
+    range?.logId === log?.logId &&
+    range?.comparison === selection.comparison
+      ? range
+      : null
+  const selectedIndex =
+    activeRange !== null
+      ? activeRange.cursor + offset
+      : renderedIndex !== -1
+        ? renderedIndex
+        : located == null
+          ? -1
+          : located + offset
 
   const { scrollToIndex } = list
-  const selectIndex = (index: number) => {
+  const selectIndex = (index: number, extend = false) => {
     if (index < 0 || index >= count) return
+    const request = ++selectionRequest.current
     scrollToIndex(index)
     if (index < offset) return onSelect({ _tag: "WorkingCopy" })
-    const row = index - offset
-    const oid = oidAt(row)
-    if (oid !== undefined) return onSelect({ _tag: "Commit", oid })
     if (log === undefined) return
-    const page = logPageAtom(logPageKey(log.key, log.logId, Math.floor(row / LOG_PAGE_SIZE)))
-    void Effect.runPromise(AtomRegistry.getResult(registry, page)).then(
-      (rows) => {
-        const next = rows[row % LOG_PAGE_SIZE]?.oid
-        if (next !== undefined) onSelect({ _tag: "Commit", oid: next })
+    const row = index - offset
+    const anchor = extend ? (activeRange?.anchor ?? Math.max(0, selectedIndex - offset)) : row
+    const loadOid = async (at: number) => {
+      const oid = oidAt(at)
+      if (oid !== undefined) return oid
+      const page = logPageAtom(logPageKey(log.key, log.logId, Math.floor(at / LOG_PAGE_SIZE)))
+      const rows = await Effect.runPromise(AtomRegistry.getResult(registry, page))
+      return rows[at % LOG_PAGE_SIZE]?.oid
+    }
+    void Promise.all([loadOid(Math.max(anchor, row)), loadOid(Math.min(anchor, row))]).then(
+      ([base, head]) => {
+        if (request !== selectionRequest.current || base === undefined || head === undefined) return
+        if (!extend || anchor === row) return onSelect({ _tag: "Commit", oid: head })
+        const comparison: Comparison = { base, head, mode: "range" }
+        setRange({ logId: log.logId, anchor, cursor: row, comparison })
+        onSelect({ _tag: "Comparison", comparison })
       },
       () => {},
     )
@@ -286,13 +315,17 @@ export function CommitList({
     if (picking.current && pickFirstMatch()) picking.current = false
   })
 
-  const step = (delta: number) => () => {
-    selectIndex(selectedIndex === -1 ? 0 : selectedIndex + delta)
-  }
+  const step =
+    (delta: number, extend = false) =>
+    () => {
+      selectIndex(selectedIndex === -1 ? 0 : selectedIndex + delta, extend)
+    }
   useCommandKeys(
     [
       { id: "list.next", run: step(1) },
       { id: "list.previous", run: step(-1) },
+      { id: "history.extendNext", run: step(1, true) },
+      { id: "history.extendPrevious", run: step(-1, true) },
       {
         id: "history.copySha",
         run: () => {
@@ -339,6 +372,20 @@ export function CommitList({
             }
           }}
         />
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton
+            size="xs"
+            title="Compare refs, or Shift-select commits for a range"
+            onClick={() =>
+              openCompare({
+                head: selection._tag === "Commit" ? selection.oid : "HEAD",
+                mode: selection._tag === "Commit" ? "direct" : "merge-base",
+              })
+            }
+          >
+            Compare…
+          </InputGroupButton>
+        </InputGroupAddon>
         {summary !== null && (
           <InputGroupAddon align="inline-end">
             <InputGroupText className="tabular-nums">{summary}</InputGroupText>
@@ -367,8 +414,10 @@ export function CommitList({
           viewportProps={{
             tabIndex: 0,
             role: "listbox",
-            "aria-label": "Commits",
-            className: "[contain:strict] focus-visible:ring-0 focus-visible:outline-none",
+            "aria-label": "Commits. Use Shift and arrow keys to compare a range.",
+            "aria-multiselectable": true,
+            className:
+              "[contain:strict] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
           }}
         >
           <div className="relative w-full" style={{ height: list.height }}>
@@ -403,8 +452,16 @@ export function CommitList({
                     graphWidth={graphWidth}
                     labels={labels}
                     headOid={headOid}
-                    selectedOid={selection._tag === "Commit" ? selection.oid : undefined}
-                    onSelect={onSelect}
+                    selected={
+                      activeRange !== null
+                        ? row.index - offset >= Math.min(activeRange.anchor, activeRange.cursor) &&
+                          row.index - offset <= Math.max(activeRange.anchor, activeRange.cursor)
+                        : selection._tag === "Commit" && selection.oid === oidAt(row.index - offset)
+                    }
+                    onPick={(extend) => {
+                      list.element?.focus({ preventScroll: true })
+                      selectIndex(row.index, extend)
+                    }}
                     report={report}
                   />
                 ) : null}
@@ -425,8 +482,8 @@ const CommitRowView = memo(function CommitRowView({
   graphWidth,
   labels,
   headOid,
-  selectedOid,
-  onSelect,
+  selected,
+  onPick,
   report,
 }: {
   repo: RepoId
@@ -436,8 +493,8 @@ const CommitRowView = memo(function CommitRowView({
   graphWidth: number
   labels: Map<string, Array<RefLabel>>
   headOid: string | undefined
-  selectedOid: Oid | undefined
-  onSelect: (selection: Selection) => void
+  selected: boolean
+  onPick: (extend: boolean) => void
   report: (lanes: number) => void
 }) {
   const pageAtom = logPageAtom(logPageKey(log, logId, Math.floor(index / LOG_PAGE_SIZE)))
@@ -467,14 +524,13 @@ const CommitRowView = memo(function CommitRowView({
       </div>
     )
   }
-  const selected = row.oid === selectedOid
   return (
     <ContextMenu>
       <ContextMenuTrigger className="block h-full">
         <div
           role="option"
           aria-selected={selected}
-          onClick={() => onSelect({ _tag: "Commit", oid: row.oid })}
+          onClick={(event) => onPick(event.shiftKey)}
           className={cn(
             "flex h-full w-full items-center gap-2 overflow-hidden px-2 text-left",
             selected ? "bg-selection" : "hover:bg-muted/60",

@@ -7,6 +7,8 @@ import {
   CommandEntry,
   CommitDetail,
   CommitRow,
+  Comparison,
+  ComparisonDetail,
   ConflictDetail,
   DiffTarget,
   DirectoryListing,
@@ -109,6 +111,11 @@ export class GitRpcs extends RpcGroup.make(
     error: Schema.Union([GitError, LogExpired]),
   }),
   Rpc.make("GetCommit", { payload: { repo: RepoId, oid: Oid }, success: CommitDetail, error: GitError }),
+  Rpc.make("GetComparison", {
+    payload: { repo: RepoId, comparison: Comparison },
+    success: ComparisonDetail,
+    error: GitError,
+  }),
   Rpc.make("GetDiff", {
     payload: {
       repo: RepoId,

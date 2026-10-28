@@ -7,6 +7,7 @@ import {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu"
+import { useCompare } from "@/lib/comparison"
 import { copyWithToast } from "@/lib/clipboard"
 import { shortOid } from "@/lib/format"
 import { latest, statusAtom, useGitAction } from "@/lib/git"
@@ -21,6 +22,7 @@ const resetModes = [
 
 export function CommitMenuItems({ repo, row }: { repo: RepoId; row: CommitRow }) {
   const git = useGitAction()
+  const compare = useCompare(repo)
   const confirm = useConfirm()
   const prompt = usePrompt()
   const head = latest(useAtomValue(statusAtom(repo)))?.head
@@ -44,6 +46,10 @@ export function CommitMenuItems({ repo, row }: { repo: RepoId; row: CommitRow })
 
   return (
     <>
+      <ContextMenuItem onClick={() => compare({ head: row.oid, base: "HEAD", mode: "direct" })}>
+        Compare with…
+      </ContextMenuItem>
+      <ContextMenuSeparator />
       <ContextMenuItem
         onClick={() =>
           prompt({

@@ -191,7 +191,14 @@ export const diffKey = (
   paths: ReadonlyArray<RepoPath> = [],
   ignoreWhitespace = false,
   allowLarge = false,
-) => JSON.stringify([repo, target, paths, ignoreWhitespace && target._tag === "Commit", allowLarge])
+) =>
+  JSON.stringify([
+    repo,
+    target,
+    paths,
+    ignoreWhitespace && (target._tag === "Commit" || target._tag === "Comparison"),
+    allowLarge,
+  ])
 
 export const diffAtom = Atom.family((key: string) => {
   const [repo, target, paths, ignoreWhitespace, allowLarge] = JSON.parse(key) as [
@@ -201,7 +208,7 @@ export const diffAtom = Atom.family((key: string) => {
     boolean,
     boolean,
   ]
-  const live = target._tag !== "Commit"
+  const live = target._tag !== "Commit" && target._tag !== "Comparison"
   return GitClient.query(
     "GetDiff",
     { repo, target, paths, ignoreWhitespace, allowLarge },

@@ -5,6 +5,8 @@ import { basename, dirname, join, resolve } from "node:path"
 import {
   type CommitDetail,
   type CommitRow,
+  type Comparison,
+  type ComparisonDetail,
   type ConflictDetail,
   type DiffTarget,
   type FileDiff,
@@ -41,6 +43,7 @@ import * as Scope from "effect/Scope"
 import * as Semaphore from "effect/Semaphore"
 import * as Stream from "effect/Stream"
 import { diffTreeArgs, parseCommit, parseFileChanges, showArgs } from "./commit.ts"
+import { makeComparison, resolveRevision } from "./comparison.ts"
 import { makeConflicts } from "./conflict.ts"
 import { Git, nulList } from "./git.ts"
 import {
@@ -218,6 +221,7 @@ export class Repo extends Context.Service<
     ) => Effect.Effect<ReadonlyArray<CommitRow>, GitError | LogExpired>
     readonly logIndex: (repo: RepoId, logId: string, oid: Oid) => Effect.Effect<number | null, GitError | LogExpired>
     readonly commit: (repo: RepoId, oid: Oid) => Effect.Effect<CommitDetail, GitError>
+    readonly comparison: (repo: RepoId, comparison: Comparison) => Effect.Effect<ComparisonDetail, GitError>
     readonly diff: (
       repo: RepoId,
       target: DiffTarget,
@@ -545,6 +549,8 @@ export class Repo extends Context.Service<
       ): ReadonlyArray<string> => {
         const common = ["--no-ext-diff", "--no-color", "-M", ...(ignoreWhitespace ? ["-w"] : [])]
         switch (target._tag) {
+          case "Comparison":
+            return ["diff", ...common, target.base, target.head, "--", ...paths]
           case "Commit":
             return [
               "diff-tree",
@@ -574,6 +580,13 @@ export class Repo extends Context.Service<
         ignoreWhitespace = false,
         allowLarge = false,
       ) {
+        if (target._tag === "Comparison") {
+          const [base, head] = yield* Effect.all([
+            resolveRevision(git, repo, target.base, "tree"),
+            resolveRevision(git, repo, target.head),
+          ])
+          target = { _tag: "Comparison", base, head }
+        }
         const bytes =
           target._tag === "Untracked"
             ? Buffer.concat(
@@ -753,6 +766,7 @@ export class Repo extends Context.Service<
         logPage,
         logIndex,
         commit,
+        comparison: makeComparison(git),
         diff,
         stage,
         unstage,

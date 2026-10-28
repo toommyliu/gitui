@@ -113,6 +113,10 @@ export const refsAtom = Atom.family((repo: RepoId) =>
   GitClient.query("GetRefs", { repo }, { reactivityKeys: [keys.refs(repo)], timeToLive: CACHE_TTL }),
 )
 
+export const recoveryAtom = Atom.family((repo: RepoId) =>
+  GitClient.query("GetRecovery", { repo }, { reactivityKeys: [keys.refs(repo), keys.status(repo)] }),
+)
+
 export const draftAtom = Atom.family((repo: RepoId) =>
   GitClient.query("GetDraft", { repo }, { reactivityKeys: [keys.draft(repo)], timeToLive: CACHE_TTL }),
 )

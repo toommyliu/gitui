@@ -24,6 +24,7 @@ import {
   PullTarget,
   PushDestination,
   Remote,
+  Recovery,
   Refs,
   RefVisibility,
   RepoEvent,
@@ -91,6 +92,15 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("WatchRepo", { payload: repo, success: RepoEvent, error: GitError, stream: true }),
   Rpc.make("GetStatus", { payload: repo, success: Status, error: GitError }),
   Rpc.make("GetRefs", { payload: repo, success: Refs, error: GitError }),
+  Rpc.make("GetRecovery", { payload: repo, success: Recovery, error: GitError }),
+  Rpc.make("RecoverCommit", {
+    payload: { ...repo, oid: Oid, name: Schema.String },
+    error: GitError,
+  }),
+  Rpc.make("UndoCommit", {
+    payload: { ...repo, expected: Oid, branch: Schema.String },
+    error: GitError,
+  }),
   Rpc.make("OpenLog", {
     payload: {
       repo: RepoId,

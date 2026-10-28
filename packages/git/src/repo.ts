@@ -73,6 +73,7 @@ import {
 import { parseFilePatch, selectLines } from "./patch.ts"
 import { parseStatus, statusArgs } from "./status.ts"
 import { makePublishing } from "./publishing.ts"
+import { makeRecovery } from "./recovery.ts"
 import { makeRewrite } from "./rewrite.ts"
 
 const chunks = <T>(items: ReadonlyArray<T>, size: number) =>
@@ -203,9 +204,11 @@ const find = (session: LogSession, oid: Oid, from: number): Effect.Effect<number
     }
   })
 
+type RepoCommands = ReturnType<typeof makePublishing> & ReturnType<typeof makeRecovery>
+
 export class Repo extends Context.Service<
   Repo,
-  ReturnType<typeof makePublishing> & {
+  RepoCommands & {
     readonly rewritePlan: ReturnType<typeof makeRewrite>["plan"]
     readonly startRewrite: ReturnType<typeof makeRewrite>["start"]
     readonly rebaseState: ReturnType<typeof makeRewrite>["state"]
@@ -769,6 +772,7 @@ export class Repo extends Context.Service<
 
       const service: Repo["Service"] = {
         ...makePublishing(git),
+        ...makeRecovery(git, status),
         open,
         status,
         refs,
@@ -881,6 +885,8 @@ export class Repo extends Context.Service<
       }
       return Repo.of({
         ...service,
+        recoverCommit: locked(service.recoverCommit),
+        undoCommit: locked(service.undoCommit),
         stage: locked(service.stage),
         unstage: locked(service.unstage),
         discard: locked(service.discard),

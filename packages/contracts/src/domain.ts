@@ -38,6 +38,26 @@ export const Head = Schema.Union([
 ])
 export type Head = typeof Head.Type
 
+export const RecoveryEntry = Schema.Struct({
+  kind: Schema.Literals(["reflog", "rewrite"]),
+  selector: Schema.String,
+  oid: Oid,
+  action: Schema.String,
+  subject: Schema.String,
+  actor: Schema.String,
+  time: Schema.Int,
+})
+export type RecoveryEntry = typeof RecoveryEntry.Type
+
+export const UndoCommit = Schema.Union([
+  Schema.TaggedStruct("Available", { branch: Schema.String, oid: Oid, parent: Oid, subject: Schema.String }),
+  Schema.TaggedStruct("Unavailable", { reason: Schema.String }),
+])
+export type UndoCommit = typeof UndoCommit.Type
+
+export const Recovery = Schema.Struct({ entries: Schema.Array(RecoveryEntry), undo: UndoCommit })
+export type Recovery = typeof Recovery.Type
+
 export const Operation = Schema.Literals(["merge", "rebase", "cherry-pick", "revert", "bisect"])
 export type Operation = typeof Operation.Type
 

@@ -21,6 +21,7 @@ import { ConflictWorkspace } from "./conflict-workspace"
 import { useNetworkCommands } from "./network"
 import { Sidebar } from "./sidebar"
 import { RemotesDialog } from "./remotes"
+import { RecoveryDialog } from "./recovery"
 import { WorkingCopy } from "./working-copy"
 import { WorktreePreview } from "./worktree-preview"
 import { RewriteDialog } from "./rewrite-dialog"
@@ -119,6 +120,7 @@ export function Workspace({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <RecoveryDialog repo={repo} onInspect={(oid) => select({ _tag: "Commit", oid })} />
       <RemotesDialog repo={repo} />
       <ComparisonDialog repo={repo} onSelect={select} />
       <RewriteDialog repo={repo} onWorktree={() => select({ _tag: "WorkingCopy" })} />

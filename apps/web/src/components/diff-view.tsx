@@ -42,7 +42,7 @@ import { editorLine } from "@/lib/lines"
 import { fileStepTarget } from "@/lib/file-step"
 import { type Settings, settingsAtom } from "@/lib/settings"
 import { ChangeLetter } from "./change-letter"
-import { OpenInButton, OpenInContextMenu } from "./open-in"
+import { OpenInContextMenu } from "./open-in"
 import { useTheme } from "./theme-provider"
 
 export const hash = (text: string) => {
@@ -332,12 +332,6 @@ function FileHeader({
           {fileDiff.name}
         </div>
         <CopyPathButton path={fileDiff.name} />
-        <OpenInButton
-          repo={repo}
-          file={{ path: fileDiff.name, ...(line === undefined ? {} : { line }) }}
-          compact
-          disabled={fileDiff.type === "deleted"}
-        />
         {note === null ? (
           <span className="ml-auto shrink-0 tabular-nums">
             {deletions > 0 && <span className="text-change-deleted">-{deletions} </span>}

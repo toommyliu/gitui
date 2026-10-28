@@ -220,6 +220,7 @@ export class Repo extends Context.Service<
       target: DiffTarget,
       paths: ReadonlyArray<RepoPath>,
       ignoreWhitespace?: boolean,
+      allowLarge?: boolean,
     ) => Effect.Effect<FileDiff, GitError>
     readonly stage: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
     readonly unstage: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
@@ -542,6 +543,7 @@ export class Repo extends Context.Service<
         target: DiffTarget,
         paths: ReadonlyArray<RepoPath>,
         ignoreWhitespace = false,
+        allowLarge = false,
       ) {
         const bytes =
           target._tag === "Untracked"
@@ -551,7 +553,8 @@ export class Repo extends Context.Service<
                 ),
               )
             : yield* git.run(repo, patchArgs(target, paths, ignoreWhitespace))
-        if (bytes.length > MAX_PATCH_BYTES) return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
+        if (!allowLarge && bytes.length > MAX_PATCH_BYTES)
+          return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
         const text = decoder.decode(bytes)
         const files = text.match(/^diff --git /gm)?.length ?? 0
         if (files === 0) return { _tag: "Empty" } satisfies FileDiff

@@ -118,7 +118,7 @@ export class Worktrees extends Context.Service<
   {
     readonly summaries: (repo: RepoId) => Effect.Effect<ReadonlyArray<WorktreeSummary>, GitError>
     readonly detail: (worktree: RepoId) => Effect.Effect<WorktreeDetail, GitError>
-    readonly diff: (worktree: RepoId) => Effect.Effect<FileDiff, GitError>
+    readonly diff: (worktree: RepoId, allowLarge?: boolean) => Effect.Effect<FileDiff, GitError>
     readonly checkMerge: (worktree: RepoId, base: Oid) => Effect.Effect<MergeCheck, GitError>
   }
 >()("@gitui/git/Worktrees") {
@@ -256,7 +256,7 @@ export class Worktrees extends Context.Service<
           out.trim(),
         )
 
-      const diff = Effect.fn("Worktrees.diff")(function* (worktree: RepoId) {
+      const diff = Effect.fn("Worktrees.diff")(function* (worktree: RepoId, allowLarge = false) {
         const { head, entries } = yield* status(worktree)
         const against = headOid(head) ?? (yield* emptyTree(worktree))
         const common = ["--no-ext-diff", "--no-color", "-M"]
@@ -276,7 +276,8 @@ export class Worktrees extends Context.Service<
           { concurrency: 2 },
         )
         const bytes = Buffer.concat([tracked, ...added])
-        if (bytes.length > MAX_PATCH_BYTES) return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
+        if (!allowLarge && bytes.length > MAX_PATCH_BYTES)
+          return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
         const text = decoder.decode(bytes)
         if (!/^diff --git /m.test(text)) return { _tag: "Empty" } satisfies FileDiff
         return { _tag: "Patch", patch: text } satisfies FileDiff

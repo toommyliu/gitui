@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Rpc from "effect/rpc/Rpc"
 import * as RpcGroup from "effect/rpc/RpcGroup"
+import { RebaseState, RewritePlan, RewriteRequest, RewriteResult } from "./rewrite.ts"
 import {
   allRefsVisible,
   CommandEntry,
@@ -218,6 +219,10 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("RenameBranch", { payload: { repo: RepoId, from: Schema.String, to: Schema.String }, error: GitError }),
   Rpc.make("Merge", { payload: { repo: RepoId, ref: Schema.String }, error: GitError }),
   Rpc.make("Rebase", { payload: { repo: RepoId, onto: Schema.String }, error: GitError }),
+  Rpc.make("GetRewritePlan", { payload: { ...repo, first: Oid }, success: RewritePlan, error: GitError }),
+  Rpc.make("StartRewrite", { payload: { ...repo, request: RewriteRequest }, success: RewriteResult, error: GitError }),
+  Rpc.make("GetRebaseState", { payload: repo, success: RebaseState, error: GitError }),
+  Rpc.make("SplitRebaseCommit", { payload: repo, error: GitError }),
   Rpc.make("CherryPick", { payload: { repo: RepoId, oid: Oid }, error: GitError }),
   Rpc.make("Revert", { payload: { repo: RepoId, oid: Oid }, error: GitError }),
   Rpc.make("Reset", {

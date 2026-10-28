@@ -50,6 +50,7 @@ import { useStashPrompt } from "./stash-prompt"
 import { useDraft } from "@/lib/draft"
 import { describeConflict, keepLabels, type Sides, sideNames } from "@/lib/conflicts"
 import { dirtyPaths, useConflictSession } from "@/lib/conflict-session"
+import { rebaseStateAtom } from "@/lib/rewrite"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Atom from "effect/reactivity/Atom"
 import { ChevronDownIcon, ChevronRightIcon, ChevronsDownUpIcon, ChevronsUpDownIcon } from "lucide-react"
@@ -478,6 +479,9 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
 const noCommit = Atom.make(AsyncResult.initial<CommitDetail, never>())
 
 function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status; stagedCount: number }) {
+  const rebase = latest(useAtomValue(rebaseStateAtom(repo)))
+  const editing = status.operation === "rebase" && rebase?._tag === "Rebase" && rebase.phase === "edit"
+  const splitting = editing && rebase.split
   const draft = useDraft(repo)
   const [amend, setAmend] = useState(false)
   const [amendEdit, setAmendEdit] = useState<string | null>(null)
@@ -486,7 +490,9 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
   const stash = useStashPrompt(repo)
 
   const amendOid =
-    status.head._tag === "Unborn" || (status.operation !== null && status.operation !== "bisect")
+    status.head._tag === "Unborn" ||
+    splitting ||
+    (status.operation !== null && status.operation !== "bisect" && !editing)
       ? null
       : status.head.oid
   const amending = amend && amendOid !== null
@@ -498,7 +504,8 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
     setAmendEdit(null)
   }
 
-  const canCommit = !busy && message.trim() !== "" && (stagedCount > 0 || amending) && status.operation !== "rebase"
+  const canCommit =
+    !busy && message.trim() !== "" && (stagedCount > 0 || amending) && (status.operation !== "rebase" || editing)
   const commit = async () => {
     if (!canCommit) return
     setBusy(true)

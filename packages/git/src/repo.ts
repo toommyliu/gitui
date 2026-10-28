@@ -69,6 +69,7 @@ import {
 } from "./refs.ts"
 import { parseFilePatch, selectLines } from "./patch.ts"
 import { parseStatus, statusArgs } from "./status.ts"
+import { makePublishing } from "./publishing.ts"
 
 const chunks = <T>(items: ReadonlyArray<T>, size: number) =>
   Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size))
@@ -200,7 +201,7 @@ const find = (session: LogSession, oid: Oid, from: number): Effect.Effect<number
 
 export class Repo extends Context.Service<
   Repo,
-  {
+  ReturnType<typeof makePublishing> & {
     readonly open: (path: string) => Effect.Effect<RepoInfo, RepoNotFound | DirectoryNotFound>
     readonly status: (repo: RepoId) => Effect.Effect<Status, GitError>
     readonly refs: (repo: RepoId) => Effect.Effect<Refs, GitError>
@@ -222,6 +223,7 @@ export class Repo extends Context.Service<
       target: DiffTarget,
       paths: ReadonlyArray<RepoPath>,
       ignoreWhitespace?: boolean,
+      allowLarge?: boolean,
     ) => Effect.Effect<FileDiff, GitError>
     readonly stage: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
     readonly unstage: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
@@ -273,9 +275,6 @@ export class Repo extends Context.Service<
     ) => Effect.Effect<void, GitError>
     readonly pruneWorktrees: (repo: RepoId) => Effect.Effect<void, GitError>
     readonly fetch: (repo: RepoId) => Stream.Stream<Progress, GitError>
-    readonly pull: (repo: RepoId) => Stream.Stream<Progress, GitError>
-    readonly push: (repo: RepoId) => Stream.Stream<Progress, GitError>
-    readonly forcePush: (repo: RepoId, expected: Oid) => Stream.Stream<Progress, GitError>
     readonly renameBranch: (repo: RepoId, from: string, to: string) => Effect.Effect<void, GitError>
     readonly merge: (repo: RepoId, ref: string) => Effect.Effect<void, GitError>
     readonly rebase: (repo: RepoId, onto: string) => Effect.Effect<void, GitError>
@@ -285,7 +284,6 @@ export class Repo extends Context.Service<
     readonly checkoutDetached: (repo: RepoId, oid: Oid) => Effect.Effect<void, GitError>
     readonly createTag: (repo: RepoId, name: string, oid: Oid, message: string) => Effect.Effect<void, GitError>
     readonly deleteTag: (repo: RepoId, name: string) => Effect.Effect<void, GitError>
-    readonly deleteRemoteBranch: (repo: RepoId, name: string) => Effect.Effect<void, GitError>
     readonly stashPush: (repo: RepoId, message: string, includeUntracked: boolean) => Effect.Effect<void, GitError>
     readonly addWorktree: (
       repo: RepoId,
@@ -574,6 +572,7 @@ export class Repo extends Context.Service<
         target: DiffTarget,
         paths: ReadonlyArray<RepoPath>,
         ignoreWhitespace = false,
+        allowLarge = false,
       ) {
         const bytes =
           target._tag === "Untracked"
@@ -583,7 +582,8 @@ export class Repo extends Context.Service<
                 ),
               )
             : yield* git.run(repo, patchArgs(target, paths, ignoreWhitespace))
-        if (bytes.length > MAX_PATCH_BYTES) return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
+        if (!allowLarge && bytes.length > MAX_PATCH_BYTES)
+          return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
         const text = decoder.decode(bytes)
         const files = text.match(/^diff --git /gm)?.length ?? 0
         if (files === 0) return { _tag: "Empty" } satisfies FileDiff
@@ -744,43 +744,8 @@ export class Repo extends Context.Service<
         if (branch !== null) yield* run(repo, ["branch", force ? "-D" : "-d", branch])
       })
 
-      const pushArgs = Effect.fn("Repo.pushArgs")(function* (repo: RepoId) {
-        const { head, upstream } = yield* status(repo)
-        if (upstream !== null || head._tag !== "Branch") return ["push", "--progress"]
-        const remotes = parseRemotes(yield* git.run(repo, remotesArgs, { okExitCodes: [1] }))
-        const remote = remotes.find((r) => r.name === "origin") ?? (remotes.length === 1 ? remotes[0] : undefined)
-        if (remote === undefined) {
-          return yield* new GitError({
-            args: ["push"],
-            exitCode: -1,
-            stderr: remotes.length === 0 ? "This repository has no remotes." : "Pick a remote: there's no origin.",
-          })
-        }
-        return ["push", "--progress", "--set-upstream", remote.name, `refs/heads/${head.name}`]
-      })
-
-      const forcePushArgs = Effect.fn("Repo.forcePushArgs")(function* (repo: RepoId, expected: Oid) {
-        const { head, upstream } = yield* status(repo)
-        if (head._tag !== "Branch" || upstream === null) {
-          return yield* new GitError({
-            args: ["push"],
-            exitCode: -1,
-            stderr: "Force push needs a branch with an upstream.",
-          })
-        }
-        const slash = upstream.name.indexOf("/")
-        const remote = upstream.name.slice(0, slash)
-        const remoteBranch = upstream.name.slice(slash + 1)
-        return [
-          "push",
-          "--progress",
-          `--force-with-lease=refs/heads/${remoteBranch}:${expected}`,
-          remote,
-          `refs/heads/${head.name}:refs/heads/${remoteBranch}`,
-        ]
-      })
-
       const service: Repo["Service"] = {
+        ...makePublishing(git),
         open,
         status,
         refs,
@@ -843,16 +808,6 @@ export class Repo extends Context.Service<
           existsSync(join(repo, ".git"))
             ? git.progress(repo, ["fetch", "--all", "--prune", "--progress"])
             : Stream.fail(new GitError({ args: ["fetch"], exitCode: -1, stderr: `${repo} is no longer a repository` })),
-        pull: (repo) =>
-          Stream.unwrap(
-            Effect.as(
-              Effect.acquireRelease(lockFor(repo).take(1), () => lockFor(repo).release(1)),
-              git.progress(repo, ["pull", "--progress"]),
-            ),
-          ),
-        push: (repo) => Stream.unwrap(pushArgs(repo).pipe(Effect.map((args) => git.progress(repo, args)))),
-        forcePush: (repo, expected) =>
-          Stream.unwrap(forcePushArgs(repo, expected).pipe(Effect.map((args) => git.progress(repo, args)))),
         renameBranch: (repo, from, to) => run(repo, ["branch", "-m", from, to]),
         merge: (repo, ref) => run(repo, ["merge", "--no-edit", ref]),
         rebase: (repo, onto) => run(repo, ["rebase", onto]),
@@ -865,7 +820,6 @@ export class Repo extends Context.Service<
             ? run(repo, ["tag", name, oid])
             : run(repo, ["tag", "-a", name, "-F", "-", oid], new TextEncoder().encode(message)),
         deleteTag: (repo, name) => run(repo, ["tag", "-d", name]),
-        deleteRemoteBranch: (repo, name) => run(repo, ["branch", "-d", "-r", name]),
         stashPush: (repo, message, includeUntracked) =>
           Effect.asVoid(
             git.run(
@@ -923,7 +877,18 @@ export class Repo extends Context.Service<
         checkoutDetached: locked(service.checkoutDetached),
         createTag: locked(service.createTag),
         deleteTag: locked(service.deleteTag),
-        deleteRemoteBranch: locked(service.deleteRemoteBranch),
+        deleteRemoteTrackingBranch: locked(service.deleteRemoteTrackingBranch),
+        addRemote: locked(service.addRemote),
+        editRemote: locked(service.editRemote),
+        removeRemote: locked(service.removeRemote),
+        setUpstream: locked(service.setUpstream),
+        pull: (repo, strategy, target) =>
+          Stream.unwrap(
+            Effect.as(
+              Effect.acquireRelease(lockFor(repo).take(1), () => lockFor(repo).release(1)),
+              service.pull(repo, strategy, target),
+            ),
+          ),
         stashPush: locked(service.stashPush),
         addWorktree: locked(service.addWorktree),
         stashApply: locked(service.stashApply),

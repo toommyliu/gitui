@@ -17,6 +17,7 @@ import { CommitList } from "./commit-list"
 import { ConflictWorkspace } from "./conflict-workspace"
 import { useNetworkCommands } from "./network"
 import { Sidebar } from "./sidebar"
+import { RemotesDialog } from "./remotes"
 import { WorkingCopy } from "./working-copy"
 import { WorktreePreview } from "./worktree-preview"
 
@@ -62,7 +63,7 @@ export function Workspace({
 
   const detail =
     selection._tag === "Commit" ? (
-      <CommitDetail repo={repo} oid={selection.oid} onSelect={select} onHistory={showHistory} />
+      <CommitDetail key={selection.oid} repo={repo} oid={selection.oid} onSelect={select} onHistory={showHistory} />
     ) : selection._tag === "Worktree" ? (
       <WorktreePreview
         key={selection.path}
@@ -73,7 +74,7 @@ export function Workspace({
         onHistory={showHistory}
       />
     ) : (
-      <WorkingCopy repo={repo} onHistory={showHistory} />
+      <WorkingCopy key={repo} repo={repo} onHistory={showHistory} />
     )
   const sidebar = (
     <Sidebar
@@ -99,6 +100,7 @@ export function Workspace({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <RemotesDialog repo={repo} />
       <CommandLogDrawer repo={repo}>
         {conflictSession.open ? (
           <ConflictWorkspace repo={repo} />

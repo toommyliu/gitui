@@ -30,13 +30,15 @@ import {
   mergeCheckKey,
   worktreeAtom,
   worktreeDiffAtom,
+  worktreeDiffKey,
   worktreeLabel,
   worktreeSummariesAtom,
 } from "@/lib/worktrees"
 import { ChangeLetter } from "./change-letter"
+import { OpenInButton } from "./open-in"
 import { ChangeTotals, HistoryButton, SectionBar, TestsToggle } from "./commit-detail"
 import { DiffStack, patchItems, useCollapse } from "./diff-view"
-import { Loading, Nothing } from "./loading"
+import { LargeDiff, Loading, Nothing } from "./loading"
 
 const MAX_ROWS = 500
 const SECTION = "worktree"
@@ -299,11 +301,12 @@ export function WorktreePreview(props: PreviewProps) {
 }
 
 function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
+  const [allowLarge, setAllowLarge] = useState(false)
   const worktree = path as RepoId
   useAtomMount(watchAtom(worktree))
   const result = useAtomValue(worktreeAtom(worktree))
   const detail = latest(result)
-  const diffResult = useAtomValue(worktreeDiffAtom(worktree))
+  const diffResult = useAtomValue(worktreeDiffAtom(worktreeDiffKey(worktree, allowLarge)))
   const diff = latest(diffResult)
   const refs = latest(useAtomValue(refsAtom(repo)))
   const summaries = latest(useAtomValue(worktreeSummariesAtom(repo)))
@@ -369,11 +372,11 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
           const count = counts.get(row.path)
           const others = overlaps.get(row.path) ?? []
           return (
-            <li key={row.path}>
+            <li key={row.path} className="flex items-center pr-2">
               <button
                 type="button"
                 onClick={() => reveal(row.path)}
-                className="flex h-6 w-full items-center gap-2 px-3 text-left whitespace-nowrap hover:bg-muted/60"
+                className="flex h-6 min-w-0 flex-1 items-center gap-2 px-3 text-left whitespace-nowrap hover:bg-muted/60"
               >
                 <ChangeLetter change={row.change} />
                 <span className="min-w-0 truncate">
@@ -401,6 +404,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
                   )}
                 </span>
               </button>
+              <OpenInButton repo={worktree} file={{ path: row.path }} compact disabled={row.change === "deleted"} />
             </li>
           )
         })}
@@ -420,6 +424,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
             Open in new tab
             <ArrowUpRightIcon data-icon="inline-end" />
           </Button>
+          <OpenInButton repo={worktree} compact />
         </div>
         <p className="truncate text-muted-foreground">
           <span className="font-mono text-xs select-text">{path}</span>
@@ -450,10 +455,7 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
                 <Loading label="Loading diff" />
               )
             ) : diff._tag === "TooLarge" ? (
-              <Nothing
-                title="Too large to diff"
-                description="These changes are over 4 MB, so they aren't shown together."
-              />
+              <LargeDiff bytes={diff.bytes} onShow={() => setAllowLarge(true)} />
             ) : items.length === 0 ? (
               <Nothing title="Nothing to diff" />
             ) : shownItems.length === 0 ? (

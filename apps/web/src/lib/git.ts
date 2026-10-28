@@ -1,5 +1,6 @@
 import * as BrowserSocket from "@effect/platform-browser/BrowserSocket"
-import { useAtomSet } from "@effect/atom-react"
+import { RegistryContext, useAtomSet } from "@effect/atom-react"
+import { useContext } from "react"
 import {
   type ChangeScope,
   type CommandEntry,
@@ -9,6 +10,9 @@ import {
   GitRpcs,
   type Oid,
   type Progress,
+  type PullStrategy,
+  type PullTarget,
+  type PushDestination,
   type RefVisibility,
   type RepoId,
   type RepoPath,
@@ -186,14 +190,21 @@ export const diffKey = (
   target: DiffTarget,
   paths: ReadonlyArray<RepoPath> = [],
   ignoreWhitespace = false,
-) => JSON.stringify([repo, target, paths, ignoreWhitespace && target._tag === "Commit"])
+  allowLarge = false,
+) => JSON.stringify([repo, target, paths, ignoreWhitespace && target._tag === "Commit", allowLarge])
 
 export const diffAtom = Atom.family((key: string) => {
-  const [repo, target, paths, ignoreWhitespace] = JSON.parse(key) as [RepoId, DiffTarget, Array<RepoPath>, boolean]
+  const [repo, target, paths, ignoreWhitespace, allowLarge] = JSON.parse(key) as [
+    RepoId,
+    DiffTarget,
+    Array<RepoPath>,
+    boolean,
+    boolean,
+  ]
   const live = target._tag !== "Commit"
   return GitClient.query(
     "GetDiff",
-    { repo, target, paths, ignoreWhitespace },
+    { repo, target, paths, ignoreWhitespace, allowLarge },
     live ? { reactivityKeys: [keys.worktree(repo)] } : {},
   )
 })
@@ -345,14 +356,20 @@ export const useCheckout = () => {
 }
 
 export type NetworkRequest =
-  | { readonly action: "Fetch" | "Pull" | "Push" }
-  | { readonly action: "ForcePush"; readonly expected: Oid }
+  | { readonly action: "Fetch" }
+  | { readonly action: "Pull"; readonly strategy: PullStrategy; readonly target: PullTarget }
+  | { readonly action: "Push"; readonly destination: PushDestination; readonly setUpstream: boolean }
+  | { readonly action: "ForcePush"; readonly destination: PushDestination; readonly expected: Oid }
+  | { readonly action: "PushTags"; readonly remote: string; readonly tags: ReadonlyArray<string> }
+  | { readonly action: "DeleteRemoteBranch"; readonly remote: string; readonly branch: string; readonly expected: Oid }
 
 export const networkLabels: Record<NetworkRequest["action"], string> = {
   Fetch: "Fetch",
   Pull: "Pull",
   Push: "Push",
   ForcePush: "Force push",
+  PushTags: "Push tags",
+  DeleteRemoteBranch: "Delete remote branch",
 }
 
 export const networkDoneLabels: Record<NetworkRequest["action"], string> = {
@@ -360,6 +377,8 @@ export const networkDoneLabels: Record<NetworkRequest["action"], string> = {
   Pull: "Pulled",
   Push: "Pushed",
   ForcePush: "Force pushed",
+  PushTags: "Pushed tags",
+  DeleteRemoteBranch: "Deleted remote branch",
 }
 
 export type NetworkState =
@@ -382,10 +401,27 @@ export const networkAtom = Atom.family((repo: RepoId) =>
       return Effect.gen(function* () {
         const client = yield* GitClient
         get.registry.set(state, { _tag: "Running", action: request.action, progress: null })
-        const updates =
-          request.action === "ForcePush"
-            ? client("ForcePush", { repo, expected: request.expected })
-            : client(request.action, { repo })
+        const updates = (() => {
+          switch (request.action) {
+            case "Fetch":
+              return client("Fetch", { repo })
+            case "Pull":
+              return client("Pull", { repo, strategy: request.strategy, target: request.target })
+            case "Push":
+              return client("Push", { repo, destination: request.destination, setUpstream: request.setUpstream })
+            case "ForcePush":
+              return client("ForcePush", { repo, destination: request.destination, expected: request.expected })
+            case "PushTags":
+              return client("PushTags", { repo, remote: request.remote, tags: request.tags })
+            case "DeleteRemoteBranch":
+              return client("DeleteRemoteBranch", {
+                repo,
+                remote: request.remote,
+                branch: request.branch,
+                expected: request.expected,
+              })
+          }
+        })()
         yield* Reactivity.mutation(
           Stream.runForEach(updates, (progress) =>
             Effect.sync(() => get.registry.set(state, { _tag: "Running", action: request.action, progress })),
@@ -413,11 +449,18 @@ export const networkAtom = Atom.family((repo: RepoId) =>
 )
 
 export const useNetwork = (repo: RepoId) => {
+  const registry = useContext(RegistryContext)
   const run = useAtomSet(networkAtom(repo), { mode: "promiseExit" })
   const interrupt = useAtomSet(networkAtom(repo))
   const fail = useFailureToast()
   return {
     run: async (request: NetworkRequest, options?: { readonly quiet?: boolean }) => {
+      const state = registry.get(networkStateAtom(repo))
+      if (state?._tag === "Running") {
+        if (options?.quiet !== true)
+          toast.error(`${networkLabels[state.action]} is still running. Wait for it to finish or cancel it first.`)
+        return false
+      }
       const exit = await run(request)
       if (Exit.isSuccess(exit)) return true
       if (options?.quiet !== true && !Cause.hasInterruptsOnly(exit.cause))

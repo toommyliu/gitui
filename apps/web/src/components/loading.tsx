@@ -50,3 +50,21 @@ export function Nothing({
     </Empty>
   )
 }
+
+export function LargeDiff({ bytes, onShow, hint }: { bytes: number; onShow: () => void; hint?: string }) {
+  const size = (bytes / (1024 * 1024)).toLocaleString(undefined, { maximumFractionDigits: 1 })
+  return (
+    <Empty className="h-full">
+      <EmptyHeader>
+        <EmptyTitle>Large diff</EmptyTitle>
+        <EmptyDescription>This diff is {size} MB. Showing it may slow down the app.</EmptyDescription>
+        {hint !== undefined && <EmptyDescription>{hint}</EmptyDescription>}
+      </EmptyHeader>
+      <EmptyContent>
+        <Button size="sm" variant="outline" onClick={onShow}>
+          Show diff anyway
+        </Button>
+      </EmptyContent>
+    </Empty>
+  )
+}

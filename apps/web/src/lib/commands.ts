@@ -52,6 +52,8 @@ export const appHotkeys = defineAppHotkeys({
   },
   "repo.fetch": { hotkey: null, meta: { name: "Fetch", group: "Repository" } },
   "repo.pull": { hotkey: null, meta: { name: "Pull", group: "Repository" } },
+  "repo.remotes": { hotkey: null, meta: { name: "Manage remotes…", group: "Repository" } },
+  "repo.pushTags": { hotkey: null, meta: { name: "Push tags…", group: "Repository" } },
   "repo.push": { hotkey: null, meta: { name: "Push", group: "Repository" } },
   "history.search": { hotkey: "Mod+F", meta: { name: "Search history", group: "History" } },
   "history.copySha": { hotkey: "Mod+C", meta: { name: "Copy the commit SHA", group: "History" } },

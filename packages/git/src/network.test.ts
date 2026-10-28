@@ -44,7 +44,9 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
         repo.write("b.txt", "b\n")
         repo.git("add", ".")
         repo.commit("more")
-        const updates = yield* Stream.runCollect((yield* Repo).push(id(repo.root)))
+        const updates = yield* Stream.runCollect(
+          (yield* Repo).push(id(repo.root), { branch: "main", remote: "origin", remoteBranch: "main" }, false),
+        )
         const writing = updates.filter((update) => update.line.startsWith("Writing objects:"))
         expect(writing.at(-1)?.percent).toBe(100)
       }),

@@ -41,9 +41,10 @@ import { type CommandId, type KeyBinding, useCommand, useCommandKeys } from "@/l
 import { ChangeLetter } from "./change-letter"
 import { useConflictActions } from "./conflict-view"
 import { OperationBanner, openConflicts } from "./conflict-workspace"
+import { OpenInButton } from "./open-in"
 import { HistoryButton } from "./commit-detail"
 import { useConfirm } from "./confirm"
-import { Loading, Nothing } from "./loading"
+import { LargeDiff, Loading, Nothing } from "./loading"
 import { Shortcut } from "./shortcut"
 import { useStashPrompt } from "./stash-prompt"
 import { useDraft } from "@/lib/draft"
@@ -128,13 +129,14 @@ function EmptyDiff({ files }: { files: number }) {
   return <Nothing title="No changes" description="The working tree matches HEAD." />
 }
 
-function useLastLoaded<A>(repo: RepoId, value: A | undefined): A | undefined {
-  const [kept, setKept] = useState<{ readonly repo: RepoId; readonly value: A } | null>(null)
-  if (value !== undefined && (kept?.value !== value || kept.repo !== repo)) setKept({ repo, value })
-  return value ?? (kept?.repo === repo ? kept.value : undefined)
+function useLastLoaded<A>(key: string, value: A | undefined): A | undefined {
+  const [kept, setKept] = useState<{ readonly key: string; readonly value: A } | null>(null)
+  if (value !== undefined && (kept?.value !== value || kept.key !== key)) setKept({ key, value })
+  return value ?? (kept?.key === key ? kept.value : undefined)
 }
 
 export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (path: string) => void }) {
+  const [allowLarge, setAllowLarge] = useState(false)
   const statusResult = useAtomValue(statusAtom(repo))
   const refreshStatus = useAtomRefresh(statusAtom(repo))
   const status = latest(statusResult)
@@ -169,19 +171,19 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     [onDemand, untrackedPaths, unstaged],
   )
 
-  const unstagedAtom = diffAtom(diffKey(repo, { _tag: "Unstaged" }))
-  const stagedAtom = diffAtom(diffKey(repo, { _tag: "Staged" }))
-  const untrackedAtom = diffAtom(diffKey(repo, { _tag: "Untracked" }, untrackedPaths))
+  const unstagedAtom = diffAtom(diffKey(repo, { _tag: "Unstaged" }, [], false, allowLarge))
+  const stagedAtom = diffAtom(diffKey(repo, { _tag: "Staged" }, [], false, allowLarge))
+  const untrackedAtom = diffAtom(diffKey(repo, { _tag: "Untracked" }, untrackedPaths, false, allowLarge))
+  const onDemandAtom = diffAtom(diffKey(repo, { _tag: "Untracked" }, onDemandPaths, false, allowLarge))
   const unstagedResult = useAtomValue(unstagedAtom)
   const stagedResult = useAtomValue(stagedAtom)
   const untrackedResult = useAtomValue(untrackedAtom)
+  const onDemandResult = useAtomValue(onDemandAtom)
   const unstagedDiff = latest(unstagedResult)
   const stagedDiff = latest(stagedResult)
-  const untrackedDiff = useLastLoaded(repo, latest(untrackedResult))
-  const onDemandDiff = useLastLoaded(
-    repo,
-    latest(useAtomValue(diffAtom(diffKey(repo, { _tag: "Untracked" }, onDemandPaths)))),
-  )
+  const loadedKey = `${repo}\n${allowLarge}`
+  const untrackedDiff = useLastLoaded(loadedKey, latest(untrackedResult))
+  const onDemandDiff = useLastLoaded(loadedKey, latest(onDemandResult))
   const registry = useContext(RegistryContext)
 
   const items = useMemo(
@@ -197,15 +199,36 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     ],
     [unstagedDiff, stagedDiff, untrackedDiff, untrackedPaths.length, onDemandDiff, onDemandPaths.length],
   )
-  const diffs = untrackedPaths.length > 0 ? [unstagedDiff, stagedDiff, untrackedDiff] : [unstagedDiff, stagedDiff]
+  const diffs = [
+    unstagedDiff,
+    stagedDiff,
+    ...(untrackedPaths.length > 0 ? [untrackedDiff] : []),
+    ...(onDemandPaths.length > 0 ? [onDemandDiff] : []),
+  ]
   const diffsLoading = diffs.some((d) => d === undefined)
   const diffError = diffsLoading
-    ? [unstagedResult, stagedResult, untrackedResult]
-        .slice(0, diffs.length)
+    ? [
+        unstagedResult,
+        stagedResult,
+        ...(untrackedPaths.length > 0 ? [untrackedResult] : []),
+        ...(onDemandPaths.length > 0 ? [onDemandResult] : []),
+      ]
         .map(loadError)
         .find((error) => error !== undefined)
     : undefined
-  const tooLarge = [...diffs, onDemandPaths.length > 0 ? onDemandDiff : undefined].some((d) => d?._tag === "TooLarge")
+  const tooLarge = diffs.some((d) => d?._tag === "TooLarge")
+  const largeBytes = tooLarge
+    ? diffs.reduce(
+        (sum, diff) =>
+          sum +
+          (diff?._tag === "TooLarge"
+            ? diff.bytes
+            : diff?._tag === "Patch"
+              ? new TextEncoder().encode(diff.patch).length
+              : 0),
+        0,
+      )
+    : 0
 
   const git = useGitAction()
   const confirm = useConfirm()
@@ -281,11 +304,12 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
   const [revealing, setRevealing] = useState<{ readonly id: string } | null>(null)
   const revealed = useRef<object | null>(null)
   useEffect(() => {
+    if (diffsLoading || tooLarge || diffError !== undefined) return
     if (revealing === null || revealed.current === revealing || !itemsById.has(revealing.id)) return
     revealed.current = revealing
     // A CodeView that mounts in this commit (after "Too large to diff") ignores a scrollTo until it has laid out.
     requestAnimationFrame(() => viewRef.current?.scrollTo({ type: "item", id: revealing.id, align: "start" }))
-  }, [revealing, itemsById])
+  }, [revealing, itemsById, diffsLoading, tooLarge, diffError])
   const reveal = (row: FileRow) => {
     if (row.area === "conflicted") return
     const section = row.area === "staged" ? "staged" : row.area === "untracked" ? "untracked" : "unstaged"
@@ -353,6 +377,7 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
           )}
           <CommitBox repo={repo} status={status} stagedCount={staged.length} />
           <FileLists
+            repo={repo}
             lists={lists}
             selection={fileSelection}
             onSelectionChange={setFileSelection}
@@ -390,15 +415,14 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
           <Nothing
             title="Couldn't load the diffs"
             description={diffError}
-            onRetry={() => [unstagedAtom, stagedAtom, untrackedAtom].forEach((atom) => registry.refresh(atom))}
+            onRetry={() =>
+              [unstagedAtom, stagedAtom, untrackedAtom, onDemandAtom].forEach((atom) => registry.refresh(atom))
+            }
           />
         ) : diffsLoading ? (
           <Loading label="Loading diffs" />
         ) : tooLarge ? (
-          <Nothing
-            title="Too large to diff"
-            description="These changes are over 4 MB, so they aren't shown together."
-          />
+          <LargeDiff bytes={largeBytes} onShow={() => setAllowLarge(true)} />
         ) : items.length === 0 ? (
           <EmptyDiff files={unstaged.length + staged.length} />
         ) : (
@@ -559,6 +583,7 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
 }
 
 function FileLists({
+  repo,
   lists,
   selection,
   onSelectionChange: setSelection,
@@ -566,6 +591,7 @@ function FileLists({
   diffToggle,
   ...actions
 }: RowActions & {
+  repo: RepoId
   lists: Readonly<Record<Side, ReadonlyArray<FileRow>>>
   selection: FileSelection | null
   onSelectionChange: (selection: FileSelection | null) => void
@@ -653,6 +679,7 @@ function FileLists({
     <div className="flex min-h-0 flex-1 flex-col">
       {(["unstaged", "staged"] as const).map((side) => (
         <FileSection
+          repo={repo}
           key={side}
           side={side}
           rows={lists[side]}
@@ -688,6 +715,7 @@ interface RowActions {
 }
 
 function FileSection({
+  repo,
   side,
   rows,
   open,
@@ -700,6 +728,7 @@ function FileSection({
   diffToggle,
   ...actions
 }: RowActions & {
+  repo: RepoId
   side: Side
   rows: ReadonlyArray<FileRow>
   open: boolean
@@ -765,6 +794,7 @@ function FileSection({
                 style={{ height: ROW, transform: `translateY(${item.start}px)` }}
               >
                 <FileRowView
+                  repo={repo}
                   row={row}
                   selected={selection?.paths.has(row.path) === true}
                   onClick={onClick}
@@ -860,6 +890,7 @@ function SectionHeader({
 }
 
 function FileRowView({
+  repo,
   row,
   selected,
   onClick,
@@ -872,6 +903,7 @@ function FileRowView({
   onMarkResolved,
   onOpenConflict,
 }: RowActions & {
+  repo: RepoId
   row: FileRow
   selected: boolean
   onClick: (row: FileRow, mode: ClickMode) => void
@@ -908,6 +940,7 @@ function FileRowView({
         )}
       </button>
       <span className="flex shrink-0 gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
+        <OpenInButton repo={repo} file={{ path: row.path }} compact disabled={row.change === "deleted"} />
         {row.area === "staged" ? (
           <Button size="sm" variant="ghost" onClick={() => onUnstage([row])}>
             Unstage

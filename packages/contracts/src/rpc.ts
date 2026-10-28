@@ -7,6 +7,7 @@ import {
   CommandEntry,
   CommitDetail,
   CommitRow,
+  ConflictDetail,
   DiffTarget,
   DirectoryListing,
   FileDiff,
@@ -142,6 +143,23 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("AbortOperation", { payload: repo, error: GitError }),
   Rpc.make("ResolveConflict", {
     payload: { ...paths, side: Schema.Literals(["ours", "theirs"]) },
+    error: GitError,
+  }),
+  Rpc.make("GetConflict", {
+    payload: { repo: RepoId, path: RepoPath },
+    success: ConflictDetail,
+    error: GitError,
+  }),
+  Rpc.make("RunMergeTool", { payload: { repo: RepoId, path: RepoPath }, error: GitError }),
+  Rpc.make("SaveConflictResult", {
+    payload: {
+      repo: RepoId,
+      path: RepoPath,
+      content: Schema.String,
+      expectedVersion: Schema.String,
+      stage: Schema.Boolean,
+    },
+    success: Schema.String,
     error: GitError,
   }),
   Rpc.make("Checkout", { payload: { repo: RepoId, branch: Schema.String }, error: GitError }),

@@ -145,7 +145,7 @@ export function CommitDetail({
   repo: RepoId
   oid: Oid
   onSelect: (selection: Selection) => void
-  onHistory: (path: string) => void
+  onHistory?: (path: string) => void
 }) {
   const [allowLarge, setAllowLarge] = useState(false)
   const commit = commitAtom(`${repo}\n${oid}`)
@@ -215,7 +215,7 @@ export function CommitDetail({
             items={items}
             collapse={collapse}
             header={() => <Summary detail={detail} onSelect={onSelect} />}
-            actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />}
+            actions={(meta) => onHistory !== undefined && <HistoryButton onClick={() => onHistory(meta.path)} />}
           />
         </div>
       ) : (
@@ -297,7 +297,7 @@ function LargeCommit({
   bytes: number
   onShow: () => void
   summary: ReactNode
-  onHistory: (path: string) => void
+  onHistory: ((path: string) => void) | undefined
 }) {
   const [open, setOpen] = useState<FileChange | null>(null)
   const [detailsShown, setDetailsShown] = useState(true)
@@ -430,7 +430,7 @@ function SingleFileDiff({
   repo: RepoId
   oid: Oid
   file: FileChange
-  onHistory: (path: string) => void
+  onHistory: ((path: string) => void) | undefined
 }) {
   const [allowLarge, setAllowLarge] = useState(false)
   const paths = file.from === null ? [file.path] : [file.from, file.path]
@@ -450,6 +450,10 @@ function SingleFileDiff({
   }
   if (diff._tag === "TooLarge") return <LargeDiff bytes={diff.bytes} onShow={() => setAllowLarge(true)} />
   return (
-    <DiffStack repo={repo} items={items} actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />} />
+    <DiffStack
+      repo={repo}
+      items={items}
+      actions={(meta) => onHistory !== undefined && <HistoryButton onClick={() => onHistory(meta.path)} />}
+    />
   )
 }

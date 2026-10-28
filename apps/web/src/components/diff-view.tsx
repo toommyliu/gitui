@@ -45,7 +45,7 @@ import { ChangeLetter } from "./change-letter"
 import { OpenInButton, OpenInContextMenu } from "./open-in"
 import { useTheme } from "./theme-provider"
 
-const hash = (text: string) => {
+export const hash = (text: string) => {
   let h = 5381
   for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0
   return h >>> 0
@@ -183,12 +183,12 @@ const changeOf: Record<ChangeTypes, FileChange["change"]> = {
 }
 
 const HEADER_HEIGHT = 32
-const SEPARATOR_HEIGHT = 24
+export const SEPARATOR_HEIGHT = 24
 
 const separator = ':is([data-separator="line-info"], [data-separator="line-info-basic"])'
 const quiet = "color-mix(in srgb, var(--diffs-fg) 50%, var(--diffs-bg))"
 
-const UNSAFE_CSS = `
+export const UNSAFE_CSS = `
 :host {
   --diffs-light: var(--foreground);
   --diffs-dark: var(--foreground);

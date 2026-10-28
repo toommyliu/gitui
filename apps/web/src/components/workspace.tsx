@@ -6,6 +6,7 @@ import * as Atom from "effect/reactivity/Atom"
 import { useRef } from "react"
 import { flushSync } from "react-dom"
 import { useCommand } from "@/lib/commands"
+import { useConflictSession } from "@/lib/conflict-session"
 import { pathQuery, watchAtom } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
@@ -13,6 +14,7 @@ import { visibilityAtom } from "@/lib/visibility"
 import { CommandLogDrawer } from "./command-log"
 import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
+import { ConflictWorkspace } from "./conflict-workspace"
 import { useNetworkCommands } from "./network"
 import { Sidebar } from "./sidebar"
 import { RemotesDialog } from "./remotes"
@@ -42,6 +44,7 @@ export function Workspace({
   const [pane, setPane] = useAtom(paneAtom(repo))
   const [query, setQuery] = useAtom(queryAtom(repo))
   const [visibility, setVisibility] = useAtom(visibilityAtom(commonDir))
+  const [conflictSession] = useConflictSession(repo)
   const searchRef = useRef<HTMLInputElement>(null)
   useCommand("history.search", () => {
     if (narrow) flushSync(() => setPane("history"))
@@ -99,7 +102,9 @@ export function Workspace({
     <div className="flex min-h-0 flex-1 flex-col">
       <RemotesDialog repo={repo} />
       <CommandLogDrawer repo={repo}>
-        {narrow ? (
+        {conflictSession.open ? (
+          <ConflictWorkspace repo={repo} />
+        ) : narrow ? (
           <Tabs value={pane} onValueChange={(value: Pane) => setPane(value)} className="h-full gap-0">
             <TabsList variant="line" className="h-9 w-full shrink-0 rounded-none border-b p-0">
               {(Object.keys(paneLabels) as Array<Pane>).map((p) => (

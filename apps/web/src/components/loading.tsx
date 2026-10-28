@@ -20,10 +20,12 @@ export function Nothing({
   title,
   description,
   onRetry,
+  action,
 }: {
   title: string
   description?: ReactNode
   onRetry?: () => void
+  action?: { readonly label: string; readonly onClick: () => void }
 }) {
   return (
     <Empty className="h-full">
@@ -35,6 +37,13 @@ export function Nothing({
         <EmptyContent>
           <Button size="sm" variant="outline" onClick={onRetry}>
             Retry
+          </Button>
+        </EmptyContent>
+      )}
+      {action !== undefined && (
+        <EmptyContent>
+          <Button size="sm" onClick={action.onClick}>
+            {action.label}
           </Button>
         </EmptyContent>
       )}

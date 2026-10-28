@@ -84,6 +84,19 @@ const createWindow = () => {
   window.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith(`${appOrigin}/`)) event.preventDefault()
   })
+  window.webContents.on("will-prevent-unload", (event) => {
+    const choice = dialog.showMessageBoxSync(window, {
+      type: "warning",
+      title: "Unsaved conflict edits",
+      message: "Discard unsaved conflict edits?",
+      detail: "Changes in the conflict editor have not been saved to disk.",
+      buttons: ["Keep editing", "Discard edits"],
+      defaultId: 0,
+      cancelId: 0,
+    })
+    if (choice === 1) event.preventDefault()
+    else quitting = false
+  })
   void window.loadURL(`${appOrigin}/`)
 }
 

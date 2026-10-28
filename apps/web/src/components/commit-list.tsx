@@ -173,9 +173,7 @@ export function CommitList({
   searchRef: React.RefObject<HTMLInputElement | null>
 }) {
   const openCompare = useCompare(repo)
-  const [range, setRange] = useState<{ logId: string; anchor: number; cursor: number; comparison: Comparison } | null>(
-    null,
-  )
+  const [range, setRange] = useState<{ anchor: Oid; cursor: Oid; comparison: Comparison } | null>(null)
   const selectionRequest = useRef(0)
   const search = useDebounced(query.trim(), 250)
   const result = useAtomValue(logAtom(logKey(repo, search, visibility)))
@@ -246,36 +244,37 @@ export function CommitList({
     }
     return -1
   })()
-  const lookup =
-    selection._tag === "Commit" && renderedIndex === -1 && log !== undefined
-      ? logIndexKey(repo, log.logId, selection.oid)
-      : undefined
-  const located = latest(useAtomValue(lookup === undefined ? idle : logIndexAtom(lookup)))
   const activeRange =
     selection._tag === "Comparison" &&
     selection.comparison.mode === "range" &&
-    range?.logId === log?.logId &&
     range?.comparison === selection.comparison
       ? range
       : null
-  const selectedIndex =
-    activeRange !== null
-      ? activeRange.cursor + offset
-      : renderedIndex !== -1
-        ? renderedIndex
-        : located == null
-          ? -1
-          : located + offset
+  const cursorOid = selection._tag === "Commit" ? selection.oid : activeRange?.cursor
+  const lookup =
+    cursorOid !== undefined && renderedIndex === -1 && log !== undefined
+      ? logIndexKey(repo, log.logId, cursorOid)
+      : undefined
+  const located = latest(useAtomValue(lookup === undefined ? idle : logIndexAtom(lookup)))
+  const anchorIndex = latest(
+    useAtomValue(
+      activeRange === null || log === undefined ? idle : logIndexAtom(logIndexKey(repo, log.logId, activeRange.anchor)),
+    ),
+  )
+  const selectedRange =
+    activeRange !== null && anchorIndex != null && located != null ? { anchor: anchorIndex, cursor: located } : null
+  const selectedIndex = renderedIndex !== -1 ? renderedIndex : located == null ? -1 : located + offset
 
   const { scrollToIndex } = list
   const selectIndex = (index: number, extend = false) => {
     if (index < 0 || index >= count) return
+    if (extend && activeRange !== null && selectedRange === null) return
     const request = ++selectionRequest.current
     scrollToIndex(index)
     if (index < offset) return onSelect({ _tag: "WorkingCopy" })
     if (log === undefined) return
     const row = index - offset
-    const anchor = extend ? (activeRange?.anchor ?? Math.max(0, selectedIndex - offset)) : row
+    const anchor = extend ? (selectedRange?.anchor ?? Math.max(0, selectedIndex - offset)) : row
     const loadOid = async (at: number) => {
       const oid = oidAt(at)
       if (oid !== undefined) return oid
@@ -288,7 +287,7 @@ export function CommitList({
         if (request !== selectionRequest.current || base === undefined || head === undefined) return
         if (!extend || anchor === row) return onSelect({ _tag: "Commit", oid: head })
         const comparison: Comparison = { base, head, mode: "range" }
-        setRange({ logId: log.logId, anchor, cursor: row, comparison })
+        setRange({ anchor: anchor > row ? base : head, cursor: anchor > row ? head : base, comparison })
         onSelect({ _tag: "Comparison", comparison })
       },
       () => {},
@@ -452,11 +451,11 @@ export function CommitList({
                     graphWidth={graphWidth}
                     labels={labels}
                     headOid={headOid}
+                    selectedOid={selection._tag === "Commit" ? selection.oid : undefined}
                     selected={
-                      activeRange !== null
-                        ? row.index - offset >= Math.min(activeRange.anchor, activeRange.cursor) &&
-                          row.index - offset <= Math.max(activeRange.anchor, activeRange.cursor)
-                        : selection._tag === "Commit" && selection.oid === oidAt(row.index - offset)
+                      selectedRange !== null &&
+                      row.index - offset >= Math.min(selectedRange.anchor, selectedRange.cursor) &&
+                      row.index - offset <= Math.max(selectedRange.anchor, selectedRange.cursor)
                     }
                     onPick={(extend) => {
                       list.element?.focus({ preventScroll: true })
@@ -482,6 +481,7 @@ const CommitRowView = memo(function CommitRowView({
   graphWidth,
   labels,
   headOid,
+  selectedOid,
   selected,
   onPick,
   report,
@@ -493,6 +493,7 @@ const CommitRowView = memo(function CommitRowView({
   graphWidth: number
   labels: Map<string, Array<RefLabel>>
   headOid: string | undefined
+  selectedOid: Oid | undefined
   selected: boolean
   onPick: (extend: boolean) => void
   report: (lanes: number) => void
@@ -502,6 +503,7 @@ const CommitRowView = memo(function CommitRowView({
   const refreshPage = useAtomRefresh(pageAtom)
   const date = useHistoryDate()
   const row: CommitRow | undefined = latest(page)?.[index % LOG_PAGE_SIZE]
+  const isSelected = selected || (row !== undefined && row.oid === selectedOid)
   useEffect(() => {
     if (row !== undefined) report(lanesUsed(row.graph))
   }, [row, report])
@@ -529,11 +531,11 @@ const CommitRowView = memo(function CommitRowView({
       <ContextMenuTrigger className="block h-full">
         <div
           role="option"
-          aria-selected={selected}
+          aria-selected={isSelected}
           onClick={(event) => onPick(event.shiftKey)}
           className={cn(
             "flex h-full w-full items-center gap-2 overflow-hidden px-2 text-left",
-            selected ? "bg-selection" : "hover:bg-muted/60",
+            isSelected ? "bg-selection" : "hover:bg-muted/60",
           )}
         >
           <span className="-my-px flex shrink-0 overflow-hidden" style={{ width: graphWidth }}>

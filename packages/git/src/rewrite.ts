@@ -226,7 +226,7 @@ export const makeRewrite = (
     const dir = join(yield* gitDirOf(repo), "rebase-merge")
     yield* write(join(dir, "gitui-split-base"), parent)
     yield* write(join(dir, "gitui-split-commit"), stopped.commit!)
-    yield* run(repo, ["reset", "--mixed", parent]).pipe(
+    yield* run(repo, ["reset", "--mixed", "-N", parent]).pipe(
       Effect.tapError(() =>
         Effect.all([
           fs.remove(join(dir, "gitui-split-base"), { force: true }),

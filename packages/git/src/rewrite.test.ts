@@ -180,13 +180,13 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
     }),
   )
 
-  it.effect("splits a paused commit into separately staged replacements before replaying later commits", () =>
+  it.effect("splits a paused commit including ignored additions before replaying later commits", () =>
     Effect.gen(function* () {
       const fixture = makeRepo()
-      fixture.commit("base")
+      add(fixture, ".gitignore", "b\n", "base")
       fixture.write("a", "a\n")
       fixture.write("b", "b\n")
-      fixture.git("add", ".")
+      fixture.git("add", "-f", ".")
       const first = Oid.make(fixture.commit("combined"))
       add(fixture, "later", "later\n", "later")
       const tree = fixture.git("rev-parse", "HEAD^{tree}")
@@ -195,6 +195,7 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
       const started = yield* r.startRewrite(repo, request(yield* r.rewritePlan(repo, first), ["edit", "pick"]))
       yield* r.splitRebaseCommit(repo)
       expect(yield* r.rebaseState(repo)).toMatchObject({ _tag: "Rebase", phase: "edit", split: true })
+      expect((yield* r.status(repo)).entries.map((entry) => entry.path).sort()).toEqual(["a", "b"])
       expect((yield* Effect.flip(r.continueOperation(repo))).stderr).toContain("Create the replacement commits")
       expect((yield* Effect.flip(r.commitIndex(repo, "wrong amend", true))).stderr).toContain("Create a new commit")
       yield* r.stage(repo, [RepoPath.make("a")])

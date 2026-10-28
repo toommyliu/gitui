@@ -15,6 +15,7 @@ import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
 import { useNetworkCommands } from "./network"
 import { Sidebar } from "./sidebar"
+import { RemotesDialog } from "./remotes"
 import { WorkingCopy } from "./working-copy"
 import { WorktreePreview } from "./worktree-preview"
 
@@ -96,6 +97,7 @@ export function Workspace({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <RemotesDialog repo={repo} />
       <CommandLogDrawer repo={repo}>
         {narrow ? (
           <Tabs value={pane} onValueChange={(value: Pane) => setPane(value)} className="h-full gap-0">

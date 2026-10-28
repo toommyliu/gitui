@@ -392,15 +392,23 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
       const { branches, remoteBranches, tags, remotes } = yield* (yield* Repo).refs(id(repo.root))
       expect({ branches, remoteBranches, tags, remotes }).toEqual({
         branches: [
-          { name: "main", oid: tip, upstream: { _tag: "Tracking", name: "origin/main", ahead: 1, behind: 0 } },
-          { name: "stale", oid: base, upstream: { _tag: "Gone", name: "origin/stale" } },
+          {
+            name: "main",
+            oid: tip,
+            upstream: { _tag: "Tracking", ref: "refs/remotes/origin/main", name: "origin/main", ahead: 1, behind: 0 },
+          },
+          {
+            name: "stale",
+            oid: base,
+            upstream: { _tag: "Gone", ref: "refs/remotes/origin/stale", name: "origin/stale" },
+          },
         ],
         remoteBranches: [
           { remote: "origin", name: "origin/feature/x", oid: base },
           { remote: "origin", name: "origin/main", oid: base },
         ],
         tags: [{ name: "v1", oid: base }],
-        remotes: [{ name: "origin", url: "git@example.com:a/b.git" }],
+        remotes: [{ name: "origin", urls: ["git@example.com:a/b.git"], pushUrls: [] }],
       })
     }),
   )

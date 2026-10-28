@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -22,6 +22,7 @@ export interface PromptField<F extends string> {
   readonly placeholder?: string | ((values: Readonly<Record<F, string>>) => string)
   readonly optional?: boolean
   readonly multiline?: boolean
+  readonly choices?: ReadonlyArray<{ readonly value: string; readonly label: string }>
 }
 
 export interface PromptOption<O extends string> {
@@ -61,7 +62,7 @@ export function PromptProvider({ children }: { children: ReactNode }) {
             <PromptForm
               key={request.id}
               request={request.request}
-              onDone={() => setRequest((current) => (current?.id === request.id ? null : current))}
+              onDone={() => setRequest((current) => (current === request ? null : current))}
             />
           )}
         </DialogContent>
@@ -81,15 +82,24 @@ function PromptForm({ request, onDone }: { request: AnyRequest; onDone: () => vo
   const cleaned = Object.fromEntries(
     request.fields.map((field) => [field.key, field.multiline ? values[field.key]! : values[field.key]!.trim()]),
   )
-  const valid = request.fields.every((field) => field.optional || cleaned[field.key]!.trim() !== "")
+  const [submitted, setSubmitted] = useState(false)
+  const invalidFields = request.fields.filter((field) => !field.optional && cleaned[field.key]!.trim() === "")
   const [busy, setBusy] = useState(false)
 
   return (
     <form
+      noValidate
       className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault()
-        if (!valid || busy) return
+        if (busy) return
+        setSubmitted(true)
+        const firstInvalid = invalidFields[0]
+        if (firstInvalid !== undefined) {
+          const control = event.currentTarget.elements.namedItem(firstInvalid.key)
+          if (control instanceof HTMLElement) control.focus()
+          return
+        }
         setBusy(true)
         void request.onSubmit(cleaned, options).then((ok) => (ok ? onDone() : setBusy(false)))
       }}
@@ -103,17 +113,40 @@ function PromptForm({ request, onDone }: { request: AnyRequest; onDone: () => vo
       <FieldGroup className="gap-3">
         {request.fields.map((field, index) => {
           const fieldId = `${id}-${field.key}`
+          const invalid = submitted && invalidFields.includes(field)
+          const errorId = invalid ? `${fieldId}-error` : undefined
           const placeholder = typeof field.placeholder === "function" ? field.placeholder(cleaned) : field.placeholder
           const set = (value: string) => setValues((current) => ({ ...current, [field.key]: value }))
           return (
-            <Field key={field.key}>
+            <Field key={field.key} data-invalid={invalid}>
               <FieldLabel htmlFor={fieldId}>
                 {field.label}
                 {field.optional && <span className="font-normal text-muted-foreground">optional</span>}
               </FieldLabel>
-              {field.multiline ? (
+              {field.choices !== undefined ? (
+                <select
+                  id={fieldId}
+                  name={field.key}
+                  autoFocus={index === 0}
+                  required={!field.optional}
+                  aria-invalid={invalid}
+                  aria-describedby={errorId}
+                  value={values[field.key]}
+                  onChange={(event) => set(event.target.value)}
+                  className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20"
+                >
+                  {field.choices.map((choice) => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
+                    </option>
+                  ))}
+                </select>
+              ) : field.multiline ? (
                 <Textarea
                   id={fieldId}
+                  name={field.key}
+                  aria-invalid={invalid}
+                  aria-describedby={errorId}
                   autoFocus={index === 0}
                   value={values[field.key]}
                   placeholder={placeholder}
@@ -123,16 +156,21 @@ function PromptForm({ request, onDone }: { request: AnyRequest; onDone: () => vo
                       event.currentTarget.form?.requestSubmit()
                   }}
                   rows={3}
+                  required={!field.optional}
                   className="min-h-0 resize-none font-mono text-xs"
                 />
               ) : (
                 <Input
                   id={fieldId}
+                  name={field.key}
+                  aria-invalid={invalid}
+                  aria-describedby={errorId}
                   autoFocus={index === 0}
                   autoComplete="off"
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}
+                  required={!field.optional}
                   value={values[field.key]}
                   placeholder={placeholder}
                   onChange={(event) => set(event.target.value)}
@@ -140,6 +178,7 @@ function PromptForm({ request, onDone }: { request: AnyRequest; onDone: () => vo
                   className="font-mono"
                 />
               )}
+              {invalid && <FieldError id={errorId}>{field.label} is required.</FieldError>}
             </Field>
           )
         })}
@@ -161,7 +200,7 @@ function PromptForm({ request, onDone }: { request: AnyRequest; onDone: () => vo
       </FieldGroup>
       <DialogFooter>
         <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-        <Button type="submit" disabled={!valid || busy}>
+        <Button type="submit" disabled={busy}>
           {busy && <Spinner data-icon="inline-start" />}
           {request.submitLabel}
         </Button>

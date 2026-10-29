@@ -6,8 +6,11 @@ import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
 import type { Oid, RepoId } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
+import * as Deferred from "effect/Deferred"
+import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"
 import * as Stream from "effect/Stream"
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
 import { CommandLog } from "./command-log.ts"
 import { Repo } from "./repo.ts"
 import { fixtureEnv, makeRepo } from "./testRepo.ts"
@@ -21,6 +24,133 @@ const bare = () => {
 }
 
 layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeServices.layer)))("Publishing", (it) => {
+  it.effect("holds remote edits until a confirmed push finishes", () =>
+    Effect.gen(function* () {
+      const fixture = makeRepo()
+      const tip = fixture.commit("base")
+      const origin = bare()
+      const replacement = bare()
+      fixture.git("remote", "add", "origin", origin.path)
+      const ready = yield* Deferred.make<void>()
+      const resume = yield* Deferred.make<void>()
+      let paused = false
+      let editStarted = false
+      const spawner = Layer.effect(
+        ChildProcessSpawner.ChildProcessSpawner,
+        Effect.map(ChildProcessSpawner.ChildProcessSpawner, (actual) => ({
+          ...actual,
+          spawn: (command) =>
+            Effect.gen(function* () {
+              if (command._tag === "StandardCommand" && command.args.includes("push")) {
+                paused = true
+                yield* Deferred.succeed(ready, undefined)
+                yield* Deferred.await(resume)
+                paused = false
+              } else if (paused) editStarted = true
+              return yield* actual.spawn(command)
+            }),
+        })),
+      ).pipe(Layer.provide(NodeServices.layer))
+      yield* Effect.gen(function* () {
+        const r = yield* Repo
+        const id = fixture.root as RepoId
+        const context = yield* r.pushContext(id, "main")
+        const pushing = yield* Effect.forkChild(
+          Stream.runDrain(
+            r.push(id, { branch: "main", remote: "origin", remoteBranch: "main" }, false, context.fingerprint),
+          ),
+        )
+        yield* Deferred.await(ready)
+        const editing = yield* Effect.forkChild(
+          r.editRemote(id, "origin", {
+            name: "origin",
+            urls: [replacement.path],
+            pushUrls: [],
+          }),
+          { startImmediately: true },
+        )
+        expect(editStarted).toBe(false)
+        yield* Deferred.succeed(resume, undefined)
+        yield* Fiber.join(pushing)
+        yield* Fiber.join(editing)
+        expect(origin.git("rev-parse", "main")).toBe(tip)
+        expect(replacement.git("for-each-ref")).toBe("")
+        expect(fixture.git("remote", "get-url", "origin")).toBe(replacement.path)
+      }).pipe(
+        Effect.provide(
+          Layer.fresh(Repo.layer).pipe(
+            Layer.provide(spawner),
+            Layer.provide(CommandLog.layer),
+            Layer.provide(NodeServices.layer),
+          ),
+        ),
+      )
+    }),
+  )
+
+  it.effect("checks the confirmed push context before publishing and exposes rewritten push URLs", () =>
+    Effect.gen(function* () {
+      const fixture = makeRepo()
+      const tip = fixture.commit("base")
+      const origin = bare()
+      const fork = bare()
+      fixture.git("remote", "add", "origin", origin.path)
+      fixture.git("remote", "add", "fork", fork.path)
+      fixture.git("config", "remote.fork.pushurl", "publish:fork")
+      fixture.git("config", `url.${fork.path}.insteadOf`, "publish:fork")
+      fixture.git("config", "branch.main.pushRemote", "fork")
+      fixture.git("config", "remote.pushDefault", "origin")
+      fixture.git("config", "push.default", "nothing")
+      const r = yield* Repo
+      const id = fixture.root as RepoId
+      const context = yield* r.pushContext(id, "main")
+      expect(context.remotes.find((remote) => remote.name === "fork")?.pushUrls).toEqual([fork.path])
+      const destination = { branch: "main", remote: "fork", remoteBranch: "review" }
+      yield* Stream.runDrain(r.push(id, destination, false, context.fingerprint))
+      expect(fork.git("rev-parse", "review")).toBe(tip)
+      expect(origin.git("for-each-ref")).toBe("")
+      yield* Stream.runDrain(r.push(id, destination, true, context.fingerprint))
+      const established = yield* r.pushContext(id, "main")
+      expect(established.fingerprint).not.toBe(context.fingerprint)
+      expect(established.configuration).toBe(context.configuration)
+      expect(established.upstream).toEqual({ remote: "fork", merge: ["refs/heads/review"] })
+      fixture.commit("next")
+      fixture.git("config", "remote.fork.pushurl", origin.path)
+      const error = yield* Stream.runDrain(r.push(id, destination, false, established.fingerprint)).pipe(Effect.flip)
+      expect(error.stderr).toContain("configuration changed")
+      expect(origin.git("for-each-ref")).toBe("")
+      expect(fork.git("rev-parse", "review")).toBe(tip)
+    }),
+  )
+
+  it.effect("invalidates confirmed context for push settings, upstream, URL rewrites and checkout changes", () =>
+    Effect.gen(function* () {
+      const fixture = makeRepo()
+      fixture.commit("base")
+      const origin = bare()
+      fixture.git("remote", "add", "origin", origin.path)
+      const r = yield* Repo
+      const id = fixture.root as RepoId
+      const changes = [
+        () => fixture.git("config", "branch.main.pushRemote", "origin"),
+        () => fixture.git("config", "remote.pushDefault", "origin"),
+        () => fixture.git("config", "push.default", "upstream"),
+        () => fixture.git("push", "-u", "origin", "main"),
+        () => fixture.git("config", "remote.origin.url", bare().path),
+        () => fixture.git("config", `url.${bare().path}.pushInsteadOf`, origin.path),
+        () => fixture.git("switch", "-c", "other"),
+      ]
+      for (const change of changes) {
+        const before = yield* r.pushContext(id, "main")
+        change()
+        const error = yield* Stream.runDrain(
+          r.push(id, { branch: "main", remote: "origin", remoteBranch: "main" }, false, before.fingerprint),
+        ).pipe(Effect.flip)
+        expect(error.stderr).toContain("configuration changed")
+      }
+    }),
+  )
+
   it.effect("rejects edits, renames and removal of inherited remotes before changing local configuration", () =>
     Effect.gen(function* () {
       const repo = makeRepo()

@@ -6,8 +6,10 @@ import {
   type CommandEntry,
   type CommitRow,
   type DiffTarget,
+  type DiscardBackup,
   GitError,
   GitRpcs,
+  type LineSelection,
   type Oid,
   type Progress,
   type PullStrategy,
@@ -33,6 +35,7 @@ import type { RpcClientError } from "effect/rpc/RpcClientError"
 import * as RpcSerialization from "effect/rpc/RpcSerialization"
 import { toast } from "sonner"
 import { desktop } from "./desktop"
+import { authAdvice } from "./failure-hints"
 
 const socketUrl = desktop?.rpcUrl ?? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/rpc`
 
@@ -88,6 +91,11 @@ export const describeFailure = (cause: Cause.Cause<unknown>) => {
   return error instanceof GitError ? error.summary : String(error)
 }
 
+export const isPromptCancel = (cause: Cause.Cause<unknown>) => {
+  const error = Cause.squash(cause)
+  return error instanceof GitError && error.stderr.startsWith("Authentication cancelled.")
+}
+
 export const loadError = <A, E>(result: AsyncResult.AsyncResult<A, E>): string | undefined =>
   result._tag === "Failure" && !result.waiting && Option.isNone(result.previousSuccess)
     ? describeFailure(result.cause)
@@ -115,6 +123,56 @@ export const refsAtom = Atom.family((repo: RepoId) =>
 
 export const recoveryAtom = Atom.family((repo: RepoId) =>
   GitClient.query("GetRecovery", { repo }, { reactivityKeys: [keys.refs(repo), keys.status(repo)] }),
+)
+
+export const discardRecoveryAtom = Atom.family((repo: RepoId) =>
+  GitClient.query("GetDiscardRecovery", { repo }, { reactivityKeys: [keys.refs(repo), keys.status(repo)] }),
+)
+
+export type DiscardRequest =
+  | { readonly _tag: "Files"; readonly repo: RepoId; readonly paths: ReadonlyArray<RepoPath> }
+  | {
+      readonly _tag: "Lines"
+      readonly repo: RepoId
+      readonly path: RepoPath
+      readonly lines: ReadonlyArray<LineSelection>
+    }
+
+export const discardAtom = GitClient.runtime.fn(
+  (request: DiscardRequest) =>
+    Effect.gen(function* () {
+      const client = yield* GitClient
+      const { repo } = request
+      const discard =
+        request._tag === "Files"
+          ? client("Discard", { repo, paths: request.paths })
+          : client("ApplyLines", { repo, action: "discard", path: request.path, lines: request.lines })
+      return yield* Reactivity.mutation(discard, scopeKeys(repo, "refs"))
+    }),
+  { concurrent: true },
+)
+
+export const restoreDiscardAtom = GitClient.runtime.fn(
+  (request: { readonly repo: RepoId; readonly id: string; readonly overwriteVersion: string | null }) =>
+    Effect.gen(function* () {
+      const client = yield* GitClient
+      return yield* Reactivity.mutation(client("RestoreDiscard", request), scopeKeys(request.repo, "refs"))
+    }),
+  { concurrent: true },
+)
+
+export interface DiscardConflict {
+  readonly backup: DiscardBackup
+  readonly paths: ReadonlyArray<RepoPath>
+  readonly version: string
+}
+
+export type RecoveryView =
+  | { readonly _tag: "Browse" }
+  | { readonly _tag: "Conflict"; readonly conflict: DiscardConflict }
+
+export const recoveryViewAtom = Atom.family((_repo: RepoId) =>
+  Atom.make<RecoveryView | null>(null).pipe(Atom.keepAlive),
 )
 
 export const draftAtom = Atom.family((repo: RepoId) =>
@@ -309,8 +367,10 @@ export const useFailureToast = () => {
     recover?: { readonly label: string; readonly onClick: () => void },
   ) => {
     const log = { label: "Show log", onClick: () => setLogOpen(true) }
+    const error = Cause.squash(cause)
+    const advice = error instanceof GitError ? authAdvice(error.stderr) : null
     toast.error(`${label} failed`, {
-      description: describeFailure(cause),
+      description: advice === null ? describeFailure(cause) : `${describeFailure(cause)}\n\n${advice}`,
       ...(recover === undefined
         ? { action: log, classNames: { description: "whitespace-pre-line" } }
         : {
@@ -359,7 +419,11 @@ export const useCheckout = () => {
     }
     const includeUntracked = error.stderr.includes("untracked working tree files would be")
     const stashAndSwitch = async () => {
-      if (await git("Stash", repo, (c) => c("StashPush", { repo, message: "", includeUntracked })))
+      if (
+        await git("Stash", repo, (c) =>
+          c("StashPush", { repo, message: "", includeUntracked, paths: null, keepIndex: false }),
+        )
+      )
         await git("Checkout", repo, checkout)
     }
     fail("Checkout", exit.cause, { label: "Stash and switch", onClick: () => void stashAndSwitch() })
@@ -369,7 +433,12 @@ export const useCheckout = () => {
 export type NetworkRequest =
   | { readonly action: "Fetch" }
   | { readonly action: "Pull"; readonly strategy: PullStrategy; readonly target: PullTarget }
-  | { readonly action: "Push"; readonly destination: PushDestination; readonly setUpstream: boolean }
+  | {
+      readonly action: "Push"
+      readonly destination: PushDestination
+      readonly setUpstream: boolean
+      readonly expectedContext?: string
+    }
   | { readonly action: "ForcePush"; readonly destination: PushDestination; readonly expected: Oid }
   | { readonly action: "PushTags"; readonly remote: string; readonly tags: ReadonlyArray<string> }
   | { readonly action: "DeleteRemoteBranch"; readonly remote: string; readonly branch: string; readonly expected: Oid }
@@ -419,7 +488,12 @@ export const networkAtom = Atom.family((repo: RepoId) =>
             case "Pull":
               return client("Pull", { repo, strategy: request.strategy, target: request.target })
             case "Push":
-              return client("Push", { repo, destination: request.destination, setUpstream: request.setUpstream })
+              return client("Push", {
+                repo,
+                destination: request.destination,
+                setUpstream: request.setUpstream,
+                expectedContext: request.expectedContext,
+              })
             case "ForcePush":
               return client("ForcePush", { repo, destination: request.destination, expected: request.expected })
             case "PushTags":
@@ -447,7 +521,7 @@ export const networkAtom = Atom.family((repo: RepoId) =>
               action: request.action,
               outcome: Exit.isSuccess(exit)
                 ? "succeeded"
-                : Cause.hasInterruptsOnly(exit.cause)
+                : Cause.hasInterruptsOnly(exit.cause) || isPromptCancel(exit.cause)
                   ? "cancelled"
                   : "failed",
               at: new Date(),
@@ -474,7 +548,7 @@ export const useNetwork = (repo: RepoId) => {
       }
       const exit = await run(request)
       if (Exit.isSuccess(exit)) return true
-      if (options?.quiet !== true && !Cause.hasInterruptsOnly(exit.cause))
+      if (options?.quiet !== true && !Cause.hasInterruptsOnly(exit.cause) && !isPromptCancel(exit.cause))
         fail(networkLabels[request.action], exit.cause)
       return false
     },

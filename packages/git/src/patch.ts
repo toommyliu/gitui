@@ -86,7 +86,9 @@ export type Selected =
   | { readonly _tag: "Unsupported"; readonly reason: string }
 
 const wholeFileOnly =
-  /^(new file mode|deleted file mode|old mode|new mode|similarity index|rename from|copy from|Binary files)/
+  /^(?:old mode|new mode|copy from|copy to|Binary files|GIT binary patch)|(?:^index .*|^(?:new|deleted) file mode) (?:120000|160000)$/
+
+const counterpart = (row: string, prefix: "a" | "b") => row.slice(4).replace(/^("?)[ab]\//, `$1${prefix}/`)
 
 export const selectLines = (
   patch: FilePatch,
@@ -94,12 +96,17 @@ export const selectLines = (
   direction: Direction,
 ): Selected => {
   if (patch.header.some((row) => wholeFileOnly.test(row))) {
-    return { _tag: "Unsupported", reason: "Stage this file as a whole: it is new, deleted, renamed or binary." }
+    return {
+      _tag: "Unsupported",
+      reason: "Use a whole-file action for binary files, mode changes, symlinks and submodules.",
+    }
   }
   const wanted = new Map(selections.map((s) => [selectionKey(s.side, s.line), s.text]))
   const found = new Set<string>()
   const out: Array<string> = []
   let delta = 0
+  let oldTotal = 0
+  let newTotal = 0
 
   for (const hunk of patch.hunks) {
     let oldLine = hunk.oldStart
@@ -124,10 +131,17 @@ export const selectLines = (
     )
     const oldCount = kept.filter((l) => l.kind !== "+").length
     const newCount = kept.filter((l) => l.kind !== "-").length
-    const originalOldCount = hunk.lines.filter((l) => l.kind !== "+").length
-    const oldStart = oldCount === 0 && originalOldCount > 0 ? hunk.oldStart - 1 : hunk.oldStart
-    const newStart = Math.max(0, oldStart + delta + (oldCount === 0 ? 1 : 0) - (newCount === 0 ? 1 : 0))
-    delta += newCount - oldCount
+    const sourceCount = direction === "forward" ? oldCount : newCount
+    const targetCount = direction === "forward" ? newCount : oldCount
+    const originalSourceCount = hunk.lines.filter((l) => l.kind !== (direction === "forward" ? "+" : "-")).length
+    const start = direction === "forward" ? hunk.oldStart : hunk.newStart
+    const sourceStart = sourceCount === 0 && originalSourceCount > 0 ? start - 1 : start
+    const targetStart = Math.max(0, sourceStart + delta + (sourceCount === 0 ? 1 : 0) - (targetCount === 0 ? 1 : 0))
+    const oldStart = direction === "forward" ? sourceStart : targetStart
+    const newStart = direction === "forward" ? targetStart : sourceStart
+    delta += targetCount - sourceCount
+    oldTotal += oldCount
+    newTotal += newCount
     out.push(`@@ -${oldStart},${oldCount} +${newStart},${newCount} @@`)
     for (const line of kept) {
       out.push(`${line.kind}${line.text}`)
@@ -137,5 +151,20 @@ export const selectLines = (
 
   if (found.size !== wanted.size) return { _tag: "Stale", reason: "Some selected lines are no longer in the diff." }
   if (out.length === 0) return { _tag: "Stale", reason: "Nothing selected is still changed." }
-  return { _tag: "Patch", patch: [...patch.header, ...out, ""].join("\n") }
+  const added = patch.header.some((row) => row.startsWith("new file mode"))
+  const deleted = patch.header.some((row) => row.startsWith("deleted file mode"))
+  const renamed = patch.header.some((row) => row.startsWith("rename from"))
+  const from = patch.header.find((row) => row.startsWith("--- "))
+  const to = patch.header.find((row) => row.startsWith("+++ "))
+  const modifying = (added && oldTotal > 0) || (deleted && newTotal > 0) || (renamed && direction === "reverse")
+  const header = patch.header.flatMap((row) => {
+    if (row.startsWith("index ")) return []
+    if (!modifying) return [row]
+    if (/^(?:new file mode|deleted file mode|similarity index|rename from|rename to)/.test(row)) return []
+    if (row === "--- /dev/null" || (renamed && row.startsWith("--- ")))
+      return to === undefined ? [] : [`--- ${counterpart(to, "a")}`]
+    if (row === "+++ /dev/null") return from === undefined ? [] : [`+++ ${counterpart(from, "b")}`]
+    return [row]
+  })
+  return { _tag: "Patch", patch: [...header, ...out, ""].join("\n") }
 }

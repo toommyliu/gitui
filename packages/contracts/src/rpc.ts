@@ -1,3 +1,4 @@
+import { CommitIdentity, IdentitySettings, CommitUpdate, CredentialPrompt } from "./commit-workflow.ts"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Rpc from "effect/rpc/Rpc"
@@ -14,6 +15,8 @@ import {
   ConflictDetail,
   DiffTarget,
   DirectoryListing,
+  DiscardBackup,
+  DiscardRestore,
   FileDiff,
   LineAction,
   LineSelection,
@@ -24,6 +27,7 @@ import {
   PullStrategy,
   PullTarget,
   PushDestination,
+  PushContext,
   Remote,
   Recovery,
   Refs,
@@ -43,6 +47,12 @@ export class GitError extends Schema.TaggedError<GitError>()("GitError", {
   stderr: Schema.String,
 }) {
   get summary(): string {
+    if (/authentication failed|could not read (?:username|password)|terminal prompts disabled/i.test(this.stderr))
+      return "Authentication failed. Check your credential helper or retry with a valid username and token."
+    if (/permission denied \(publickey|could not read from remote repository/i.test(this.stderr))
+      return "SSH authentication failed. Check your SSH agent, loaded keys, and repository access."
+    if (/host key verification failed/i.test(this.stderr))
+      return "SSH host verification failed. Verify the host fingerprint and update known_hosts from a terminal."
     const raw = this.stderr.split("\n").filter((line) => line.trim() !== "" && !line.trimStart().startsWith("hint:"))
     const lines = raw.map((line) => line.trim())
     const problems = lines.flatMap((line, index) => {
@@ -172,7 +182,13 @@ export class GitRpcs extends RpcGroup.make(
   }),
   Rpc.make("Stage", { payload: paths, error: GitError }),
   Rpc.make("Unstage", { payload: paths, error: GitError }),
-  Rpc.make("Discard", { payload: paths, error: GitError }),
+  Rpc.make("GetDiscardRecovery", { payload: repo, success: Schema.Array(DiscardBackup), error: GitError }),
+  Rpc.make("RestoreDiscard", {
+    payload: { ...repo, id: Schema.String, overwriteVersion: Schema.NullOr(Schema.String) },
+    success: DiscardRestore,
+    error: GitError,
+  }),
+  Rpc.make("Discard", { payload: paths, success: Schema.NullOr(DiscardBackup), error: GitError }),
   Rpc.make("ApplyLines", {
     payload: {
       repo: RepoId,
@@ -180,13 +196,27 @@ export class GitRpcs extends RpcGroup.make(
       path: RepoPath,
       lines: Schema.Array(LineSelection),
     },
+    success: Schema.NullOr(DiscardBackup),
     error: GitError,
   }),
   Rpc.make("GetDraft", { payload: repo, success: Schema.String, error: GitError }),
   Rpc.make("SetDraft", { payload: { repo: RepoId, message: Schema.String }, error: GitError }),
   Rpc.make("Commit", {
     payload: { repo: RepoId, message: Schema.String, amend: Schema.Boolean },
+    success: CommitUpdate,
     error: GitError,
+    stream: true,
+  }),
+  Rpc.make("GetCommitIdentity", { payload: repo, success: CommitIdentity, error: GitError }),
+  Rpc.make("SetCommitIdentity", { payload: { ...repo, settings: IdentitySettings }, error: GitError }),
+  Rpc.make("CredentialPrompts", { payload: repo, success: Schema.Array(CredentialPrompt), stream: true }),
+  Rpc.make("AnswerCredentialPrompt", {
+    payload: {
+      ...repo,
+      id: Schema.String,
+      answer: Schema.NullOr(Schema.Redacted(Schema.String.check(Schema.isMaxLength(4096)))),
+    },
+    success: Schema.Boolean,
   }),
   Rpc.make("ContinueOperation", { payload: repo, error: GitError }),
   Rpc.make("SkipOperation", { payload: repo, error: GitError }),
@@ -234,10 +264,20 @@ export class GitRpcs extends RpcGroup.make(
     stream: true,
   }),
   Rpc.make("Push", {
-    payload: { ...repo, destination: PushDestination, setUpstream: Schema.Boolean },
+    payload: {
+      ...repo,
+      destination: PushDestination,
+      setUpstream: Schema.Boolean,
+      expectedContext: Schema.optional(Schema.String),
+    },
     success: Progress,
     error: GitError,
     stream: true,
+  }),
+  Rpc.make("GetPushContext", {
+    payload: { ...repo, branch: Schema.String },
+    success: PushContext,
+    error: GitError,
   }),
   Rpc.make("ForcePush", {
     payload: { ...repo, destination: PushDestination, expected: Oid },
@@ -285,7 +325,13 @@ export class GitRpcs extends RpcGroup.make(
   }),
   Rpc.make("DeleteRemoteTrackingBranch", { payload: { ...repo, name: Schema.String }, error: GitError }),
   Rpc.make("StashPush", {
-    payload: { repo: RepoId, message: Schema.String, includeUntracked: Schema.Boolean },
+    payload: {
+      repo: RepoId,
+      message: Schema.String,
+      includeUntracked: Schema.Boolean,
+      paths: Schema.NullOr(Schema.Array(RepoPath)).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+      keepIndex: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+    },
     error: GitError,
   }),
   Rpc.make("AddWorktree", {

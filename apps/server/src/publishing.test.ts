@@ -34,15 +34,28 @@ layer(serverLayer({ host: "127.0.0.1", port: 0, webDist: null, trustedOrigins: [
         execFileSync("git", ["--git-dir", remotePath, ...args], { encoding: "utf8" }).trim()
       const { id: repo } = yield* client.OpenRepo({ path: fixture.root })
       yield* client.AddRemote({ repo, remote: { name: "fork", urls: [remotePath], pushUrls: [] } })
+      const context = yield* client.GetPushContext({ repo, branch: "main" })
+      expect(context.remotes).toEqual([{ name: "fork", urls: [remotePath], pushUrls: [remotePath] }])
       yield* Stream.runDrain(
         client.Push({
           repo,
           destination: { branch: "main", remote: "fork", remoteBranch: "review" },
           setUpstream: true,
+          expectedContext: context.fingerprint,
         }),
       )
       expect(remoteGit("rev-parse", "refs/heads/review")).toBe(tip)
       yield* client.EditRemote({ repo, name: "fork", remote: { name: "team", urls: [remotePath], pushUrls: [] } })
+      const stale = yield* Stream.runDrain(
+        client.Push({
+          repo,
+          destination: { branch: "main", remote: "team", remoteBranch: "unexpected" },
+          setUpstream: false,
+          expectedContext: context.fingerprint,
+        }),
+      ).pipe(Effect.flip)
+      expect(stale).toMatchObject({ _tag: "GitError", stderr: expect.stringContaining("configuration changed") })
+      expect(remoteGit("for-each-ref", "--format=%(refname)", "refs/heads")).toBe("refs/heads/review")
       expect((yield* client.GetStatus({ repo })).upstream?.name).toBe("team/review")
       yield* Stream.runDrain(
         client.Pull({ repo, strategy: "ff-only", target: { branch: "main", upstream: "refs/remotes/team/review" } }),

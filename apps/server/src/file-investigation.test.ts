@@ -5,6 +5,7 @@ import { expect, layer } from "@effect/vitest"
 import { GitRpcs, RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Stream from "effect/Stream"
 import * as HttpServer from "effect/http/HttpServer"
 import * as RpcClient from "effect/rpc/RpcClient"
 import * as RpcSerialization from "effect/rpc/RpcSerialization"
@@ -60,6 +61,18 @@ layer(serverLayer({ host: "127.0.0.1", port: 0, webDist: null, trustedOrigins: [
         yield* client.RestoreFile({ ...request, overwrite: true })
         expect(readFileSync(join(f.root, path), "utf8")).toBe("original\n")
         expect(f.git("show", ":new.txt")).toBe("staged")
+        const backup = yield* client.Discard({ repo, paths: [path] })
+        expect(readFileSync(join(f.root, path), "utf8")).toBe("staged\n")
+        expect(yield* client.RestoreDiscard({ repo, id: backup!.id, overwriteVersion: null })).toEqual({
+          _tag: "Restored",
+        })
+        expect(readFileSync(join(f.root, path), "utf8")).toBe("original\n")
+        const updates = yield* Stream.runCollect(
+          client.Commit({ repo, message: "Commit staged version", amend: false }),
+        )
+        expect(updates.at(-1)).toEqual({ _tag: "Committed", oid: f.git("rev-parse", "HEAD") })
+        expect(f.git("show", "HEAD:new.txt")).toBe("staged")
+        expect(readFileSync(join(f.root, path), "utf8")).toBe("original\n")
       }).pipe(Effect.scoped),
     )
   },

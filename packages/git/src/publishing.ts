@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto"
 import {
   GitError,
   type Oid,
   type PullStrategy,
   type PullTarget,
   type PushDestination,
+  type PushContext,
   type Remote,
   type RepoId,
 } from "@gitui/contracts"
@@ -83,8 +85,47 @@ export const makePublishing = (git: Git["Service"]) => {
     yield* checkBranch(repo, destination.remoteBranch)
     return `refs/heads/${destination.branch}:refs/heads/${destination.remoteBranch}`
   })
+  const pushContext = Effect.fn(function* (repo: RepoId, branch: string) {
+    yield* checkBranch(repo, branch)
+    const [head, config, names] = yield* Effect.all([
+      git.text(repo, ["symbolic-ref", "--quiet", "HEAD"], { okExitCodes: [1] }),
+      git.text(repo, ["config", "--null", "--get-regexp", "^(branch|remote|push|url)\\."], { okExitCodes: [1] }),
+      git.text(repo, ["remote"]),
+    ])
+    const lines = (text: string) => text.trimEnd().split("\n").filter(Boolean)
+    const remotes = yield* Effect.forEach(lines(names), (name) =>
+      Effect.gen(function* () {
+        const [urls, pushUrls] = yield* Effect.all([
+          git.text(repo, ["remote", "get-url", "--all", "--", name]),
+          git.text(repo, ["remote", "get-url", "--push", "--all", "--", name]),
+        ])
+        return { name, urls: lines(urls), pushUrls: lines(pushUrls) }
+      }),
+    )
+    const entries = config
+      .split("\0")
+      .filter(Boolean)
+      .map((entry) => {
+        const newline = entry.indexOf("\n")
+        return [entry.slice(0, newline), entry.slice(newline + 1)] as const
+      })
+    const remoteKey = `branch.${branch}.remote`
+    const mergeKey = `branch.${branch}.merge`
+    const upstream = {
+      remote: entries.filter(([key]) => key === remoteKey).at(-1)?.[1] ?? null,
+      merge: entries.filter(([key]) => key === mergeKey).map(([, value]) => value),
+    }
+    const hash = (settings: unknown) =>
+      createHash("sha256")
+        .update(JSON.stringify([branch, head, settings, remotes]))
+        .digest("hex")
+    const fingerprint = hash(entries)
+    const configuration = hash(entries.filter(([key]) => key !== remoteKey && key !== mergeKey))
+    return { branch, fingerprint, configuration, upstream, remotes } satisfies PushContext
+  })
 
   return {
+    pushContext,
     addRemote: Effect.fn(function* (repo: RepoId, remote: Remote) {
       yield* checkSettings(repo, remote)
       yield* run(repo, ["remote", "add", "--", remote.name, remote.urls[0]!])
@@ -123,9 +164,14 @@ export const makePublishing = (git: Git["Service"]) => {
           return git.progress(repo, ["pull", "--progress", ...pullFlags[strategy]])
         }),
       ),
-    push: (repo: RepoId, destination: PushDestination, setUpstream: boolean) =>
+    push: (repo: RepoId, destination: PushDestination, setUpstream: boolean, expectedContext?: string) =>
       Stream.unwrap(
         Effect.gen(function* () {
+          if (
+            expectedContext !== undefined &&
+            (yield* pushContext(repo, destination.branch)).fingerprint !== expectedContext
+          )
+            return yield* invalid("The branch or remote configuration changed. Choose the push destination again.")
           const refspec = yield* destinationRefspec(repo, destination)
           return publish(repo, destination.remote, [
             "--no-force",

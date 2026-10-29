@@ -12,7 +12,8 @@ import {
 } from "@pierre/diffs"
 import { CodeView, type CodeViewHandle, useWorkerPool, WorkerPoolContextProvider } from "@pierre/diffs/react"
 import DiffsWorker from "@pierre/diffs/worker/worker.js?worker"
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
+import { formatForDisplay, useAppHotkeys } from "@tanstack/react-hotkeys"
+import { ArrowDownIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
 import {
   type CSSProperties,
   type ReactNode,
@@ -35,14 +36,25 @@ import {
 } from "@/components/ui/context-menu"
 import { cn } from "cn"
 import { copyText, copyWithToast } from "@/lib/clipboard"
-import { useCommandKeys, useOverlayOpen } from "@/lib/commands"
+import {
+  type DiffLocation,
+  type DiffMatch,
+  diffMatches,
+  hunkLocations,
+  matchesFileName,
+  stepMatch,
+} from "@/lib/change-search"
+import { type CommandId, useCommand, useCommandKeys, useOverlayOpen } from "@/lib/commands"
 import { diffThemes } from "@/lib/diff-themes"
 import { desktop } from "@/lib/desktop"
 import { editorLine } from "@/lib/lines"
+import { hiddenLocationTop, locationBeyond, nearestBeyond, READING_SLOP, sideRuns } from "@/lib/diff-nav"
 import { fileStepTarget } from "@/lib/file-step"
 import { type Settings, settingsAtom } from "@/lib/settings"
 import { ChangeLetter } from "./change-letter"
+import { CURRENT_FIND_HIGHLIGHT, FIND_HIGHLIGHT, useMatchHighlights } from "./diff-find"
 import { OpenInContextMenu } from "./open-in"
+import { FindField } from "./search-fields"
 import { useTheme } from "./theme-provider"
 
 export const hash = (text: string) => {
@@ -84,6 +96,11 @@ export const patchItems = (section: string, patch: string): Array<DiffItem> => {
 }
 
 export const hasText = (item: DiffItem) => item.fileDiff.hunks.length > 0
+
+export const filterItems = (items: ReadonlyArray<DiffItem>, query: string) =>
+  query.trim() === ""
+    ? items
+    : items.filter((item) => matchesFileName(item.fileDiff.name, query, item.fileDiff.prevName))
 
 export const expandableIds = (items: ReadonlyArray<DiffItem>) => items.filter(hasText).map((item) => item.id)
 
@@ -234,6 +251,13 @@ ${separator}[data-expand-index] :is([data-separator-content], [data-expand-butto
   [data-diff] {
     transition: none;
   }
+}
+::highlight(${FIND_HIGHLIGHT}) {
+  background-color: color-mix(in oklch, var(--change-modified) 35%, transparent);
+}
+::highlight(${CURRENT_FIND_HIGHLIGHT}) {
+  background-color: color-mix(in oklch, var(--change-modified) 75%, transparent);
+  text-decoration: underline 2px;
 }
 `
 
@@ -434,6 +458,23 @@ export function DiffWorkerPool({ children }: { children: ReactNode }) {
   )
 }
 
+type ViewInstance = NonNullable<ReturnType<CodeViewHandle<undefined, undefined>["getInstance"]>>
+
+interface Reveal {
+  readonly location: DiffLocation
+  readonly align: "start" | "center"
+}
+
+interface Find {
+  readonly query: string
+  readonly items: ReadonlyArray<DiffItem>
+  readonly matches: ReadonlyArray<DiffMatch>
+  readonly current: number | null
+}
+
+const sameMatch = (a: DiffMatch, b: DiffMatch) =>
+  a.id === b.id && a.side === b.side && a.lineNumber === b.lineNumber && a.start === b.start
+
 export function DiffStack({
   repo,
   items,
@@ -468,6 +509,16 @@ export function DiffStack({
   const selection = lines === undefined ? ownSelection : lines.selection
   const lineActions = lines !== undefined
   const selectable = lineActions || desktop !== undefined
+  const [view, setView] = useState<CodeViewHandle<undefined, undefined> | null>(null)
+  const [find, setFind] = useState<Find>({ query: "", items, matches: [], current: null })
+  if (find.items !== items) {
+    const matches = find.query === "" ? find.matches : diffMatches(items, find.query)
+    const previous = find.current === null ? undefined : find.matches[find.current]
+    const index = previous === undefined ? -1 : matches.findIndex((match) => sameMatch(match, previous))
+    setFind({ query: find.query, items, matches, current: index === -1 ? null : index })
+  }
+  const { query, matches, current } = find
+  const paintMatches = useMatchHighlights(view, matches, current)
   const options = useMemo(
     () => ({
       ...look,
@@ -485,10 +536,10 @@ export function DiffStack({
       hunkSeparators: "line-info" as const,
       enableLineSelection: selectable,
       enableGutterUtility: lineActions,
+      onPostRender: paintMatches,
     }),
-    [look, lineHeight, selectable, lineActions],
+    [look, lineHeight, selectable, lineActions, paintMatches],
   )
-  const [view, setView] = useState<CodeViewHandle<undefined, undefined> | null>(null)
   const attachView = useCallback(
     (handle: CodeViewHandle<undefined, undefined> | null) => {
       setView(handle)
@@ -504,50 +555,190 @@ export function DiffStack({
     const target = index === null ? undefined : shown[index]
     if (target !== undefined) view?.scrollTo({ type: "item", id: target.id, align: "start" })
   }
+
+  const [revealing, setRevealing] = useState<Reveal | null>(null)
+  useEffect(() => {
+    if (revealing === null) return
+    const { location, align } = revealing
+    view?.scrollTo({ type: "line", id: location.id, lineNumber: location.lineNumber, side: location.side, align })
+  }, [view, revealing])
+  const reveal = (location: DiffLocation, align: Reveal["align"]) => {
+    if (collapsedIds.has(location.id)) setCollapsed([location.id], false)
+    setRevealing({ location, align })
+  }
+  const locate = (instance: ViewInstance) => {
+    const rendered = new Map(instance.getRenderedItems().map((item) => [item.id, item]))
+    return (location: DiffLocation) => {
+      const top = instance.getTopForItem(location.id) ?? 0
+      const item = collapsedIds.has(location.id) ? undefined : rendered.get(location.id)
+      const line = item?.type === "diff" ? item.instance.getLinePosition(location.lineNumber, location.side) : undefined
+      return line === undefined
+        ? { top: hiddenLocationTop(top, HEADER_HEIGHT), exact: false }
+        : { top: top + line.top, exact: true }
+    }
+  }
+  const readingLine = (instance: ViewInstance) => instance.getScrollTop() + HEADER_HEIGHT
+
+  const hunks = useMemo(() => hunkLocations(items), [items])
+  const hunkStep = (delta: 1 | -1) => () => {
+    const instance = view?.getInstance()
+    if (instance === undefined) return
+    const position = locate(instance)
+    const edge = readingLine(instance) + delta * READING_SLOP
+    const index = locationBeyond(hunks.length, (i) => position(hunks[i]!).top, edge, delta)
+    const hunk = index === null ? undefined : hunks[index]
+    if (hunk !== undefined) reveal(hunk, "start")
+  }
+
+  const showMatch = (instance: ViewInstance, match: DiffMatch) => {
+    const { top, exact } = locate(instance)(match)
+    const scrollTop = instance.getScrollTop()
+    const visible = exact && top >= scrollTop + HEADER_HEIGHT && top + lineHeight <= scrollTop + instance.getHeight()
+    if (!visible) reveal(match, "center")
+  }
+  const nearestMatch = (instance: ViewInstance, list: ReadonlyArray<DiffMatch>, delta: 1 | -1) => {
+    const position = locate(instance)
+    const top = (index: number) => position(list[index]!).top
+    const runs = sideRuns(list)
+    const wrap = delta === 1 ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY
+    return (
+      nearestBeyond(runs, top, readingLine(instance) - READING_SLOP, delta) ?? nearestBeyond(runs, top, wrap, delta)
+    )
+  }
+  const search = (next: string) => {
+    const instance = view?.getInstance()
+    const found = diffMatches(items, next)
+    const index = instance === undefined ? null : nearestMatch(instance, found, 1)
+    setFind({ query: next, items, matches: found, current: index })
+    const match = index === null ? undefined : found[index]
+    if (instance !== undefined && match !== undefined) showMatch(instance, match)
+  }
+  const findStep = (delta: 1 | -1) => {
+    const instance = view?.getInstance()
+    if (instance === undefined) return
+    const index = current === null ? nearestMatch(instance, matches, delta) : stepMatch(matches.length, current, delta)
+    const match = index === null ? undefined : matches[index]
+    if (match === undefined) return
+    setFind({ ...find, current: index })
+    showMatch(instance, match)
+  }
+
+  const rootRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const findRef = useRef<HTMLInputElement>(null)
+  const returnFocus = useRef<HTMLElement | null>(null)
+  useCommand(
+    "diff.find",
+    () => {
+      const active = document.activeElement
+      if (active !== findRef.current) {
+        returnFocus.current = active instanceof HTMLElement && rootRef.current?.contains(active) ? active : null
+      }
+      findRef.current?.focus()
+      findRef.current?.select()
+    },
+    { target: rootRef },
+  )
+  const closeFind = () => {
+    search("")
+    const back = returnFocus.current
+    returnFocus.current = null
+    ;(back?.isConnected === true ? back : scrollRef.current)?.focus({ preventScroll: true })
+  }
+
   const overlayOpen = useOverlayOpen()
   useCommandKeys(
     [
       { id: "diff.nextFile", run: fileStep(1) },
       { id: "diff.previousFile", run: fileStep(-1) },
+      { id: "diff.nextHunk", run: hunkStep(1) },
+      { id: "diff.previousHunk", run: hunkStep(-1) },
     ],
     { enabled: !overlayOpen },
   )
+  const keys = useAppHotkeys()
+  const described = (label: string, id: CommandId) => {
+    const { hotkey } = keys[id]
+    return hotkey === null ? label : `${label} (${formatForDisplay(hotkey)})`
+  }
   return (
-    <CodeView
-      ref={attachView}
-      items={shown}
-      options={options}
-      style={style}
-      className="h-full overflow-auto overscroll-contain select-text"
-      {...(header === undefined ? {} : { renderCodeViewHeader: header })}
-      renderCustomHeader={(item) =>
-        item.type === "diff" ? (
-          <FileHeader
-            repo={repo}
-            line={selection?.id === item.id ? editorLine(item.fileDiff, selection.range) : undefined}
-            fileDiff={item.fileDiff}
-            note={notes.get(item.id) ?? null}
-            fullPath={`${repo}/${item.fileDiff.name}`}
-            first={item.id === shown[0]?.id}
-            collapsed={item.collapsed === true}
-            onToggle={() => setCollapsed([item.id], item.collapsed !== true)}
-            onSetAll={expandable.length > 1 ? (collapsed) => setCollapsed(expandable, collapsed) : null}
-            actions={actions?.(itemMeta(item.id))}
-          />
-        ) : null
-      }
-      selectedLines={selection}
-      onSelectedLinesChange={lines?.onSelectionChange ?? setOwnSelection}
-      {...(lines === undefined
-        ? {}
-        : {
-            renderGutterUtility: (getHovered, item) => {
-              const hovered = getHovered()
-              if (hovered === undefined || item.type !== "diff" || !("side" in hovered)) return null
-              const side = hovered.side === "deletions" ? "deletions" : "additions"
-              return lines.gutter({ lineNumber: hovered.lineNumber, side }, item)
-            },
-          })}
-    />
+    <div
+      ref={rootRef}
+      className="flex h-full flex-col"
+      onPointerDownCapture={() => {
+        if (!rootRef.current?.contains(document.activeElement)) scrollRef.current?.focus({ preventScroll: true })
+      }}
+    >
+      <div className="flex shrink-0 items-center gap-0.5 border-b pr-1.5">
+        <FindField
+          inputRef={findRef}
+          query={query}
+          onQueryChange={search}
+          results={query === "" ? null : { count: matches.length, current }}
+          onStep={findStep}
+          onClose={closeFind}
+          hotkey={keys["diff.find"].hotkey}
+        />
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className="text-muted-foreground"
+          aria-label="Previous hunk"
+          title={described("Previous hunk", "diff.previousHunk")}
+          disabled={hunks.length === 0}
+          onClick={hunkStep(-1)}
+        >
+          <ArrowUpIcon />
+        </Button>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className="text-muted-foreground"
+          aria-label="Next hunk"
+          title={described("Next hunk", "diff.nextHunk")}
+          disabled={hunks.length === 0}
+          onClick={hunkStep(1)}
+        >
+          <ArrowDownIcon />
+        </Button>
+      </div>
+      <CodeView
+        ref={attachView}
+        containerRef={scrollRef}
+        items={shown}
+        options={options}
+        style={style}
+        className="min-h-0 flex-1 overflow-auto overscroll-contain select-text"
+        {...(header === undefined ? {} : { renderCodeViewHeader: header })}
+        renderCustomHeader={(item) =>
+          item.type === "diff" ? (
+            <FileHeader
+              repo={repo}
+              line={selection?.id === item.id ? editorLine(item.fileDiff, selection.range) : undefined}
+              fileDiff={item.fileDiff}
+              note={notes.get(item.id) ?? null}
+              fullPath={`${repo}/${item.fileDiff.name}`}
+              first={item.id === shown[0]?.id}
+              collapsed={item.collapsed === true}
+              onToggle={() => setCollapsed([item.id], item.collapsed !== true)}
+              onSetAll={expandable.length > 1 ? (collapsed) => setCollapsed(expandable, collapsed) : null}
+              actions={actions?.(itemMeta(item.id))}
+            />
+          ) : null
+        }
+        selectedLines={selection}
+        onSelectedLinesChange={lines?.onSelectionChange ?? setOwnSelection}
+        {...(lines === undefined
+          ? {}
+          : {
+              renderGutterUtility: (getHovered, item) => {
+                const hovered = getHovered()
+                if (hovered === undefined || item.type !== "diff" || !("side" in hovered)) return null
+                const side = hovered.side === "deletions" ? "deletions" : "additions"
+                return lines.gutter({ lineNumber: hovered.lineNumber, side }, item)
+              },
+            })}
+      />
+    </div>
   )
 }

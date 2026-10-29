@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "cn"
+import { filterFiles } from "@/lib/change-search"
 import { comparisonAtom, comparisonKey, comparisonLabel, comparisonModes, useCompare } from "@/lib/comparison"
 import { isTestFile } from "@/lib/file-kind"
 import { shortOid } from "@/lib/format"
@@ -13,9 +14,10 @@ import { describeFailure, diffAtom, diffKey, latest, loadError } from "@/lib/git
 import type { Selection } from "@/lib/selection"
 import { settingsAtom } from "@/lib/settings"
 import { ChangeLetter } from "./change-letter"
-import { ChangeTotals, HistoryButton, SectionBar, TestsToggle } from "./commit-detail"
-import { DiffStack, patchItems, useCollapse } from "./diff-view"
+import { ChangeTotals, HistoryButton, NoMatchingFiles, SectionBar, TestsToggle } from "./commit-detail"
+import { DiffStack, filterItems, patchItems, useCollapse } from "./diff-view"
 import { LargeDiff, Loading, Nothing } from "./loading"
+import { FileFilter } from "./search-fields"
 
 export function ComparisonDetail({
   repo,
@@ -98,7 +100,10 @@ function ComparisonFiles({
   const [selected, setSelected] = useState<RepoPath | null>(null)
   const [allowLarge, setAllowLarge] = useState(false)
   const { ignoreWhitespace, hideTests } = useAtomValue(settingsAtom)
-  const files = hideTests ? detail.files.filter((file) => !isTestFile(file.path)) : detail.files
+  const [filter, setFilter] = useState("")
+  const filtering = filter.trim() !== ""
+  const tested = hideTests ? detail.files.filter((file) => !isTestFile(file.path)) : detail.files
+  const files = filterFiles(tested, filter)
   const file = selected === null ? undefined : files.find((item) => item.path === selected)
   const paths = file === undefined ? [] : file.from === null ? [file.path] : [file.from, file.path]
   const target = { _tag: "Comparison", base: detail.start, head: detail.head } as const
@@ -109,8 +114,8 @@ function ComparisonFiles({
   const error = loadError(result)
   const items = useMemo(() => {
     const all = diff?._tag === "Patch" ? patchItems("comparison", diff.patch) : []
-    return hideTests ? all.filter((item) => !isTestFile(item.fileDiff.name)) : all
-  }, [diff, hideTests])
+    return filterItems(hideTests ? all.filter((item) => !isTestFile(item.fileDiff.name)) : all, filter)
+  }, [diff, hideTests, filter])
   const collapse = useCollapse()
   const listId = useId()
   const [listElement, setListElement] = useState<HTMLDivElement | null>(null)
@@ -121,6 +126,7 @@ function ComparisonFiles({
     overscan: 10,
   })
   const rows = virtualizer.getVirtualItems()
+  const allLabel = filtering ? "All matching files" : "All files"
   const selectedIndex = file === undefined ? 0 : files.indexOf(file) + 1
   const selectFile = (index: number) => {
     setSelected(files[index - 1]?.path ?? null)
@@ -137,84 +143,91 @@ function ComparisonFiles({
       ) : (
         <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
           <ResizablePanel defaultSize="30%" minSize="10%">
-            <ScrollArea
-              className="h-full"
-              viewportRef={setListElement}
-              viewportProps={{
-                tabIndex: 0,
-                role: "listbox",
-                "aria-label": "Changed files",
-                "aria-activedescendant": rows.some((row) => row.index === selectedIndex)
-                  ? `${listId}-${selectedIndex}`
-                  : undefined,
-                className:
-                  "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
-                onKeyDown: (event) => {
-                  const next =
-                    event.key === "ArrowDown"
-                      ? Math.min(files.length, selectedIndex + 1)
-                      : event.key === "ArrowUp"
-                        ? Math.max(0, selectedIndex - 1)
-                        : event.key === "Home"
-                          ? 0
-                          : event.key === "End"
-                            ? files.length
-                            : event.key === "Enter" || event.key === " "
-                              ? selectedIndex
-                              : undefined
-                  if (next === undefined) return
-                  event.preventDefault()
-                  selectFile(next)
-                },
-              }}
-            >
-              <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-                {rows.map((row) => {
-                  const item = files[row.index - 1]
-                  return (
-                    <div
-                      key={row.key}
-                      id={`${listId}-${row.index}`}
-                      role="option"
-                      aria-selected={selectedIndex === row.index}
-                      aria-posinset={row.index + 1}
-                      aria-setsize={files.length + 1}
-                      title={
-                        item === undefined
-                          ? "All files"
-                          : item.from === null
-                            ? item.path
-                            : `${item.from} → ${item.path}`
-                      }
-                      className={cn(
-                        "absolute inset-x-0 top-0 flex h-6 items-center gap-2 px-3 text-start hover:bg-muted/60",
-                        selectedIndex === row.index && "bg-selection",
-                      )}
-                      style={{ transform: `translateY(${row.start}px)` }}
-                      onClick={() => {
-                        listElement?.focus({ preventScroll: true })
-                        selectFile(row.index)
-                      }}
-                    >
-                      {item === undefined ? (
-                        "All files"
-                      ) : (
-                        <>
-                          <ChangeLetter change={item.change} />
-                          <span className="min-w-0 flex-1 truncate">{item.path}</span>
-                          {item.additions !== null && (
-                            <span className="shrink-0 text-change-added tabular-nums">+{item.additions}</span>
+            <div className="flex h-full flex-col">
+              <FileFilter value={filter} onChange={setFilter} shown={files.length} total={tested.length} />
+              {files.length === 0 && filtering ? (
+                <NoMatchingFiles filter={filter} onClear={() => setFilter("")} />
+              ) : (
+                <ScrollArea
+                  className="min-h-0 flex-1"
+                  viewportRef={setListElement}
+                  viewportProps={{
+                    tabIndex: 0,
+                    role: "listbox",
+                    "aria-label": "Changed files",
+                    "aria-activedescendant": rows.some((row) => row.index === selectedIndex)
+                      ? `${listId}-${selectedIndex}`
+                      : undefined,
+                    className:
+                      "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+                    onKeyDown: (event) => {
+                      const next =
+                        event.key === "ArrowDown"
+                          ? Math.min(files.length, selectedIndex + 1)
+                          : event.key === "ArrowUp"
+                            ? Math.max(0, selectedIndex - 1)
+                            : event.key === "Home"
+                              ? 0
+                              : event.key === "End"
+                                ? files.length
+                                : event.key === "Enter" || event.key === " "
+                                  ? selectedIndex
+                                  : undefined
+                      if (next === undefined) return
+                      event.preventDefault()
+                      selectFile(next)
+                    },
+                  }}
+                >
+                  <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+                    {rows.map((row) => {
+                      const item = files[row.index - 1]
+                      return (
+                        <div
+                          key={row.key}
+                          id={`${listId}-${row.index}`}
+                          role="option"
+                          aria-selected={selectedIndex === row.index}
+                          aria-posinset={row.index + 1}
+                          aria-setsize={files.length + 1}
+                          title={
+                            item === undefined
+                              ? allLabel
+                              : item.from === null
+                                ? item.path
+                                : `${item.from} → ${item.path}`
+                          }
+                          className={cn(
+                            "absolute inset-x-0 top-0 flex h-6 items-center gap-2 px-3 text-start hover:bg-muted/60",
+                            selectedIndex === row.index && "bg-selection",
                           )}
-                          {item.deletions !== null && (
-                            <span className="shrink-0 text-change-deleted tabular-nums">−{item.deletions}</span>
+                          style={{ transform: `translateY(${row.start}px)` }}
+                          onClick={() => {
+                            listElement?.focus({ preventScroll: true })
+                            selectFile(row.index)
+                          }}
+                        >
+                          {item === undefined ? (
+                            allLabel
+                          ) : (
+                            <>
+                              <ChangeLetter change={item.change} />
+                              <span className="min-w-0 flex-1 truncate">{item.path}</span>
+                              {item.additions !== null && (
+                                <span className="shrink-0 text-change-added tabular-nums">+{item.additions}</span>
+                              )}
+                              {item.deletions !== null && (
+                                <span className="shrink-0 text-change-deleted tabular-nums">−{item.deletions}</span>
+                              )}
+                            </>
                           )}
-                        </>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </ScrollArea>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
           </ResizablePanel>
           <ResizableHandle />
           <ResizablePanel minSize="20%">
@@ -231,7 +244,15 @@ function ComparisonFiles({
                 hint="You can also select a file to view its diff."
               />
             ) : items.length === 0 ? (
-              <Nothing title={files.length === 0 ? "Only tests changed" : "Nothing to diff"} />
+              <Nothing
+                title={
+                  filtering
+                    ? `No files match "${filter.trim()}"`
+                    : files.length === 0
+                      ? "Only tests changed"
+                      : "Nothing to diff"
+                }
+              />
             ) : (
               <DiffStack
                 repo={repo}

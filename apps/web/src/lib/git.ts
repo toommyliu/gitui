@@ -6,8 +6,10 @@ import {
   type CommandEntry,
   type CommitRow,
   type DiffTarget,
+  type DiscardBackup,
   GitError,
   GitRpcs,
+  type LineSelection,
   type Oid,
   type Progress,
   type PullStrategy,
@@ -121,6 +123,56 @@ export const refsAtom = Atom.family((repo: RepoId) =>
 
 export const recoveryAtom = Atom.family((repo: RepoId) =>
   GitClient.query("GetRecovery", { repo }, { reactivityKeys: [keys.refs(repo), keys.status(repo)] }),
+)
+
+export const discardRecoveryAtom = Atom.family((repo: RepoId) =>
+  GitClient.query("GetDiscardRecovery", { repo }, { reactivityKeys: [keys.refs(repo), keys.status(repo)] }),
+)
+
+export type DiscardRequest =
+  | { readonly _tag: "Files"; readonly repo: RepoId; readonly paths: ReadonlyArray<RepoPath> }
+  | {
+      readonly _tag: "Lines"
+      readonly repo: RepoId
+      readonly path: RepoPath
+      readonly lines: ReadonlyArray<LineSelection>
+    }
+
+export const discardAtom = GitClient.runtime.fn(
+  (request: DiscardRequest) =>
+    Effect.gen(function* () {
+      const client = yield* GitClient
+      const { repo } = request
+      const discard =
+        request._tag === "Files"
+          ? client("Discard", { repo, paths: request.paths })
+          : client("ApplyLines", { repo, action: "discard", path: request.path, lines: request.lines })
+      return yield* Reactivity.mutation(discard, scopeKeys(repo, "refs"))
+    }),
+  { concurrent: true },
+)
+
+export const restoreDiscardAtom = GitClient.runtime.fn(
+  (request: { readonly repo: RepoId; readonly id: string; readonly overwriteVersion: string | null }) =>
+    Effect.gen(function* () {
+      const client = yield* GitClient
+      return yield* Reactivity.mutation(client("RestoreDiscard", request), scopeKeys(request.repo, "refs"))
+    }),
+  { concurrent: true },
+)
+
+export interface DiscardConflict {
+  readonly backup: DiscardBackup
+  readonly paths: ReadonlyArray<RepoPath>
+  readonly version: string
+}
+
+export type RecoveryView =
+  | { readonly _tag: "Browse" }
+  | { readonly _tag: "Conflict"; readonly conflict: DiscardConflict }
+
+export const recoveryViewAtom = Atom.family((_repo: RepoId) =>
+  Atom.make<RecoveryView | null>(null).pipe(Atom.keepAlive),
 )
 
 export const draftAtom = Atom.family((repo: RepoId) =>

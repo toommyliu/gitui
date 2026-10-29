@@ -14,6 +14,8 @@ import {
   ConflictDetail,
   DiffTarget,
   DirectoryListing,
+  DiscardBackup,
+  DiscardRestore,
   FileDiff,
   LineAction,
   LineSelection,
@@ -147,7 +149,13 @@ export class GitRpcs extends RpcGroup.make(
   }),
   Rpc.make("Stage", { payload: paths, error: GitError }),
   Rpc.make("Unstage", { payload: paths, error: GitError }),
-  Rpc.make("Discard", { payload: paths, error: GitError }),
+  Rpc.make("GetDiscardRecovery", { payload: repo, success: Schema.Array(DiscardBackup), error: GitError }),
+  Rpc.make("RestoreDiscard", {
+    payload: { ...repo, id: Schema.String, overwriteVersion: Schema.NullOr(Schema.String) },
+    success: DiscardRestore,
+    error: GitError,
+  }),
+  Rpc.make("Discard", { payload: paths, success: Schema.NullOr(DiscardBackup), error: GitError }),
   Rpc.make("ApplyLines", {
     payload: {
       repo: RepoId,
@@ -155,6 +163,7 @@ export class GitRpcs extends RpcGroup.make(
       path: RepoPath,
       lines: Schema.Array(LineSelection),
     },
+    success: Schema.NullOr(DiscardBackup),
     error: GitError,
   }),
   Rpc.make("GetDraft", { payload: repo, success: Schema.String, error: GitError }),

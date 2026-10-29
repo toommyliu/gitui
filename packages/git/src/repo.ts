@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
 import { existsSync, lstatSync, statSync } from "node:fs"
+import { unlink } from "node:fs/promises"
 import { basename, dirname, join, resolve } from "node:path"
 import {
   type CommitDetail,
+  type DiscardBackup,
   type CommitIdentity,
   type IdentitySettings,
   type CommitUpdate,
@@ -78,6 +80,7 @@ import {
 import { parseFilePatch, selectLines } from "./patch.ts"
 import { parseStatus, statusArgs } from "./status.ts"
 import { makePublishing } from "./publishing.ts"
+import { makeDiscardRecovery } from "./discard-recovery.ts"
 import { makeRecovery } from "./recovery.ts"
 import { makeRewrite } from "./rewrite.ts"
 
@@ -209,7 +212,9 @@ const find = (session: LogSession, oid: Oid, from: number): Effect.Effect<number
     }
   })
 
-type RepoCommands = ReturnType<typeof makePublishing> & ReturnType<typeof makeRecovery>
+type RepoCommands = ReturnType<typeof makePublishing> &
+  ReturnType<typeof makeRecovery> &
+  Pick<ReturnType<typeof makeDiscardRecovery>, "discardRecovery" | "restoreDiscard">
 
 export class Repo extends Context.Service<
   Repo,
@@ -244,13 +249,13 @@ export class Repo extends Context.Service<
     ) => Effect.Effect<FileDiff, GitError>
     readonly stage: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
     readonly unstage: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
-    readonly discard: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<void, GitError>
+    readonly discard: (repo: RepoId, paths: ReadonlyArray<RepoPath>) => Effect.Effect<DiscardBackup | null, GitError>
     readonly applyLines: (
       repo: RepoId,
       action: LineAction,
       path: RepoPath,
       lines: ReadonlyArray<LineSelection>,
-    ) => Effect.Effect<void, GitError>
+    ) => Effect.Effect<DiscardBackup | null, GitError>
     readonly readDraft: (repo: RepoId) => Effect.Effect<string, GitError>
     readonly writeDraft: (repo: RepoId, message: string) => Effect.Effect<void, GitError>
     readonly commitIndex: (repo: RepoId, message: string, amend: boolean) => Effect.Effect<void, GitError>
@@ -329,6 +334,7 @@ export class Repo extends Context.Service<
       const git = yield* Git
       const fs = yield* FileSystem.FileSystem
       const conflicts = makeConflicts(git, fs)
+      const discardRecovery = makeDiscardRecovery(git)
       const identity = makeIdentity(git)
       const sessions = new Map<RepoId, Map<string, LogSession>>()
       const locks = new Map<RepoId, Semaphore.Semaphore>()
@@ -654,18 +660,35 @@ export class Repo extends Context.Service<
         Effect.forEach(chunks(paths, 500), (chunk) => git.run(repo, [...args, "--", ...chunk], { write }))
 
       const discard = Effect.fn("Repo.discard")(function* (repo: RepoId, paths: ReadonlyArray<RepoPath>) {
+        if (paths.length === 0) return null
         const listed = yield* chunked(repo, ["ls-files", "-z"], paths, false)
         const tracked = new Set(listed.flatMap((bytes) => decoder.decode(bytes).split("\0")))
-        yield* withPaths(
+        return yield* discardRecovery.protect(
           repo,
-          ["restore", "--worktree"],
-          paths.filter((path) => tracked.has(path)),
-        )
-        yield* chunked(
-          repo,
-          ["clean", "-f", "-q"],
-          paths.filter((path) => !tracked.has(path)),
-          true,
+          paths,
+          "files",
+          Effect.gen(function* () {
+            yield* withPaths(
+              repo,
+              ["restore", "--worktree"],
+              paths.filter((path) => tracked.has(path)),
+            )
+            yield* Effect.tryPromise({
+              try: async () => {
+                for (const path of paths.filter((path) => !tracked.has(path))) {
+                  await unlink(join(repo, path)).catch((error: unknown) => {
+                    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error
+                  })
+                }
+              },
+              catch: () =>
+                new GitError({
+                  args: ["discard"],
+                  exitCode: -1,
+                  stderr: "Could not remove the untracked file. Its backup is available in Recovery.",
+                }),
+            }).pipe(Effect.uninterruptible)
+          }),
         )
       })
 
@@ -700,10 +723,15 @@ export class Repo extends Context.Service<
         }
         const target = action === "discard" ? [] : ["--cached"]
         const reverse = action === "stage" ? [] : ["--reverse"]
-        yield* git.run(repo, ["apply", ...target, ...reverse, "--recount", "--whitespace=nowarn", "-"], {
-          stdin: new TextEncoder().encode(selected.patch),
-          write: true,
-        })
+        const apply = Effect.asVoid(
+          git.run(repo, ["apply", ...target, ...reverse, "--recount", "--whitespace=nowarn", "-"], {
+            stdin: new TextEncoder().encode(selected.patch),
+            write: true,
+          }),
+        )
+        if (action === "discard") return yield* discardRecovery.protect(repo, [path], "lines", apply)
+        yield* apply
+        return null
       })
 
       const run = (repo: RepoId, args: ReadonlyArray<string>, stdin?: Uint8Array) =>
@@ -807,6 +835,8 @@ export class Repo extends Context.Service<
       const service: Repo["Service"] = {
         ...makePublishing(git),
         ...makeRecovery(git, status),
+        discardRecovery: discardRecovery.discardRecovery,
+        restoreDiscard: discardRecovery.restoreDiscard,
         open,
         status,
         refs,
@@ -1131,6 +1161,7 @@ export class Repo extends Context.Service<
         ...service,
         recoverCommit: locked(service.recoverCommit),
         undoCommit: locked(service.undoCommit),
+        restoreDiscard: locked(service.restoreDiscard),
         stage: locked(service.stage),
         unstage: locked(service.unstage),
         discard: locked(service.discard),

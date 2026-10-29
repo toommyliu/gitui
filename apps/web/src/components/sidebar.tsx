@@ -58,6 +58,7 @@ import {
   useRunGitAction,
 } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
+import { stashBlocked } from "@/lib/stash"
 import { type Location, type LocationState, focusLocation, locationState, toggleLocation } from "@/lib/visibility"
 import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
 import { useConfirm } from "./confirm"
@@ -884,6 +885,7 @@ function SectionRow({
   const git = useGitAction()
   const prompt = usePrompt()
   const stash = useStashPrompt(repo)
+  const status = latest(useAtomValue(statusAtom(repo)))
   const publishing = usePublishing(repo)
   const networkBusy = useAtomValue(networkStateAtom(repo))?._tag === "Running"
   const header = (
@@ -902,7 +904,12 @@ function SectionRow({
       <ContextMenu>
         <ContextMenuTrigger className="block h-full">{header}</ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={stash}>Stash changes…</ContextMenuItem>
+          <ContextMenuItem
+            disabled={status === undefined || status.entries.length === 0 || stashBlocked(status)}
+            onClick={() => status !== undefined && stash(status, { _tag: "All", keepIndex: false })}
+          >
+            Stash changes…
+          </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
     )

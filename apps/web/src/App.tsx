@@ -15,6 +15,7 @@ import * as Cause from "effect/Cause"
 import { SettingsIcon, XIcon } from "lucide-react"
 import { type Ref, useEffect, useState } from "react"
 import { CommandPalette } from "@/components/command-palette"
+import { CredentialPrompts } from "@/components/credential-prompts"
 import { Loading, Nothing } from "@/components/loading"
 import { useBackgroundFetch } from "@/components/network"
 import { RepoPicker } from "@/components/repo-picker"
@@ -210,6 +211,7 @@ export function App() {
       )}
       <SettingsPage />
       <CommandPalette />
+      <CredentialPrompts paths={tabs} />
     </div>
   )
 }

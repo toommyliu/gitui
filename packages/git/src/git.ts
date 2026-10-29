@@ -1,4 +1,4 @@
-import { type CommandOutcome, GitError, type Progress } from "@gitui/contracts"
+import { type CommandOutcome, type CredentialPrompt, GitError, type Progress } from "@gitui/contracts"
 import * as Clock from "effect/Clock"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer"
 import * as Stream from "effect/Stream"
 import * as ChildProcess from "effect/process/ChildProcess"
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner"
+import { makeCredentialBridge } from "./credentials.ts"
 import { CommandLog } from "./command-log.ts"
 import { ProgressSplitter, parseProgress } from "./progress.ts"
 
@@ -57,6 +58,7 @@ const command = (cwd: string, args: ReadonlyArray<string>, options: RunOptions |
     cwd,
     env: { ...gitEnv(), ...options?.env },
     extendEnv: false,
+    forceKillAfter: "2 seconds",
     stdin: options?.stdin === undefined ? "ignore" : Stream.make(options.stdin),
   })
 
@@ -71,6 +73,9 @@ export class Git extends Context.Service<
     run(cwd: string, args: ReadonlyArray<string>, options?: RunOptions): Effect.Effect<Uint8Array, GitError>
     text(cwd: string, args: ReadonlyArray<string>, options?: RunOptions): Effect.Effect<string, GitError>
     stream(cwd: string, args: ReadonlyArray<string>): Stream.Stream<Uint8Array, GitError>
+    output(cwd: string, args: ReadonlyArray<string>, options?: RunOptions): Stream.Stream<string, GitError>
+    prompts(cwd: string): Stream.Stream<ReadonlyArray<CredentialPrompt>>
+    answerPrompt(cwd: string, id: string, answer: string | null): boolean
     progress(cwd: string, args: ReadonlyArray<string>, options?: RunOptions): Stream.Stream<Progress, GitError>
   }
 >()("@gitui/git/Git") {
@@ -79,6 +84,14 @@ export class Git extends Context.Service<
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
       const log = yield* CommandLog
+      const bridge = yield* Effect.acquireRelease(Effect.promise(makeCredentialBridge), (bridge) =>
+        Effect.sync(() => bridge.close()),
+      )
+      const registration = (cwd: string) =>
+        Effect.acquireRelease(
+          Effect.sync(() => bridge.register(cwd)),
+          (operation) => Effect.sync(() => operation.close()),
+        )
       const spawnError = (args: ReadonlyArray<string>) => (cause: unknown) =>
         new GitError({ args: [...args], exitCode: -1, stderr: String(cause) })
 
@@ -104,45 +117,99 @@ export class Git extends Context.Service<
           )
       })
 
-      const run = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>, options?: RunOptions) {
-        const finish = yield* recorder(cwd, args, options)
-        const { stdout, stderr, exitCode } = yield* Effect.scoped(
+      const run = (cwd: string, args: ReadonlyArray<string>, options?: RunOptions) =>
+        Effect.scoped(
           Effect.gen(function* () {
-            const handle = yield* spawner.spawn(command(cwd, args, options))
-            const [stdout, stderr, exitCode] = yield* Effect.all(
+            const operation = yield* registration(cwd)
+            const finish = yield* recorder(cwd, args, options)
+            const handle = yield* spawner
+              .spawn(command(cwd, args, { ...options, env: { ...operation.env, ...options?.env } }))
+              .pipe(
+                Effect.catchTag("PlatformError", (cause) =>
+                  Effect.andThen(
+                    finish({ _tag: "SpawnFailed", message: String(cause) }, ""),
+                    Effect.fail(spawnError(args)(cause)),
+                  ),
+                ),
+              )
+            const [stdout, stderrBytes, exitCode] = yield* Effect.all(
               [Stream.mkUint8Array(handle.stdout), Stream.mkUint8Array(handle.stderr), handle.exitCode],
               { concurrency: "unbounded" },
-            )
-            return { stdout, stderr: decoder.decode(stderr).trim(), exitCode }
+            ).pipe(Effect.raceFirst(operation.cancelledEffect))
+            const stderr = operation.sanitize(decoder.decode(stderrBytes).trim())
+            const accepted = !operation.cancelled && (exitCode === 0 || (options?.okExitCodes ?? []).includes(exitCode))
+            yield* finish({ _tag: "Exited", code: exitCode, accepted }, stderr)
+            if (!accepted)
+              return yield* new GitError({
+                args: [...args],
+                exitCode,
+                stderr: operation.cancelled ? "Authentication cancelled. Retry when ready." : stderr,
+              })
+            return operation.hasSecrets ? new TextEncoder().encode(operation.sanitize(decoder.decode(stdout))) : stdout
           }),
-        ).pipe(
-          Effect.catchTag("PlatformError", (cause) =>
-            Effect.andThen(
-              finish({ _tag: "SpawnFailed", message: String(cause) }, ""),
-              Effect.fail(spawnError(args)(cause)),
-            ),
-          ),
-        )
-        const accepted = exitCode === 0 || (options?.okExitCodes ?? []).includes(exitCode)
-        yield* finish({ _tag: "Exited", code: exitCode, accepted }, stderr)
-        if (!accepted) {
-          return yield* new GitError({ args: [...args], exitCode, stderr })
-        }
-        return stdout
-      })
+        ).pipe(Effect.mapError((error) => (error instanceof GitError ? error : spawnError(args)(error))))
+
+      const output = (cwd: string, args: ReadonlyArray<string>, options?: RunOptions) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const operation = yield* registration(cwd)
+            const finish = yield* recorder(cwd, args, { ...options, write: true })
+            const handle = yield* spawner.spawn(
+              command(cwd, args, { ...options, env: { ...operation.env, ...options?.env } }),
+            )
+            const stderr = new ProgressSplitter(MAX_LOGGED_STDERR, operation.sanitize)
+            const stdout = new ProgressSplitter(0)
+            const lines = (stream: Stream.Stream<Uint8Array, unknown>, splitter: ProgressSplitter) =>
+              stream.pipe(
+                Stream.decodeText(),
+                Stream.mapAccum(
+                  () => undefined,
+                  (state, text) => [state, splitter.push(text).map(operation.sanitize)] as const,
+                  { onHalt: () => splitter.flush().map(operation.sanitize) },
+                ),
+              )
+            const exited = Effect.gen(function* () {
+              const exitCode = yield* handle.exitCode
+              const message = stderr.transcript
+              yield* finish(
+                { _tag: "Exited", code: exitCode, accepted: exitCode === 0 && !operation.cancelled },
+                message,
+              )
+              if (operation.cancelled || exitCode !== 0)
+                return yield* new GitError({
+                  args: [...args],
+                  exitCode,
+                  stderr: operation.cancelled ? "Authentication cancelled. Retry when ready." : message,
+                })
+            })
+            return Stream.merge(lines(handle.stderr, stderr), lines(handle.stdout, stdout)).pipe(
+              Stream.interruptWhen(operation.cancelledEffect),
+              Stream.concat(Stream.drain(Stream.fromEffect(exited))),
+              Stream.onExit((exit) =>
+                Exit.hasInterrupts(exit) || operation.cancelled
+                  ? finish({ _tag: "Cancelled" }, stderr.transcript)
+                  : Effect.void,
+              ),
+            )
+          }),
+        ).pipe(Stream.mapError((error) => (error instanceof GitError ? error : spawnError(args)(error))))
 
       return Git.of({
         run,
+        output,
+        prompts: bridge.prompts,
+        answerPrompt: (cwd, id, answer) => bridge.answer(cwd, id, answer),
         text: (cwd, args, options) => Effect.map(run(cwd, args, options), (bytes) => decoder.decode(bytes)),
         stream: (cwd, args) =>
           Stream.unwrap(
             Effect.gen(function* () {
+              const operation = yield* registration(cwd)
               const finish = yield* recorder(cwd, args, undefined)
-              const handle = yield* spawner.spawn(command(cwd, args, undefined))
+              const handle = yield* spawner.spawn(command(cwd, args, { env: operation.env }))
               const stderr = yield* Effect.forkScoped(Stream.mkUint8Array(handle.stderr))
               const exited = Effect.gen(function* () {
                 const exitCode = yield* handle.exitCode
-                const message = decoder.decode(yield* Fiber.join(stderr)).trim()
+                const message = operation.sanitize(decoder.decode(yield* Fiber.join(stderr)).trim())
                 yield* finish({ _tag: "Exited", code: exitCode, accepted: exitCode === 0 }, message)
                 if (exitCode !== 0) return yield* new GitError({ args: [...args], exitCode, stderr: message })
               })
@@ -152,37 +219,7 @@ export class Git extends Context.Service<
               )
             }),
           ).pipe(Stream.mapError((error) => (error instanceof GitError ? error : spawnError(args)(error)))),
-        progress: (cwd, args, options) =>
-          Stream.unwrap(
-            Effect.gen(function* () {
-              const writeOptions = { ...options, write: true }
-              const finish = yield* recorder(cwd, args, writeOptions)
-              const handle = yield* spawner.spawn(command(cwd, args, writeOptions))
-              const splitter = new ProgressSplitter()
-              const lines = handle.stderr.pipe(
-                Stream.decodeText(),
-                Stream.mapAccum(
-                  () => undefined,
-                  (state, text) => [state, splitter.push(text)] as const,
-                  { onHalt: () => splitter.flush() },
-                ),
-              )
-              const exited = Effect.gen(function* () {
-                const exitCode = yield* handle.exitCode
-                yield* finish({ _tag: "Exited", code: exitCode, accepted: exitCode === 0 }, splitter.transcript)
-                if (exitCode !== 0) {
-                  return yield* new GitError({ args: [...args], exitCode, stderr: splitter.transcript })
-                }
-              })
-              return Stream.merge(lines, Stream.drain(handle.stdout)).pipe(
-                Stream.concat(Stream.drain(Stream.fromEffect(exited))),
-                Stream.map(parseProgress),
-                Stream.onExit((exit) =>
-                  Exit.hasInterrupts(exit) ? finish({ _tag: "Cancelled" }, splitter.transcript) : Effect.void,
-                ),
-              )
-            }),
-          ).pipe(Stream.mapError((error) => (error instanceof GitError ? error : spawnError(args)(error)))),
+        progress: (cwd, args, options) => output(cwd, args, options).pipe(Stream.map(parseProgress)),
       })
     }),
   )

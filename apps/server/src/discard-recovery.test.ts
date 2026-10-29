@@ -5,6 +5,7 @@ import { expect, it } from "@effect/vitest"
 import { GitRpcs, type RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Stream from "effect/Stream"
 import * as HttpServer from "effect/http/HttpServer"
 import * as RpcClient from "effect/rpc/RpcClient"
 import * as RpcSerialization from "effect/rpc/RpcSerialization"
@@ -23,6 +24,40 @@ const client = Effect.gen(function* () {
 })
 const freshServer = () => Layer.fresh(serverLayer({ host: "127.0.0.1", port: 0, webDist: null, trustedOrigins: [] }))
 const p = (path: string) => path as RepoPath
+
+it.live("recovers unstaged lines after committing the staged part of a new file", () =>
+  Effect.gen(function* () {
+    const f = makeRepo()
+    f.commit("base")
+    f.write("new.txt", "first\nsecond\n")
+    const c = yield* client
+    const { id: repo } = yield* c.OpenRepo({ path: f.root })
+    expect(
+      yield* c.ApplyLines({
+        repo,
+        action: "stage",
+        path: p("new.txt"),
+        lines: [{ side: "new", line: 1, text: "first" }],
+      }),
+    ).toBeNull()
+    const staged = f.raw("ls-files", "--stage", "-z")
+    const backup = yield* c.ApplyLines({
+      repo,
+      action: "discard",
+      path: p("new.txt"),
+      lines: [{ side: "new", line: 2, text: "second" }],
+    })
+    expect(backup?.kind).toBe("lines")
+    expect(readFileSync(join(f.root, "new.txt"), "utf8")).toBe("first\n")
+    expect(f.raw("ls-files", "--stage", "-z")).toEqual(staged)
+    const updates = yield* Stream.runCollect(c.Commit({ repo, message: "Commit staged line", amend: false }))
+    expect(updates.at(-1)).toEqual({ _tag: "Committed", oid: f.git("rev-parse", "HEAD") })
+    expect(yield* c.RestoreDiscard({ repo, id: backup!.id, overwriteVersion: null })).toEqual({ _tag: "Restored" })
+    expect(readFileSync(join(f.root, "new.txt"), "utf8")).toBe("first\nsecond\n")
+    expect(f.git("show", "HEAD:new.txt")).toBe("first")
+    expect(f.git("diff", "--cached", "--name-only")).toBe("")
+  }).pipe(Effect.scoped, Effect.provide(freshServer())),
+)
 
 it.live("recovers discards over RPC after restarting the server, with guarded overwrites and unchanged index", () =>
   Effect.gen(function* () {

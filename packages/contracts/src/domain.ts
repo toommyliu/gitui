@@ -58,6 +58,20 @@ export type UndoCommit = typeof UndoCommit.Type
 export const Recovery = Schema.Struct({ entries: Schema.Array(RecoveryEntry), undo: UndoCommit })
 export type Recovery = typeof Recovery.Type
 
+export const DiscardBackup = Schema.Struct({
+  id: Schema.String,
+  kind: Schema.Literals(["files", "lines", "restore"]),
+  time: Schema.Int,
+  paths: Schema.Array(RepoPath),
+})
+export type DiscardBackup = typeof DiscardBackup.Type
+
+export const DiscardRestore = Schema.Union([
+  Schema.TaggedStruct("Restored", {}),
+  Schema.TaggedStruct("Conflict", { paths: Schema.Array(RepoPath), version: Schema.String }),
+])
+export type DiscardRestore = typeof DiscardRestore.Type
+
 export const Operation = Schema.Literals(["merge", "rebase", "cherry-pick", "revert", "bisect"])
 export type Operation = typeof Operation.Type
 

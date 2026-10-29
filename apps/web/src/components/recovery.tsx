@@ -1,4 +1,4 @@
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
+import { useAtom, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { Oid, RecoveryEntry, RepoId, UndoCommit } from "@gitui/contracts"
 import * as Exit from "effect/Exit"
 import { useId, useState } from "react"
@@ -14,25 +14,45 @@ import {
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useCommand } from "@/lib/commands"
 import { longDate, shortOid } from "@/lib/format"
-import { describeFailure, latest, loadError, recoveryAtom, useRunGitAction } from "@/lib/git"
+import {
+  type DiscardConflict,
+  describeFailure,
+  latest,
+  loadError,
+  recoveryAtom,
+  type RecoveryView,
+  recoveryViewAtom,
+  useRunGitAction,
+} from "@/lib/git"
+import { DiscardBackups, RestoreConflictForm } from "./discard-recovery"
 
 type AvailableUndo = Extract<UndoCommit, { _tag: "Available" }>
-type View = { kind: "list" } | { kind: "recover"; entry: RecoveryEntry } | { kind: "undo"; commit: AvailableUndo }
+type View =
+  | { kind: "list" }
+  | { kind: "recover"; entry: RecoveryEntry }
+  | { kind: "undo"; commit: AvailableUndo }
+  | { kind: "restore"; conflict: DiscardConflict }
+type Tab = "discards" | "commits"
+
+const panel = "grid gap-4 rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/50"
 
 export function RecoveryDialog({ repo, onInspect }: { repo: RepoId; onInspect: (oid: Oid) => void }) {
-  const [open, setOpen] = useState(false)
-  useCommand("repo.recovery", () => setOpen(true))
+  const [view, setView] = useAtom(recoveryViewAtom(repo))
+  useCommand("repo.recovery", () => setView({ _tag: "Browse" }))
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={view !== null} onOpenChange={(open) => open || setView(null)}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain sm:max-w-2xl">
-        {open && (
+        {view !== null && (
           <RecoveryContent
+            key={view._tag === "Conflict" ? `${view.conflict.backup.id}:${view.conflict.version}` : view._tag}
             repo={repo}
-            onClose={() => setOpen(false)}
+            initial={view}
+            onClose={() => setView(null)}
             onInspect={(oid) => {
-              setOpen(false)
+              setView(null)
               onInspect(oid)
             }}
           />
@@ -44,10 +64,12 @@ export function RecoveryDialog({ repo, onInspect }: { repo: RepoId; onInspect: (
 
 function RecoveryContent({
   repo,
+  initial,
   onClose,
   onInspect,
 }: {
   repo: RepoId
+  initial: RecoveryView
   onClose: () => void
   onInspect: (oid: Oid) => void
 }) {
@@ -55,7 +77,10 @@ function RecoveryContent({
   const result = useAtomValue(atom)
   const refresh = useAtomRefresh(atom)
   const recovery = latest(result)
-  const [view, setView] = useState<View>({ kind: "list" })
+  const [view, setView] = useState<View>(
+    initial._tag === "Conflict" ? { kind: "restore", conflict: initial.conflict } : { kind: "list" },
+  )
+  const [tab, setTab] = useState<Tab>("discards")
   const [message, setMessage] = useState("")
   const [filter, setFilter] = useState("")
   const id = useId()
@@ -92,6 +117,22 @@ function RecoveryContent({
         onCancel={() => show({ kind: "list" })}
       />
     )
+  if (view.kind === "restore")
+    return (
+      <RestoreConflictForm
+        repo={repo}
+        conflict={view.conflict}
+        onDone={(done) => {
+          show({ kind: "list" })
+          setTab("discards")
+          setMessage(done)
+        }}
+        onCancel={() => {
+          show({ kind: "list" })
+          setTab("discards")
+        }}
+      />
+    )
   const query = filter.trim().toLowerCase()
   const entries =
     recovery?.entries.filter((entry) =>
@@ -103,85 +144,101 @@ function RecoveryContent({
       <DialogHeader>
         <DialogTitle>Recovery</DialogTitle>
         <DialogDescription>
-          Find previous commits in this worktree's reflog and app backups. Reflog cannot restore discarded uncommitted
-          files.
+          Restore discarded file changes, or find previous commits in this worktree's reflog and app backups.
         </DialogDescription>
       </DialogHeader>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={recovery?.undo._tag !== "Available"}
-          onClick={() => {
-            if (recovery?.undo._tag === "Available") show({ kind: "undo", commit: recovery.undo })
-          }}
-        >
-          Undo last commit…
-        </Button>
-        <Button variant="ghost" size="sm" onClick={refresh}>
-          Refresh
-        </Button>
-        {recovery?.undo._tag === "Unavailable" && <p className="text-muted-foreground">{recovery.undo.reason}</p>}
-      </div>
       <p role="status" className={message === "" ? "sr-only" : "text-xs text-muted-foreground"}>
         {message}
       </p>
-      <Field>
-        <FieldLabel htmlFor={`${id}-filter`}>Find a commit or action</FieldLabel>
-        <Input
-          id={`${id}-filter`}
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-          placeholder="Commit message, SHA, reset, rebase…"
-          autoComplete="off"
-        />
-      </Field>
-      <div className="max-h-[min(28rem,50dvh)] overflow-y-auto overscroll-contain rounded-md border">
-        {error !== undefined ? (
-          <p role="alert" className="p-3 text-destructive">
-            {error}
-          </p>
-        ) : recovery === undefined ? (
-          <p className="p-3 text-muted-foreground">Loading recovery…</p>
-        ) : entries.length === 0 ? (
-          <p className="p-3 text-muted-foreground">
-            {query === ""
-              ? "No recovery entries yet. Commits and branch changes will appear here."
-              : "No matching entries. Try another message, action, or SHA."}
-          </p>
-        ) : (
-          entries.map((entry) => (
-            <div key={`${entry.kind}:${entry.selector}`} className="grid gap-2 border-b p-3 last:border-0">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <span className="font-medium break-words">{entry.action}</span>
-                <time
-                  className="text-[11px] text-muted-foreground"
-                  dateTime={new Date(entry.time * 1000).toISOString()}
-                >
-                  {longDate(entry.time)}
-                </time>
-              </div>
-              <p className="break-words">{entry.subject}</p>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                <code>{shortOid(entry.oid)}</code>
-                <span>{entry.actor}</span>
-                <span className="min-w-0 break-all">{entry.selector}</span>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => onInspect(entry.oid)}>
-                  Inspect commit
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => show({ kind: "recover", entry })}>
-                  Recover as branch…
-                </Button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+      <Tabs value={tab} onValueChange={(next: Tab) => setTab(next)}>
+        <TabsList>
+          <TabsTrigger value="discards">Discarded changes</TabsTrigger>
+          <TabsTrigger value="commits">Commits</TabsTrigger>
+        </TabsList>
+        <TabsContent value="discards" className={panel} keepMounted>
+          <DiscardBackups
+            repo={repo}
+            onRestored={setMessage}
+            onConflict={(conflict) => show({ kind: "restore", conflict })}
+          />
+        </TabsContent>
+        <TabsContent value="commits" className={panel}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={recovery?.undo._tag !== "Available"}
+              onClick={() => {
+                if (recovery?.undo._tag === "Available") show({ kind: "undo", commit: recovery.undo })
+              }}
+            >
+              Undo last commit…
+            </Button>
+            <Button variant="ghost" size="sm" onClick={refresh}>
+              Refresh
+            </Button>
+            {recovery?.undo._tag === "Unavailable" && <p className="text-muted-foreground">{recovery.undo.reason}</p>}
+          </div>
+          <Field>
+            <FieldLabel htmlFor={`${id}-filter`}>Find a commit or action</FieldLabel>
+            <Input
+              id={`${id}-filter`}
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Commit message, SHA, reset, rebase…"
+              autoComplete="off"
+            />
+          </Field>
+          <div className="max-h-[min(28rem,50dvh)] overflow-y-auto overscroll-contain rounded-md border">
+            {error !== undefined ? (
+              <p role="alert" className="p-3 text-destructive">
+                {error}
+              </p>
+            ) : recovery === undefined ? (
+              <p className="p-3 text-muted-foreground">Loading recovery…</p>
+            ) : entries.length === 0 ? (
+              <p className="p-3 text-muted-foreground">
+                {query === ""
+                  ? "No recovery entries yet. Commits and branch changes will appear here."
+                  : "No matching entries. Try another message, action, or SHA."}
+              </p>
+            ) : (
+              entries.map((entry) => (
+                <div key={`${entry.kind}:${entry.selector}`} className="grid gap-2 border-b p-3 last:border-0">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <span className="font-medium break-words">{entry.action}</span>
+                    <time
+                      className="text-[11px] text-muted-foreground"
+                      dateTime={new Date(entry.time * 1000).toISOString()}
+                    >
+                      {longDate(entry.time)}
+                    </time>
+                  </div>
+                  <p className="break-words">{entry.subject}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                    <code>{shortOid(entry.oid)}</code>
+                    <span>{entry.actor}</span>
+                    <span className="min-w-0 break-all">{entry.selector}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => onInspect(entry.oid)}>
+                      Inspect commit
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => show({ kind: "recover", entry })}>
+                      Recover as branch…
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
       <DialogFooter>
         <span className="me-auto self-center text-[11px] text-muted-foreground">
-          Up to 500 reflog entries and 100 app backups. Git may expire reflog entries.
+          {tab === "discards"
+            ? "Keeps the newest 100 discard backups, up to 128 MiB, in this worktree's Git folder."
+            : "Up to 500 reflog entries and 100 app backups. Git may expire reflog entries."}
         </span>
         <Button variant="outline" onClick={onClose}>
           Close

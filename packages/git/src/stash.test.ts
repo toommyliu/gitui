@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
@@ -22,6 +22,63 @@ const paths = (...paths: Array<string>) => paths as Array<RepoPath>
 const disk = (repo: ReturnType<typeof makeRepo>, path: string) => readFileSync(join(repo.root, path), "utf8")
 
 layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeServices.layer)))("Repo.stashPush", (it) => {
+  it.effect("rejects unsaved files inside a directory replacing a tracked file before cleanup", () =>
+    Effect.gen(function* () {
+      const r = yield* Repo
+      for (const keepIndex of [false, true]) {
+        for (const ignored of [false, true]) {
+          const repo = setup()
+          rmSync(join(repo.root, "selected"))
+          repo.write("selected/new", "unsaved content\n")
+          if (ignored) repo.write(".git/info/exclude", "selected/\n")
+          const index = repo.git("write-tree")
+          const before = repo.raw("status", "--porcelain", "-z")
+          const error = yield* Effect.flip(r.stashPush(id(repo.root), "", ignored, paths("selected"), keepIndex))
+          expect(error.stderr).toContain("would be overwritten")
+          expect(disk(repo, "selected/new")).toBe("unsaved content\n")
+          expect(repo.git("write-tree")).toBe(index)
+          expect(repo.raw("status", "--porcelain", "-z")).toEqual(before)
+          expect(repo.git("stash", "list")).toBe("")
+        }
+      }
+    }),
+  )
+
+  it.effect("preserves ignored content recreated at a staged deletion", () =>
+    Effect.gen(function* () {
+      const r = yield* Repo
+      for (const includeUntracked of [false, true]) {
+        const repo = setup()
+        repo.git("rm", "selected")
+        repo.write("selected", "ignored content\n")
+        repo.write(".git/info/exclude", "/selected\n")
+        const index = repo.git("write-tree")
+        const error = yield* Effect.flip(r.stashPush(id(repo.root), "", includeUntracked, paths("selected")))
+        expect(error.stderr).toContain("would be overwritten")
+        expect(disk(repo, "selected")).toBe("ignored content\n")
+        expect(repo.git("write-tree")).toBe(index)
+        expect(repo.git("stash", "list")).toBe("")
+      }
+    }),
+  )
+
+  it.effect("preserves an untracked file obstructing a selected path's parent directory", () =>
+    Effect.gen(function* () {
+      const repo = setup()
+      repo.write("folder/file", "tracked content\n")
+      repo.git("add", "folder/file")
+      repo.commit("nested file")
+      rmSync(join(repo.root, "folder"), { recursive: true })
+      repo.write("folder", "unsaved parent\n")
+      const index = repo.git("write-tree")
+      const error = yield* Effect.flip((yield* Repo).stashPush(id(repo.root), "", true, paths("folder/file")))
+      expect(error.stderr).toContain("would be overwritten")
+      expect(disk(repo, "folder")).toBe("unsaved parent\n")
+      expect(repo.git("write-tree")).toBe(index)
+      expect(repo.git("stash", "list")).toBe("")
+    }),
+  )
+
   it.effect("saves a copy of staged-only changes while keeping them staged in either scope", () =>
     Effect.gen(function* () {
       const r = yield* Repo

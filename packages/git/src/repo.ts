@@ -962,12 +962,30 @@ export class Repo extends Context.Service<
                   exitCode: -1,
                   stderr: "Nested repositories must be stashed separately.",
                 })
-              if (!includeUntracked && untracked.some((path) => headPaths.includes(path)))
-                return yield* new GitError({
-                  args: ["stash"],
-                  exitCode: -1,
-                  stderr: "Include untracked files to stash a deleted file that has been recreated.",
-                })
+              const restoring = keepIndex ? indexPaths : [...new Set([...headPaths, ...indexPaths])]
+              const overlaps = (path: string) =>
+                restoring.some(
+                  (target) => path === target || path.startsWith(`${target}/`) || target.startsWith(`${path}/`),
+                )
+              const untrackedRoots = (yield* git.text(repo, ["ls-files", "--others", "--directory", "-z"]))
+                .split("\0")
+                .filter(Boolean)
+                .map((path) => path.replace(/\/$/, ""))
+                .filter(overlaps)
+              const obstructions = [...new Set([...restoring, ...untrackedRoots])]
+              if (obstructions.length > 0) {
+                const saved = new Set(includeUntracked ? untracked : [])
+                const unsaved = (yield* git.text(repo, ["ls-files", "--others", "-z", "--", ...obstructions]))
+                  .split("\0")
+                  .filter(Boolean)
+                if (unsaved.some((path) => !saved.has(path) && overlaps(path.replace(/\/$/, ""))))
+                  return yield* new GitError({
+                    args: ["stash"],
+                    exitCode: -1,
+                    stderr:
+                      "Untracked or ignored files would be overwritten. Move them aside or include the untracked files in the stash.",
+                  })
+              }
               yield* temporary(["read-tree", head])
               yield* temporary(["update-index", "--force-remove", "-z", "--stdin"], nulList(selectedPaths))
               if (entries.length > 0) yield* temporary(["update-index", "-z", "--index-info"], entries)
@@ -1017,8 +1035,7 @@ export class Repo extends Context.Service<
                   if (keepIndex) {
                     if (indexPaths.length > 0) yield* withPaths(repo, ["restore", "--worktree"], indexPaths)
                   } else {
-                    const tracked = [...new Set([...headPaths, ...indexPaths])]
-                    yield* withPaths(repo, ["restore", "--source", head, "--staged", "--worktree"], tracked)
+                    yield* withPaths(repo, ["restore", "--source", head, "--staged", "--worktree"], restoring)
                   }
                   if (includeUntracked && untracked.length > 0)
                     yield* chunked(

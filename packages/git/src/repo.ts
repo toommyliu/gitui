@@ -990,6 +990,15 @@ export class Repo extends Context.Service<
                     throw cause
                   }
                 })
+              const captured = new Set(indexPaths)
+              const indexed = (yield* git.text(repo, ["ls-files", "--cached", "-z"])).split("\0").filter(Boolean)
+              if (yield* inspect(() => indexed.some((path) => !captured.has(path) && overlaps(path))))
+                return yield* new GitError({
+                  args: ["stash"],
+                  exitCode: -1,
+                  stderr:
+                    "Stashing would overwrite unselected tracked files. Select all affected files before stashing.",
+                })
               const otherRoots = (yield* git.text(repo, ["ls-files", "--others", "--directory", "-z"]))
                 .split("\0")
                 .filter(Boolean)

@@ -22,6 +22,38 @@ const paths = (...paths: Array<string>) => paths as Array<RepoPath>
 const disk = (repo: ReturnType<typeof makeRepo>, path: string) => readFileSync(join(repo.root, path), "utf8")
 
 layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeServices.layer)))("Repo.stashPush", (it) => {
+  it.effect("rejects restoration over an unselected indexed parent without expanding stash scope", () =>
+    Effect.gen(function* () {
+      const r = yield* Repo
+      for (const includeUntracked of [false, true]) {
+        const repo = setup()
+        repo.write("dir/file", "original child\n")
+        repo.git("add", "dir/file")
+        repo.commit("nested file")
+        repo.git("rm", "dir/file")
+        repo.write("dir", "staged parent\n")
+        repo.git("add", "dir")
+        repo.write("dir", "unstaged parent\n")
+        const index = repo.git("write-tree")
+        const before = repo.raw("status", "--porcelain", "-z")
+        const error = yield* Effect.flip(r.stashPush(id(repo.root), "", includeUntracked, paths("dir/file")))
+        expect(error.stderr).toContain("unselected tracked files")
+        expect(repo.raw("show", ":dir").toString()).toBe("staged parent\n")
+        expect(disk(repo, "dir")).toBe("unstaged parent\n")
+        expect(repo.git("write-tree")).toBe(index)
+        expect(repo.raw("status", "--porcelain", "-z")).toEqual(before)
+        expect(repo.git("stash", "list")).toBe("")
+        yield* r.stashPush(id(repo.root), "both selected", includeUntracked, paths("dir/file", "dir"))
+        expect(disk(repo, "dir/file")).toBe("original child\n")
+        expect(repo.raw("show", "stash:dir").toString()).toBe("unstaged parent\n")
+        expect(repo.raw("show", "stash^2:dir").toString()).toBe("staged parent\n")
+        yield* r.stashApply(id(repo.root), repo.git("rev-parse", "refs/stash") as Oid, true)
+        expect(disk(repo, "dir")).toBe("unstaged parent\n")
+        expect(repo.git("stash", "list")).toBe("")
+      }
+    }),
+  )
+
   it.effect("preserves differently cased directory obstructions using filesystem equivalence", () =>
     Effect.gen(function* () {
       const r = yield* Repo

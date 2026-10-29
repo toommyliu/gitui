@@ -58,9 +58,9 @@ export const diffMatches = (items: ReadonlyArray<SearchItem>, query: string): Re
 export const hunkLocations = (items: ReadonlyArray<SearchItem>): ReadonlyArray<DiffLocation> =>
   items.flatMap(({ id, fileDiff }) =>
     fileDiff.hunks.map((hunk) =>
-      hunk.additionCount > 0
-        ? { id, lineNumber: hunk.additionStart, side: "additions" as const }
-        : { id, lineNumber: hunk.deletionStart, side: "deletions" as const },
+      hunk.hunkContent[0]?.type === "change" && hunk.hunkContent[0].deletions > 0
+        ? { id, lineNumber: hunk.deletionStart, side: "deletions" as const }
+        : { id, lineNumber: hunk.additionStart, side: "additions" as const },
     ),
   )
 

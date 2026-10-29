@@ -64,6 +64,18 @@ describe("find in the complete parsed diff", () => {
     ])
   })
 
+  it("starts a replacement hunk at its leading deletions rather than after them", () => {
+    const patch = `diff --git a/replacement.txt b/replacement.txt
+--- a/replacement.txt
++++ b/replacement.txt
+@@ -1,100 +1 @@
+${Array.from({ length: 100 }, (_, i) => `-old line ${i + 1}\n`).join("")}+replacement\n`
+    const replacement = parsePatchFiles(patch).flatMap((parsed) =>
+      parsed.files.map((fileDiff) => ({ id: fileDiff.name, fileDiff })),
+    )
+    expect(hunkLocations(replacement)).toEqual([{ id: "replacement.txt", lineNumber: 1, side: "deletions" }])
+  })
+
   it("wraps forward and backward and handles an empty or new search", () => {
     expect(stepMatch(3, null, 1)).toBe(0)
     expect(stepMatch(3, null, -1)).toBe(2)

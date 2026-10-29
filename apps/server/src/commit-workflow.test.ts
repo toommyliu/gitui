@@ -310,4 +310,56 @@ exit 1`,
       expect((yield* c.GetStatus({ repo })).entries).toEqual([])
     }).pipe(Effect.scoped),
   )
+  it.effect("redacts overlapping username and token answers from output, errors, and history", () =>
+    Effect.gen(function* () {
+      const c = yield* clientEffect
+      const fixture = yield* fixtureEffect
+      const { id: repo } = yield* c.OpenRepo({ path: fixture.root })
+      fixture.write("file.txt", "staged\n")
+      fixture.git("add", "file.txt")
+      fixture.git("config", "commit.gpgsign", "false")
+      hook(
+        fixture.root,
+        `username=$("$GIT_ASKPASS" 'Username for fake helper:') || exit 1
+token=$("$GIT_ASKPASS" 'Password for fake helper:') || exit 1
+echo "$token"
+echo "fatal: $token" >&2
+exit 1`,
+      )
+      const ready = yield* Deferred.make<void>()
+      const answers: Array<boolean> = []
+      const listener = yield* Effect.forkScoped(
+        Stream.runForEach(c.CredentialPrompts({ repo }), (prompts) =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(ready, undefined)
+            for (const prompt of prompts) {
+              answers.push(prompt.secret)
+              yield* c.AnswerCredentialPrompt({
+                repo,
+                id: prompt.id,
+                answer: Redacted.make(prompt.secret ? "github_pat_PRIVATE_FAKE_TOKEN" : "git"),
+              })
+            }
+          }),
+        ),
+      )
+      yield* Deferred.await(ready)
+      const output: Array<string> = []
+      const error = yield* Effect.flip(
+        Stream.runForEach(c.Commit({ repo, message: "Overlapping fake answers", amend: false }), (update) =>
+          Effect.sync(() => {
+            if (update._tag === "Output") output.push(update.text)
+          }),
+        ),
+      )
+      if (error._tag !== "GitError") return yield* Effect.die("Expected GitError")
+      const history = Option.getOrThrow(yield* Stream.runHead(c.CommandLog({ repo })))
+      expect(answers).toEqual([false, true])
+      for (const exposed of [output.join("\n"), error.stderr, JSON.stringify(history)]) {
+        expect(exposed).toContain("[redacted]")
+        expect(exposed).not.toContain("PRIVATE_FAKE_TOKEN")
+      }
+      yield* Fiber.interrupt(listener)
+    }).pipe(Effect.scoped),
+  )
 })

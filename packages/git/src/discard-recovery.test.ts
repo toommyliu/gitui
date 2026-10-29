@@ -13,9 +13,11 @@ import {
 import { join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
-import type { RepoId, RepoPath } from "@gitui/contracts"
+import { GitError, type RepoId, type RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Stream from "effect/Stream"
+import * as Option from "effect/Option"
 import { CommandLog } from "./command-log.ts"
 import { Git } from "./git.ts"
 import { makeDiscardRecovery } from "./discard-recovery.ts"
@@ -32,7 +34,7 @@ const fixture = () => {
   return repo
 }
 const testLayer = Layer.merge(Repo.layer, Git.layer).pipe(
-  Layer.provide(CommandLog.layer),
+  Layer.provideMerge(CommandLog.layer),
   Layer.provide(NodeServices.layer),
 )
 layer(testLayer)("Discard recovery", (it) => {
@@ -63,6 +65,35 @@ layer(testLayer)("Discard recovery", (it) => {
         expect(f.raw("ls-files", "--stage", "-z")).toEqual(index)
         expect(yield* r.restoreDiscard(id(f.root), backup!.id, null)).toEqual({ _tag: "Restored" })
       }),
+  )
+
+  it.effect("keeps an interrupted discard recoverable and never logs its contents", () =>
+    Effect.gen(function* () {
+      const f = fixture()
+      f.write("tracked", "private-token-that-must-not-be-logged\n")
+      const recovery = makeDiscardRecovery(yield* Git)
+      const interrupted = recovery.protect(
+        id(f.root),
+        [p("tracked")],
+        "files",
+        Effect.gen(function* () {
+          f.write("tracked", "partially discarded\n")
+          return yield* new GitError({ args: ["discard"], exitCode: -1, stderr: "Interrupted" })
+        }),
+      )
+      expect((yield* Effect.result(interrupted))._tag).toBe("Failure")
+      const restarted = makeDiscardRecovery(yield* Git)
+      const backup = (yield* restarted.discardRecovery(id(f.root)))[0]!
+      const conflict = yield* restarted.restoreDiscard(id(f.root), backup.id, null)
+      expect(conflict._tag).toBe("Conflict")
+      if (conflict._tag !== "Conflict") return yield* Effect.die("Expected guarded interrupted recovery")
+      yield* restarted.restoreDiscard(id(f.root), backup.id, conflict.version)
+      expect(readFileSync(join(f.root, "tracked"), "utf8")).toBe("private-token-that-must-not-be-logged\n")
+      const logs = yield* Stream.runHead((yield* CommandLog).entries(f.root))
+      expect(JSON.stringify(Option.getOrThrow(logs))).not.toContain("private-token-that-must-not-be-logged")
+      expect(statSync(join(f.root, ".git/gitui-discard-backups")).mode & 0o777).toBe(0o700)
+      expect(statSync(join(f.root, ".git/gitui-discard-backups", `${backup.id}.json`)).mode & 0o777).toBe(0o600)
+    }),
   )
 
   it.effect("recovers selected lines and survives a fresh service instance", () =>

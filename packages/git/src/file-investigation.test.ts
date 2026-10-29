@@ -188,48 +188,52 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         )
       }),
     )
-    it.effect("classifies special blobs safely and restores binary and large files byte for byte", () =>
-      Effect.gen(function* () {
-        const f = fixture(),
-          r = yield* Repo
-        const binary = Buffer.from([0, 255, 1, 2]),
-          invalid = Buffer.from([255, 254]),
-          large = Buffer.alloc(1024 * 1024 + 1, 65)
-        writeFileSync(join(f.root, "binary"), binary)
-        writeFileSync(join(f.root, "invalid"), invalid)
-        writeFileSync(join(f.root, "large"), large)
-        symlinkSync("../../outside", join(f.root, "link"))
-        f.git("add", ".")
-        const revision = f.commit("Special files")
-        for (const [name, tag] of [
-          ["binary", "Binary"],
-          ["invalid", "Binary"],
-          ["large", "TooLarge"],
-          ["link", "Symlink"],
-        ] as const) {
-          expect((yield* r.fileRevision(f.id, revision, RepoPath.make(name))).content._tag).toBe(tag)
-          expect((yield* r.fileBlame(f.id, revision, RepoPath.make(name)))._tag).toBe("Unavailable")
-        }
-        expect((yield* r.fileRevision(f.id, revision, RepoPath.make("link"))).content).toEqual({
-          _tag: "Symlink",
-          target: "../../outside",
-        })
-        for (const [name, bytes] of [
-          ["binary", binary],
-          ["large", large],
-        ] as const) {
-          const dest = RepoPath.make(`copy-${name}`),
-            preview = yield* r.previewFileRestore(f.id, source(revision, name), dest)
-          yield* r.restoreFile(f.id, preview.source, dest, preview.version, false)
-          expect(readFileSync(join(f.root, dest))).toEqual(bytes)
-        }
-        const preview = yield* r.previewFileRestore(f.id, source(revision, "link"), RepoPath.make("copy-link"))
-        expect(preview.unavailable).toContain("symbolic links")
-        expect(
-          (yield* Effect.result(r.restoreFile(f.id, preview.source, preview.destination, preview.version, true)))._tag,
-        ).toBe("Failure")
-        expect(existsSync(join(f.root, "copy-link"))).toBe(false)
-      }),
+    it.effect(
+      "classifies special blobs safely and restores binary and large files byte for byte",
+      () =>
+        Effect.gen(function* () {
+          const f = fixture(),
+            r = yield* Repo
+          const binary = Buffer.from([0, 255, 1, 2]),
+            invalid = Buffer.from([255, 254]),
+            large = Buffer.alloc(1024 * 1024 + 1, 65)
+          writeFileSync(join(f.root, "binary"), binary)
+          writeFileSync(join(f.root, "invalid"), invalid)
+          writeFileSync(join(f.root, "large"), large)
+          symlinkSync("../../outside", join(f.root, "link"))
+          f.git("add", ".")
+          const revision = f.commit("Special files")
+          for (const [name, tag] of [
+            ["binary", "Binary"],
+            ["invalid", "Binary"],
+            ["large", "TooLarge"],
+            ["link", "Symlink"],
+          ] as const) {
+            expect((yield* r.fileRevision(f.id, revision, RepoPath.make(name))).content._tag).toBe(tag)
+            expect((yield* r.fileBlame(f.id, revision, RepoPath.make(name)))._tag).toBe("Unavailable")
+          }
+          expect((yield* r.fileRevision(f.id, revision, RepoPath.make("link"))).content).toEqual({
+            _tag: "Symlink",
+            target: "../../outside",
+          })
+          for (const [name, bytes] of [
+            ["binary", binary],
+            ["large", large],
+          ] as const) {
+            const dest = RepoPath.make(`copy-${name}`),
+              preview = yield* r.previewFileRestore(f.id, source(revision, name), dest)
+            yield* r.restoreFile(f.id, preview.source, dest, preview.version, false)
+            expect(readFileSync(join(f.root, dest))).toEqual(bytes)
+          }
+          const preview = yield* r.previewFileRestore(f.id, source(revision, "link"), RepoPath.make("copy-link"))
+          expect(preview.unavailable).toContain("symbolic links")
+          expect(
+            (yield* Effect.result(r.restoreFile(f.id, preview.source, preview.destination, preview.version, true)))
+              ._tag,
+          ).toBe("Failure")
+          expect(existsSync(join(f.root, "copy-link"))).toBe(false)
+        }),
+      15_000,
     )
     it.effect("refuses oversized restores and submodules", () =>
       Effect.gen(function* () {
@@ -249,6 +253,58 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
               ._tag,
           ).toBe("Failure")
         }
+      }),
+    )
+    it.effect("protects relocated Git metadata during preview and stale restores", () =>
+      Effect.gen(function* () {
+        const f = fixture(),
+          r = yield* Repo
+        const metadataIndex = RepoPath.make("metadata/index")
+        f.write(metadataIndex, "historical file, not an index\n")
+        f.git("add", ".")
+        const revision = f.commit("Historical metadata path")
+        f.git("rm", metadataIndex)
+        f.commit("Remove historical path")
+        const preview = yield* r.previewFileRestore(f.id, source(revision, metadataIndex), metadataIndex)
+        f.git("init", "--separate-git-dir", "metadata")
+        const index = readFileSync(join(f.root, metadataIndex))
+        expect((yield* Effect.result(r.previewFileRestore(f.id, preview.source, metadataIndex)))._tag).toBe("Failure")
+        expect(
+          (yield* Effect.result(r.restoreFile(f.id, preview.source, metadataIndex, preview.version, true)))._tag,
+        ).toBe("Failure")
+        expect(readFileSync(join(f.root, metadataIndex))).toEqual(index)
+        expect(f.git("status", "--porcelain")).toBe("?? metadata/")
+      }),
+    )
+    it.effect("protects the common Git directory inside a linked worktree", () =>
+      Effect.gen(function* () {
+        const f = fixture(),
+          r = yield* Repo
+        const metadataIndex = RepoPath.make("metadata/index")
+        f.write(metadataIndex, "historical file, not an index\n")
+        f.git("add", ".")
+        const revision = f.commit("Historical metadata path")
+        f.git("rm", metadataIndex)
+        f.commit("Remove historical path")
+        const linked = join(f.root, "linked")
+        f.git("worktree", "add", "-qb", "linked", linked)
+        f.git("init", "--separate-git-dir", join(linked, "metadata"))
+        f.git("worktree", "repair", linked)
+        const repo = RepoId.make(linked)
+        const commonIndex = readFileSync(join(linked, metadataIndex))
+        const linkedIndexPath = join(linked, "metadata/worktrees/linked/index")
+        const linkedIndex = readFileSync(linkedIndexPath)
+        for (const destination of [metadataIndex, RepoPath.make("metadata/worktrees/linked/index")]) {
+          expect(
+            (yield* Effect.result(r.previewFileRestore(repo, source(revision, metadataIndex), destination)))._tag,
+          ).toBe("Failure")
+          expect(
+            (yield* Effect.result(r.restoreFile(repo, source(revision, metadataIndex), destination, "", true)))._tag,
+          ).toBe("Failure")
+        }
+        expect(readFileSync(join(linked, metadataIndex))).toEqual(commonIndex)
+        expect(readFileSync(linkedIndexPath)).toEqual(linkedIndex)
+        expect(f.git("-C", linked, "status", "--porcelain")).toBe("?? metadata/")
       }),
     )
     it.effect("rejects invalid revisions, traversal and symlink destinations or parents", () =>

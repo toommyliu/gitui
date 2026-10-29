@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto"
 import { constants } from "node:fs"
-import { lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises"
+import { lstat, mkdir, open, realpath, rename, stat, unlink } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { type FileIdentity, type FileRestorePreview, Oid, type RepoId, type RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
@@ -11,8 +11,17 @@ import { fileError, RESTORE_BYTES, treeFile, validateFilePath } from "./file-tre
 const io = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: (error) => fileError(String(error)) })
 const missing = (error: unknown) => error instanceof Error && "code" in error && error.code === "ENOENT"
 
-const destinationState = async (repo: RepoId, path: RepoPath) => {
+const destinationState = async (
+  repo: RepoId,
+  path: RepoPath,
+  directories: ReadonlyArray<{ dev: number; ino: number }>,
+) => {
+  const protectMetadata = (info: { dev: number; ino: number }) => {
+    if (directories.some((directory) => directory.dev === info.dev && directory.ino === info.ino))
+      throw new Error("Restoring into Git's metadata or common directory is not allowed. Choose a working-tree file.")
+  }
   const root = await realpath(repo)
+  protectMetadata(await lstat(root))
   const parts = path.split("/")
   let parent = root
   for (const part of parts.slice(0, -1)) {
@@ -22,6 +31,7 @@ const destinationState = async (repo: RepoId, path: RepoPath) => {
       throw error
     })
     if (info === null) continue
+    protectMetadata(info)
     if (!info.isDirectory() || info.isSymbolicLink())
       throw new Error("The destination's parent must be a directory, without symbolic links.")
   }
@@ -76,6 +86,7 @@ export const makeFileRestore = (git: Git["Service"]) => {
     if (unavailable !== null)
       return {
         entry,
+        directories: [],
         working: null,
         preview: {
           source: { revision, path: source.path },
@@ -85,7 +96,12 @@ export const makeFileRestore = (git: Git["Service"]) => {
           unavailable,
         } satisfies FileRestorePreview,
       }
-    const working = yield* io(() => destinationState(repo, destination))
+    const directories = yield* Effect.forEach(["--absolute-git-dir", "--git-common-dir"], (flag) =>
+      git
+        .text(repo, ["rev-parse", "--path-format=absolute", flag])
+        .pipe(Effect.flatMap((path) => io(() => stat(path.replace(/\n$/, ""))))),
+    )
+    const working = yield* io(() => destinationState(repo, destination, directories))
     const index = yield* git.run(repo, ["ls-files", "--stage", "-z", "--", destination])
     const head = (yield* git.text(repo, ["rev-parse", "--verify", "-q", "HEAD"], { okExitCodes: [1] })).trim()
     const base = head === "" ? null : yield* treeFile(git, repo, Oid.make(head), destination)
@@ -103,6 +119,7 @@ export const makeFileRestore = (git: Git["Service"]) => {
       .digest("hex")
     return {
       entry,
+      directories,
       working,
       preview: {
         source: { revision, path: source.path },
@@ -128,7 +145,7 @@ export const makeFileRestore = (git: Git["Service"]) => {
       expectedVersion: string,
       overwrite: boolean,
     ) {
-      const { entry, working, preview } = yield* snapshot(repo, source, destination)
+      const { entry, directories, working, preview } = yield* snapshot(repo, source, destination)
       if (preview.unavailable !== null || entry === null || working === null)
         return yield* fileError(preview.unavailable ?? "Source file is missing.")
       if (preview.version !== expectedVersion)
@@ -141,7 +158,7 @@ export const makeFileRestore = (git: Git["Service"]) => {
       yield* io(async () => {
         const parent = dirname(working.fullPath)
         await mkdir(parent, { recursive: true })
-        await destinationState(repo, destination)
+        await destinationState(repo, destination, directories)
         const temporary = join(parent, `.gitui-restore-${randomUUID()}`)
         try {
           const handle = await open(temporary, "wx", entry.mode === "100755" ? 0o755 : 0o644)
@@ -151,7 +168,7 @@ export const makeFileRestore = (git: Git["Service"]) => {
           } finally {
             await handle.close()
           }
-          const latest = await destinationState(repo, destination)
+          const latest = await destinationState(repo, destination, directories)
           if (latest.stamp !== working.stamp)
             throw new Error("The destination changed while preparing the restore. Review it again before restoring.")
           await rename(temporary, working.fullPath)

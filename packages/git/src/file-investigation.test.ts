@@ -107,6 +107,29 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         expect(f.git("rev-parse", "HEAD")).toBe(head)
       }),
     )
+    for (const ending of ["", "\n"]) {
+      it.effect(`blames exactly 20,000 lines with ${ending === "" ? "no final newline" : "a final newline"}`, () =>
+        Effect.gen(function* () {
+          const f = fixture(),
+            r = yield* Repo
+          f.write(path, "line\n".repeat(19_999) + "last" + ending)
+          f.git("add", ".")
+          const revision = f.commit("Line limit")
+          const blame = yield* r.fileBlame(f.id, revision, path)
+          expect(blame._tag).toBe("Lines")
+          if (blame._tag !== "Lines") return
+          expect(blame.lines).toHaveLength(20_000)
+          expect(blame.lines.at(-1)).toMatchObject({ oid: revision, line: 20_000, content: "last" })
+          f.write(path, "line\n".repeat(20_000) + "too many" + ending)
+          f.git("add", ".")
+          const oversized = f.commit("Exceed line limit")
+          expect(yield* r.fileBlame(f.id, oversized, path)).toEqual({
+            _tag: "Unavailable",
+            reason: "This file has more than 20,000 lines. Use git blame from the command line.",
+          })
+        }),
+      )
+    }
     it.effect("treats magic, option-like, whitespace and colon filenames literally", () =>
       Effect.gen(function* () {
         const f = fixture(),

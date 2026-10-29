@@ -34,7 +34,9 @@ export const fileBlame = Effect.fn("File.blame")(function* (
       _tag: "Unavailable",
       reason: "Blame is available for UTF-8 text files up to 1 MiB. Select a text revision of this file.",
     }
-  if (file.content.content.split("\n").length > 20000)
+  const content = file.content.content
+  const lineCount = content.split("\n").length - (content.endsWith("\n") ? 1 : 0)
+  if (lineCount > 20_000)
     return { _tag: "Unavailable", reason: "This file has more than 20,000 lines. Use git blame from the command line." }
   const raw = yield* git
     .run(repo, ["-c", "core.quotePath=true", "blame", "--line-porcelain", "--no-textconv", file.revision, "--", path])

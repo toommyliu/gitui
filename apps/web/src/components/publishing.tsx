@@ -108,7 +108,11 @@ export function usePublishing(repo: RepoId) {
     }
     const saved = savedPushDestination(registry.get(syncPreferencesAtom(repo)), context)
     const preselected = saved?.remote ?? (context.remotes.length === 1 ? context.remotes[0]!.name : "")
-    const tracked = `refs/remotes/${preselected}/`
+    const { remote: upstreamRemote, merge } = context.upstream
+    const upstreamBranch =
+      merge.length === 1 && context.remotes.some((remote) => remote.name === upstreamRemote)
+        ? /^refs\/heads\/(.+)$/.exec(merge[0]!)?.[1]
+        : undefined
     prompt({
       title: `Push ${branch.name}`,
       description: `gitui remembers the remote and branch you choose for ${branch.name} and pushes there instead of Git's default push destination. It asks again if the upstream or remote settings change.`,
@@ -117,11 +121,7 @@ export function usePublishing(repo: RepoId) {
         {
           key: "remoteBranch",
           label: "Remote branch",
-          initial:
-            saved?.remoteBranch ??
-            (preselected !== "" && branch.upstream?.ref.startsWith(tracked)
-              ? branch.upstream.ref.slice(tracked.length)
-              : branch.name),
+          initial: saved?.remoteBranch ?? upstreamBranch ?? branch.name,
         },
       ],
       options: [

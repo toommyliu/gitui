@@ -919,6 +919,13 @@ export class Repo extends Context.Service<
         editRemote: locked(service.editRemote),
         removeRemote: locked(service.removeRemote),
         setUpstream: locked(service.setUpstream),
+        push: (repo, destination, setUpstream, expectedContext) =>
+          Stream.unwrap(
+            Effect.as(
+              Effect.acquireRelease(lockFor(repo).take(1), () => lockFor(repo).release(1)),
+              service.push(repo, destination, setUpstream, expectedContext),
+            ),
+          ),
         pull: (repo, strategy, target) =>
           Stream.unwrap(
             Effect.as(

@@ -102,6 +102,7 @@ const capture = async (repo: string, paths: ReadonlyArray<string>): Promise<Arra
 }
 
 const syncDirectory = async (directory: string) => {
+  if (process.platform === "win32") return
   const handle = await open(directory, "r")
   try {
     await handle.sync()
@@ -213,7 +214,13 @@ export const makeDiscardRecovery = (git: Git["Service"]) => {
           .sort()
           .reverse()
         const entries = []
-        for (const name of names) entries.push((await readSaved(dir, name)).entry)
+        for (const name of names) {
+          const saved = await readSaved(dir, name).catch((error: unknown) => {
+            if (missing(error)) return null
+            throw error
+          })
+          if (saved !== null) entries.push(saved.entry)
+        }
         return entries
       })
     }),
@@ -254,23 +261,32 @@ export const makeDiscardRecovery = (git: Git["Service"]) => {
           await checkParents(repo, item.path, item.state._tag !== "Missing")
           const target = join(repo, item.path)
           if (item.state._tag === "Missing") {
-            await unlink(target).catch((error: unknown) => {
-              if (!missing(error)) throw error
-            })
+            try {
+              await unlink(target)
+            } catch (error) {
+              if (missing(error)) continue
+              throw error
+            }
           } else {
             const temp = join(dirname(target), `.gitui-restore-${randomBytes(12).toString("hex")}`)
-            if (item.state._tag === "Symlink") await symlink(Buffer.from(item.state.content, "base64"), temp)
-            else {
-              const handle = await open(temp, "wx", item.state.mode)
-              try {
-                await handle.writeFile(Buffer.from(item.state.content, "base64"))
-                await handle.chmod(item.state.mode)
-                await handle.sync()
-              } finally {
-                await handle.close()
+            try {
+              if (item.state._tag === "Symlink") await symlink(Buffer.from(item.state.content, "base64"), temp)
+              else {
+                const handle = await open(temp, "wx", item.state.mode)
+                try {
+                  await handle.writeFile(Buffer.from(item.state.content, "base64"))
+                  await handle.chmod(item.state.mode)
+                  await handle.sync()
+                } finally {
+                  await handle.close()
+                }
               }
+              await rename(temp, target)
+            } finally {
+              await unlink(temp).catch((error: unknown) => {
+                if (!missing(error)) throw error
+              })
             }
-            await rename(temp, target)
           }
           await syncDirectory(dirname(target))
         }

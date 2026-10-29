@@ -367,7 +367,11 @@ export const useCheckout = () => {
     }
     const includeUntracked = error.stderr.includes("untracked working tree files would be")
     const stashAndSwitch = async () => {
-      if (await git("Stash", repo, (c) => c("StashPush", { repo, message: "", includeUntracked })))
+      if (
+        await git("Stash", repo, (c) =>
+          c("StashPush", { repo, message: "", includeUntracked, paths: null, keepIndex: false }),
+        )
+      )
         await git("Checkout", repo, checkout)
     }
     fail("Checkout", exit.cause, { label: "Stash and switch", onClick: () => void stashAndSwitch() })

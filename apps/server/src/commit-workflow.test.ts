@@ -2,7 +2,7 @@ import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path"
 import { NodeSocket } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
-import { GitRpcs, type CredentialPrompt } from "@gitui/contracts"
+import { GitRpcs, RepoPath, type CredentialPrompt } from "@gitui/contracts"
 import * as Deferred from "effect/Deferred"
 import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
@@ -36,6 +36,40 @@ const hook = (root: string, source: string) => {
 }
 
 layer(serverLayer({ host: "127.0.0.1", port: 0, webDist: null, trustedOrigins: [] }))("Commit workflow RPC", (it) => {
+  it.effect("commits partially staged new files without consuming a selected-file stash", () =>
+    Effect.gen(function* () {
+      const c = yield* clientEffect
+      const fixture = yield* fixtureEffect
+      fixture.write("notes.txt", "before\n")
+      fixture.git("add", "notes.txt")
+      fixture.commit("Base")
+      const { id: repo } = yield* c.OpenRepo({ path: fixture.root })
+      const path = RepoPath.make("new.txt")
+      fixture.write(path, "first\nsecond\n")
+      fixture.write("notes.txt", "after\n")
+      fixture.write("unrelated.txt", "leave this alone\n")
+      yield* c.ApplyLines({ repo, action: "stage", path, lines: [{ side: "new", line: 1, text: "first" }] })
+      yield* c.StashPush({
+        repo,
+        message: "Park notes",
+        includeUntracked: false,
+        paths: [RepoPath.make("notes.txt")],
+        keepIndex: true,
+      })
+      const stash = (yield* c.GetRefs({ repo })).stashes[0]!
+      expect(readFileSync(join(fixture.root, path), "utf8")).toBe("first\nsecond\n")
+      expect(readFileSync(join(fixture.root, "notes.txt"), "utf8")).toBe("before\n")
+      const updates = yield* Stream.runCollect(c.Commit({ repo, message: "Only the first line", amend: false }))
+      expect(updates.at(-1)).toEqual({ _tag: "Committed", oid: fixture.git("rev-parse", "HEAD") })
+      expect(fixture.git("show", "HEAD:new.txt")).toBe("first")
+      yield* c.StashApply({ repo, oid: stash.oid, drop: false })
+      expect(readFileSync(join(fixture.root, path), "utf8")).toBe("first\nsecond\n")
+      expect(readFileSync(join(fixture.root, "notes.txt"), "utf8")).toBe("after\n")
+      expect(readFileSync(join(fixture.root, "unrelated.txt"), "utf8")).toBe("leave this alone\n")
+      expect(fixture.git("diff", "--cached", "--name-only")).toBe("")
+    }).pipe(Effect.scoped),
+  )
+
   it.effect("keeps identity local, reads inherited config, and streams hooks and a real commit result", () =>
     Effect.gen(function* () {
       const c = yield* clientEffect

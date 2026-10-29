@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
-import { existsSync, statSync } from "node:fs"
+import { existsSync, lstatSync, statSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import {
   type CommitDetail,
@@ -306,7 +306,13 @@ export class Repo extends Context.Service<
     readonly checkoutDetached: (repo: RepoId, oid: Oid) => Effect.Effect<void, GitError>
     readonly createTag: (repo: RepoId, name: string, oid: Oid, message: string) => Effect.Effect<void, GitError>
     readonly deleteTag: (repo: RepoId, name: string) => Effect.Effect<void, GitError>
-    readonly stashPush: (repo: RepoId, message: string, includeUntracked: boolean) => Effect.Effect<void, GitError>
+    readonly stashPush: (
+      repo: RepoId,
+      message: string,
+      includeUntracked: boolean,
+      paths?: ReadonlyArray<RepoPath> | null,
+      keepIndex?: boolean,
+    ) => Effect.Effect<void, GitError>
     readonly addWorktree: (
       repo: RepoId,
       path: string,
@@ -669,8 +675,25 @@ export class Repo extends Context.Service<
         path: RepoPath,
         lines: ReadonlyArray<LineSelection>,
       ) {
-        const source = action === "unstage" ? ["diff", "--cached"] : ["diff"]
-        const text = decoder.decode(yield* git.run(repo, [...source, "--no-ext-diff", "--no-color", "--", path]))
+        const targetDiff = action === "unstage" ? { _tag: "Staged" as const } : { _tag: "Unstaged" as const }
+        const entry =
+          action === "unstage" ? (yield* status(repo)).entries.find((entry) => entry.path === path) : undefined
+        const paths = entry?._tag === "Tracked" && entry.from !== null ? [entry.from, path] : [path]
+        let args = patchArgs(targetDiff, paths, false)
+        let text = decoder.decode(yield* git.run(repo, args))
+        if (text === "" && action === "stage") {
+          const untracked = yield* git.text(repo, ["ls-files", "--others", "--exclude-standard", "-z", "--", path])
+          if (untracked.split("\0").includes(path)) {
+            args = patchArgs({ _tag: "Untracked" }, [path], false)
+            text = decoder.decode(yield* git.run(repo, args, { okExitCodes: [1] }))
+          }
+        }
+        if ((text.match(/^diff --git /gm)?.length ?? 0) > 1)
+          return yield* new GitError({
+            args: ["apply"],
+            exitCode: -1,
+            stderr: "Use a whole-file action for file type changes.",
+          })
         const selected = selectLines(parseFilePatch(text), lines, action === "stage" ? "forward" : "reverse")
         if (selected._tag !== "Patch") {
           return yield* new GitError({ args: ["apply"], exitCode: -1, stderr: selected.reason })
@@ -878,9 +901,21 @@ export class Repo extends Context.Service<
             ? run(repo, ["tag", name, oid])
             : run(repo, ["tag", "-a", name, "-F", "-", oid], new TextEncoder().encode(message)),
         deleteTag: (repo, name) => run(repo, ["tag", "-d", name]),
-        stashPush: (repo, message, includeUntracked) =>
-          Effect.asVoid(
-            git.run(
+        stashPush: Effect.fn("Repo.stashPush")(function* (
+          repo,
+          message,
+          includeUntracked,
+          paths = null,
+          keepIndex = false,
+        ) {
+          if (paths !== null && paths.length === 0)
+            return yield* new GitError({
+              args: ["stash", "push"],
+              exitCode: -1,
+              stderr: "Select at least one file to stash.",
+            })
+          if (paths === null && !keepIndex) {
+            yield* git.run(
               repo,
               [
                 "stash",
@@ -889,8 +924,192 @@ export class Repo extends Context.Service<
                 ...(message === "" ? [] : ["-m", message]),
               ],
               { write: true, patternPathspecs: true },
+            )
+            return
+          }
+          const current = yield* status(repo)
+          const selectedPaths = [
+            ...new Set(
+              paths ??
+                current.entries.flatMap((entry) =>
+                  entry._tag === "Tracked" && entry.from !== null ? [entry.from, entry.path] : [entry.path],
+                ),
             ),
-          ),
+          ]
+          if (selectedPaths.length === 0) return
+          if (current.operation !== null || current.entries.some((entry) => entry._tag === "Conflicted"))
+            return yield* new GitError({
+              args: ["stash"],
+              exitCode: -1,
+              stderr: "Finish the current Git operation before stashing selected files.",
+            })
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const temp = yield* fs.makeTempDirectoryScoped({ prefix: "gitui-stash-" })
+              const env = { GIT_INDEX_FILE: join(temp, "index") }
+              const temporary = (args: ReadonlyArray<string>, stdin?: Uint8Array) =>
+                git.text(repo, args, { env, ...(stdin === undefined ? {} : { stdin }), write: true })
+              const head = (yield* git.text(repo, ["rev-parse", "--verify", "HEAD"])).trim()
+              const headTree = (yield* git.text(repo, ["rev-parse", `${head}^{tree}`])).trim()
+              const previous = (yield* git.text(repo, ["rev-parse", "--verify", "-q", "refs/stash"], {
+                okExitCodes: [1],
+              })).trim()
+              const entries = yield* git.run(repo, ["ls-files", "--stage", "-z", "--", ...selectedPaths])
+              const indexPaths = decoder
+                .decode(entries)
+                .split("\0")
+                .filter(Boolean)
+                .map((entry) => entry.slice(entry.indexOf("\t") + 1))
+              const headPaths = (yield* git.text(repo, [
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "-z",
+                head,
+                "--",
+                ...selectedPaths,
+              ]))
+                .split("\0")
+                .filter(Boolean)
+              const untracked = (yield* git.text(repo, [
+                "ls-files",
+                "--others",
+                "--exclude-standard",
+                "-z",
+                "--",
+                ...selectedPaths,
+              ]))
+                .split("\0")
+                .filter(Boolean)
+              if (includeUntracked && untracked.some((path) => path.endsWith("/")))
+                return yield* new GitError({
+                  args: ["stash"],
+                  exitCode: -1,
+                  stderr: "Nested repositories must be stashed separately.",
+                })
+              const restoring = keepIndex ? indexPaths : [...new Set([...headPaths, ...indexPaths])]
+              const inspect = <A>(read: () => A) =>
+                Effect.try({
+                  try: read,
+                  catch: (cause) =>
+                    new GitError({
+                      args: ["stash"],
+                      exitCode: -1,
+                      stderr: `Couldn't inspect files before stashing: ${String(cause)}`,
+                    }),
+                })
+              const overlaps = (path: string) =>
+                restoring.some((target) => {
+                  const from = path.split("/")
+                  const to = target.split("/")
+                  const depth = Math.min(from.length, to.length)
+                  const left = from.slice(0, depth).join("/")
+                  const right = to.slice(0, depth).join("/")
+                  if (left === right) return true
+                  try {
+                    const a = lstatSync(join(repo, left), { throwIfNoEntry: false })
+                    const b = lstatSync(join(repo, right), { throwIfNoEntry: false })
+                    return a !== undefined && b !== undefined && a.dev === b.dev && a.ino === b.ino
+                  } catch (cause) {
+                    if (cause instanceof Error && "code" in cause && cause.code === "ENOTDIR") return false
+                    throw cause
+                  }
+                })
+              const captured = new Set(indexPaths)
+              const indexed = (yield* git.text(repo, ["ls-files", "--cached", "-z"])).split("\0").filter(Boolean)
+              if (yield* inspect(() => indexed.some((path) => !captured.has(path) && overlaps(path))))
+                return yield* new GitError({
+                  args: ["stash"],
+                  exitCode: -1,
+                  stderr:
+                    "Stashing would overwrite unselected tracked files. Select all affected files before stashing.",
+                })
+              const otherRoots = (yield* git.text(repo, ["ls-files", "--others", "--directory", "-z"]))
+                .split("\0")
+                .filter(Boolean)
+                .map((path) => path.replace(/\/$/, ""))
+              const untrackedRoots = yield* inspect(() => otherRoots.filter(overlaps))
+              const obstructions = [...new Set([...restoring, ...untrackedRoots])]
+              if (obstructions.length > 0) {
+                const saved = new Set(includeUntracked ? untracked : [])
+                const unsaved = (yield* git.text(repo, ["ls-files", "--others", "-z", "--", ...obstructions]))
+                  .split("\0")
+                  .filter(Boolean)
+                if (yield* inspect(() => unsaved.some((path) => !saved.has(path) && overlaps(path.replace(/\/$/, "")))))
+                  return yield* new GitError({
+                    args: ["stash"],
+                    exitCode: -1,
+                    stderr:
+                      "Untracked or ignored files would be overwritten. Move them aside or include the untracked files in the stash.",
+                  })
+              }
+              yield* temporary(["read-tree", head])
+              yield* temporary(["update-index", "--force-remove", "-z", "--stdin"], nulList(selectedPaths))
+              if (entries.length > 0) yield* temporary(["update-index", "-z", "--index-info"], entries)
+              const indexTree = (yield* temporary(["write-tree"])).trim()
+              if (indexPaths.length > 0)
+                yield* temporary(["add", "-u", "--pathspec-from-file=-", "--pathspec-file-nul"], nulList(indexPaths))
+              const workTree = (yield* temporary(["write-tree"])).trim()
+              let untrackedCommit: string | null = null
+              if (includeUntracked && untracked.length > 0) {
+                yield* temporary(["read-tree", "--empty"])
+                yield* temporary(["add", "--pathspec-from-file=-", "--pathspec-file-nul"], nulList(untracked))
+                const tree = (yield* temporary(["write-tree"])).trim()
+                untrackedCommit = (yield* git.text(repo, ["commit-tree", tree, "-m", "untracked files"], {
+                  write: true,
+                })).trim()
+              }
+              if (workTree === headTree && indexTree === headTree && untrackedCommit === null) return
+              const indexCommit = (yield* git.text(
+                repo,
+                ["commit-tree", indexTree, "-p", head, "-m", "index on selected files"],
+                { write: true },
+              )).trim()
+              const branch = current.head._tag === "Branch" ? current.head.name : "(no branch)"
+              const subject = `On ${branch}: ${message.trim() === "" ? "selected files" : message}`
+              const stash = (yield* git.text(
+                repo,
+                [
+                  "commit-tree",
+                  workTree,
+                  "-p",
+                  head,
+                  "-p",
+                  indexCommit,
+                  ...(untrackedCommit === null ? [] : ["-p", untrackedCommit]),
+                  "-m",
+                  subject,
+                ],
+                { write: true },
+              )).trim()
+              yield* Effect.uninterruptible(
+                Effect.gen(function* () {
+                  yield* git.run(
+                    repo,
+                    ["update-ref", "--create-reflog", "-m", subject, "refs/stash", stash, previous],
+                    { write: true },
+                  )
+                  if (keepIndex) {
+                    if (indexPaths.length > 0) yield* withPaths(repo, ["restore", "--worktree"], indexPaths)
+                  } else {
+                    yield* withPaths(repo, ["restore", "--source", head, "--staged", "--worktree"], restoring)
+                  }
+                  if (includeUntracked && untracked.length > 0)
+                    yield* chunked(
+                      repo,
+                      ["clean", "-f", "-q"],
+                      untracked.filter((path) => keepIndex || !headPaths.includes(path)),
+                      true,
+                    )
+                }),
+              )
+            }),
+          ).pipe(
+            Effect.catchTag("PlatformError", (error) =>
+              Effect.fail(new GitError({ args: ["stash"], exitCode: -1, stderr: error.message })),
+            ),
+          )
+        }),
         addWorktree: Effect.fn("Repo.addWorktree")(function* (repo, path, branch, startPoint) {
           const exists = (yield* git.text(repo, ["branch", "--list", branch])).trim() !== ""
           yield* run(

@@ -25,6 +25,7 @@ export const fileHistory = Effect.fn("File.history")(function* (
     .run(repo, [
       "log",
       "--follow",
+      "--diff-merges=first-parent",
       "--format=%H%x00%P%x00%an%x00%at%x00%s",
       "-z",
       "--name-status",

@@ -68,6 +68,45 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         expect(f.git("rev-parse", "HEAD")).toBe(deleted)
       }),
     )
+    it.effect("includes a merge resolution after later changes and restores its exact contents", () =>
+      Effect.gen(function* () {
+        const f = fixture(),
+          r = yield* Repo
+        f.write(path, "base\n")
+        f.git("add", ".")
+        f.commit("Base")
+        f.git("switch", "-qc", "side")
+        f.write(path, "side\n")
+        f.git("add", ".")
+        f.commit("Side")
+        f.git("switch", "-q", "main")
+        f.write(path, "main\n")
+        f.git("add", ".")
+        f.commit("Main")
+        expect(() => f.git("merge", "side")).toThrow()
+        f.write(path, "merged resolution\n")
+        f.git("add", ".")
+        const merge = f.commit("Resolved merge")
+        f.write(path, "later\n")
+        f.git("add", ".")
+        const head = f.commit("Later")
+        const history = yield* r.fileHistory(f.id, head, path)
+        expect(history.entries.map((entry) => entry.oid)).toContain(merge)
+        expect((yield* r.fileRevision(f.id, merge, path)).content).toEqual({
+          _tag: "Text",
+          content: "merged resolution\n",
+        })
+        const blame = yield* r.fileBlame(f.id, merge, path)
+        expect(blame._tag).toBe("Lines")
+        if (blame._tag !== "Lines") return
+        expect(blame.lines.map((line) => line.oid)).toEqual([merge])
+        const preview = yield* r.previewFileRestore(f.id, source(merge), path)
+        yield* r.restoreFile(f.id, preview.source, path, preview.version, false)
+        expect(readFileSync(join(f.root, path), "utf8")).toBe("merged resolution\n")
+        expect(f.git("show", `:${path}`)).toBe("later")
+        expect(f.git("rev-parse", "HEAD")).toBe(head)
+      }),
+    )
     it.effect("treats magic, option-like, whitespace and colon filenames literally", () =>
       Effect.gen(function* () {
         const f = fixture(),

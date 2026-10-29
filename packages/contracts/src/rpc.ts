@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Rpc from "effect/rpc/Rpc"
 import * as RpcGroup from "effect/rpc/RpcGroup"
+import { FileBlame, FileHistory, FileIdentity, FileRestorePreview, FileRevision } from "./file.ts"
 import { RebaseState, RewritePlan, RewriteRequest, RewriteResult } from "./rewrite.ts"
 import {
   allRefsVisible,
@@ -122,6 +123,22 @@ export class GitRpcs extends RpcGroup.make(
     error: Schema.Union([GitError, LogExpired]),
   }),
   Rpc.make("GetCommit", { payload: { repo: RepoId, oid: Oid }, success: CommitDetail, error: GitError }),
+  Rpc.make("GetTrackedFiles", { payload: repo, success: Schema.Array(RepoPath), error: GitError }),
+  Rpc.make("GetFileHistory", {
+    payload: { ...repo, revision: Schema.String, path: RepoPath }, success: FileHistory, error: GitError,
+  }),
+  Rpc.make("GetFileRevision", {
+    payload: { ...repo, revision: Schema.String, path: RepoPath }, success: FileRevision, error: GitError,
+  }),
+  Rpc.make("GetFileBlame", {
+    payload: { ...repo, revision: Schema.String, path: RepoPath }, success: FileBlame, error: GitError,
+  }),
+  Rpc.make("PreviewFileRestore", {
+    payload: { ...repo, source: FileIdentity, destination: RepoPath }, success: FileRestorePreview, error: GitError,
+  }),
+  Rpc.make("RestoreFile", {
+    payload: { ...repo, source: FileIdentity, destination: RepoPath, expectedVersion: Schema.String, overwrite: Schema.Boolean }, error: GitError,
+  }),
   Rpc.make("GetComparison", {
     payload: { repo: RepoId, comparison: Comparison },
     success: ComparisonDetail,

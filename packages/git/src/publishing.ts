@@ -102,10 +102,26 @@ export const makePublishing = (git: Git["Service"]) => {
         return { name, urls: lines(urls), pushUrls: lines(pushUrls) }
       }),
     )
-    const fingerprint = createHash("sha256")
-      .update(JSON.stringify([branch, head, config, remotes]))
-      .digest("hex")
-    return { branch, fingerprint, remotes } satisfies PushContext
+    const entries = config
+      .split("\0")
+      .filter(Boolean)
+      .map((entry) => {
+        const newline = entry.indexOf("\n")
+        return [entry.slice(0, newline), entry.slice(newline + 1)] as const
+      })
+    const remoteKey = `branch.${branch}.remote`
+    const mergeKey = `branch.${branch}.merge`
+    const upstream = {
+      remote: entries.filter(([key]) => key === remoteKey).at(-1)?.[1] ?? null,
+      merge: entries.filter(([key]) => key === mergeKey).map(([, value]) => value),
+    }
+    const hash = (settings: unknown) =>
+      createHash("sha256")
+        .update(JSON.stringify([branch, head, settings, remotes]))
+        .digest("hex")
+    const fingerprint = hash(entries)
+    const configuration = hash(entries.filter(([key]) => key !== remoteKey && key !== mergeKey))
+    return { branch, fingerprint, configuration, upstream, remotes } satisfies PushContext
   })
 
   return {

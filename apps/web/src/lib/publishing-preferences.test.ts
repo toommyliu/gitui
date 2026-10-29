@@ -6,16 +6,37 @@ import {
   rememberPushDestination,
   savedPushDestination,
   syncPreferencesAtom,
+  canRememberPush,
 } from "./publishing-preferences"
 
 const context: PushContext = {
   branch: "main",
   fingerprint: "original-config",
+  configuration: "original-config-without-upstream",
+  upstream: { remote: null, merge: [] },
   remotes: [{ name: "fork", urls: ["/tmp/fork"], pushUrls: ["/tmp/fork"] }],
 }
 const destination = { branch: "main", remote: "fork", remoteBranch: "review" }
 
 describe("routine sync preferences", () => {
+  it("remembers expected upstream setup but reconfirms unrelated changes during a push", () => {
+    const pushed = {
+      ...context,
+      fingerprint: "upstream-set",
+      upstream: { remote: "fork", merge: ["refs/heads/review"] },
+    }
+    expect(canRememberPush(context, pushed, destination, true)).toBe(true)
+    expect(canRememberPush(context, pushed, destination, false)).toBe(false)
+    expect(canRememberPush(context, { ...pushed, configuration: "new-remote-config" }, destination, true)).toBe(false)
+    expect(
+      canRememberPush(
+        context,
+        { ...pushed, upstream: { remote: "origin", merge: ["refs/heads/main"] } },
+        destination,
+        true,
+      ),
+    ).toBe(false)
+  })
   it("requires explicit first publish even with one remote or an upstream", () => {
     expect(savedPushDestination(defaultSyncPreferences(), context)).toBeNull()
     const confirmed = rememberPushDestination(defaultSyncPreferences(), context, destination)

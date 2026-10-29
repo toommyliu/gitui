@@ -34,6 +34,19 @@ export const savedPushDestination = (preferences: SyncPreferences, context: Push
   return saved.destination
 }
 
+export const canRememberPush = (
+  before: PushContext,
+  after: PushContext,
+  destination: PushDestination,
+  setUpstream: boolean,
+) =>
+  before.fingerprint === after.fingerprint ||
+  (setUpstream &&
+    before.configuration === after.configuration &&
+    after.upstream.remote === destination.remote &&
+    after.upstream.merge.length === 1 &&
+    after.upstream.merge[0] === `refs/heads/${destination.remoteBranch}`)
+
 export const rememberPushDestination = (
   preferences: SyncPreferences,
   context: PushContext,

@@ -22,6 +22,38 @@ const paths = (...paths: Array<string>) => paths as Array<RepoPath>
 const disk = (repo: ReturnType<typeof makeRepo>, path: string) => readFileSync(join(repo.root, path), "utf8")
 
 layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeServices.layer)))("Repo.stashPush", (it) => {
+  it.effect("preserves differently cased directory obstructions using filesystem equivalence", () =>
+    Effect.gen(function* () {
+      const r = yield* Repo
+      for (const keepIndex of [false, true]) {
+        for (const ignored of [false, true]) {
+          for (const ignoreCase of [false, true]) {
+            const repo = setup()
+            const aliases = existsSync(join(repo.root, "SELECTED"))
+            repo.git("config", "core.ignoreCase", String(ignoreCase))
+            rmSync(join(repo.root, "selected"))
+            repo.write("SELECTED/new", "unsaved alias\n")
+            if (ignored) repo.write(".git/info/exclude", "SELECTED/\n")
+            const index = repo.git("write-tree")
+            const before = repo.raw("status", "--porcelain", "-z")
+            const stash = r.stashPush(id(repo.root), "case-aware", false, paths("selected"), keepIndex)
+            if (aliases) {
+              const error = yield* Effect.flip(stash)
+              expect(error.stderr).toContain("would be overwritten")
+              expect(repo.raw("status", "--porcelain", "-z")).toEqual(before)
+              expect(repo.git("stash", "list")).toBe("")
+            } else {
+              yield* stash
+              expect(repo.git("stash", "list")).toContain("case-aware")
+            }
+            expect(disk(repo, "SELECTED/new")).toBe("unsaved alias\n")
+            expect(repo.git("write-tree")).toBe(index)
+          }
+        }
+      }
+    }),
+  )
+
   it.effect("rejects unsaved files inside a directory replacing a tracked file before cleanup", () =>
     Effect.gen(function* () {
       const r = yield* Repo

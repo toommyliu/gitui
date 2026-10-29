@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
-import { existsSync, statSync } from "node:fs"
+import { existsSync, lstatSync, statSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import {
   type CommitDetail,
@@ -963,22 +963,45 @@ export class Repo extends Context.Service<
                   stderr: "Nested repositories must be stashed separately.",
                 })
               const restoring = keepIndex ? indexPaths : [...new Set([...headPaths, ...indexPaths])]
+              const inspect = <A>(read: () => A) =>
+                Effect.try({
+                  try: read,
+                  catch: (cause) =>
+                    new GitError({
+                      args: ["stash"],
+                      exitCode: -1,
+                      stderr: `Couldn't inspect files before stashing: ${String(cause)}`,
+                    }),
+                })
               const overlaps = (path: string) =>
-                restoring.some(
-                  (target) => path === target || path.startsWith(`${target}/`) || target.startsWith(`${path}/`),
-                )
-              const untrackedRoots = (yield* git.text(repo, ["ls-files", "--others", "--directory", "-z"]))
+                restoring.some((target) => {
+                  const from = path.split("/")
+                  const to = target.split("/")
+                  const depth = Math.min(from.length, to.length)
+                  const left = from.slice(0, depth).join("/")
+                  const right = to.slice(0, depth).join("/")
+                  if (left === right) return true
+                  try {
+                    const a = lstatSync(join(repo, left), { throwIfNoEntry: false })
+                    const b = lstatSync(join(repo, right), { throwIfNoEntry: false })
+                    return a !== undefined && b !== undefined && a.dev === b.dev && a.ino === b.ino
+                  } catch (cause) {
+                    if (cause instanceof Error && "code" in cause && cause.code === "ENOTDIR") return false
+                    throw cause
+                  }
+                })
+              const otherRoots = (yield* git.text(repo, ["ls-files", "--others", "--directory", "-z"]))
                 .split("\0")
                 .filter(Boolean)
                 .map((path) => path.replace(/\/$/, ""))
-                .filter(overlaps)
+              const untrackedRoots = yield* inspect(() => otherRoots.filter(overlaps))
               const obstructions = [...new Set([...restoring, ...untrackedRoots])]
               if (obstructions.length > 0) {
                 const saved = new Set(includeUntracked ? untracked : [])
                 const unsaved = (yield* git.text(repo, ["ls-files", "--others", "-z", "--", ...obstructions]))
                   .split("\0")
                   .filter(Boolean)
-                if (unsaved.some((path) => !saved.has(path) && overlaps(path.replace(/\/$/, ""))))
+                if (yield* inspect(() => unsaved.some((path) => !saved.has(path) && overlaps(path.replace(/\/$/, "")))))
                   return yield* new GitError({
                     args: ["stash"],
                     exitCode: -1,

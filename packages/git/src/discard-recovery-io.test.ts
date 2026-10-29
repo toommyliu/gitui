@@ -6,6 +6,7 @@ import { expect, layer } from "@effect/vitest"
 import type { RepoId, RepoPath } from "@gitui/contracts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
+import * as Fiber from "effect/Fiber"
 import { afterEach, vi } from "vite-plus/test"
 import { CommandLog } from "./command-log.ts"
 import { Repo } from "./repo.ts"
@@ -83,6 +84,52 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         expect(lstatSync(join(f.root, "dir"), { throwIfNoEntry: false })).toBeUndefined()
         expect(readFileSync(join(f.root, "z"), "utf8")).toBe("saved working edit\n")
         expect(f.raw("ls-files", "--stage", "-z")).toEqual(index)
+      }),
+    )
+
+    it.effect("keeps a cancelled restore locked until its filesystem writes settle", () =>
+      Effect.gen(function* () {
+        const f = fixture()
+        const r = yield* Repo
+        f.write("z", "discarded original\n")
+        const backup = yield* r.discard(id(f.root), [p("z")])
+        let pause = () => {}
+        let release = () => {}
+        const paused = new Promise<void>((resolve) => {
+          pause = resolve
+        })
+        const gate = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        vi.mocked(rename).mockImplementation(async (from, to) => {
+          if (basename(String(from)).startsWith(".gitui-restore-")) {
+            pause()
+            await gate
+          }
+          await real.rename(from, to)
+        })
+        const restoring = yield* Effect.forkChild(r.restoreDiscard(id(f.root), backup!.id, null))
+        yield* Effect.promise(() => paused)
+        let cancelled = false
+        const cancellation = yield* Effect.forkChild(
+          Fiber.interrupt(restoring).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                cancelled = true
+              }),
+            ),
+          ),
+          { startImmediately: true },
+        )
+        const cancelledBeforeWritesSettled = cancelled
+        const staging = yield* Effect.forkChild(r.stage(id(f.root), [p("z")]), { startImmediately: true })
+        release()
+        yield* Fiber.join(cancellation)
+        yield* Fiber.join(staging)
+        expect(cancelledBeforeWritesSettled).toBe(false)
+        expect(f.git("show", ":z")).toBe("discarded original")
+        f.write("z", "newer after cancel\n")
+        expect(readFileSync(join(f.root, "z"), "utf8")).toBe("newer after cancel\n")
       }),
     )
 

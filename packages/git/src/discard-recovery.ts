@@ -292,7 +292,7 @@ export const makeDiscardRecovery = (git: Git["Service"]) => {
         }
         await atomicSave(dir, { ...displaced, after: fingerprint(saved.before) })
         return { _tag: "Restored" }
-      })
+      }).pipe(Effect.uninterruptible)
     }),
   }
 }

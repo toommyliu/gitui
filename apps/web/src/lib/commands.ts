@@ -57,6 +57,7 @@ export const appHotkeys = defineAppHotkeys({
   "repo.push": { hotkey: null, meta: { name: "Push", group: "Repository" } },
   "repo.recovery": { hotkey: null, meta: { name: "Open recovery and reflog…", group: "Repository" } },
   "history.compare": { hotkey: null, meta: { name: "Compare branches or commits…", group: "History" } },
+  "history.file": { hotkey: null, meta: { name: "Show a file's history and blame…", group: "History" } },
   "history.extendNext": { hotkey: "Shift+ArrowDown", meta: { name: "Extend commit range down", group: "History" } },
   "history.extendPrevious": { hotkey: "Shift+ArrowUp", meta: { name: "Extend commit range up", group: "History" } },
   "history.search": { hotkey: "Mod+F", meta: { name: "Search history", group: "History" } },

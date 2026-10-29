@@ -2,6 +2,7 @@ import type { FileHistory, FileHistoryEntry, FileIdentity } from "@gitui/contrac
 
 export type FileVersion =
   | { readonly _tag: "Head"; readonly key: string; readonly source: FileIdentity }
+  | { readonly _tag: "Requested"; readonly key: string; readonly source: FileIdentity }
   | { readonly _tag: "Commit"; readonly key: string; readonly source: FileIdentity; readonly entry: FileHistoryEntry }
   | {
       readonly _tag: "BeforeDeletion"
@@ -17,9 +18,14 @@ const entryVersion = (entry: FileHistoryEntry): FileVersion => {
   return { _tag: "Commit", key, source: { revision: entry.oid, path: entry.path }, entry }
 }
 
+const anchor = (history: FileHistory, atHead: boolean): ReadonlyArray<FileVersion> => {
+  const source = { revision: history.revision, path: history.path }
+  if (atHead) return [{ _tag: "Head", key: "HEAD", source }]
+  if (history.entries.some((entry) => entry.oid === history.revision)) return []
+  return [{ _tag: "Requested", key: "requested", source }]
+}
+
 export const fileVersions = (history: FileHistory, atHead: boolean): ReadonlyArray<FileVersion> => [
-  ...(atHead
-    ? [{ _tag: "Head" as const, key: "HEAD", source: { revision: history.revision, path: history.path } }]
-    : []),
+  ...anchor(history, atHead),
   ...history.entries.map(entryVersion),
 ]

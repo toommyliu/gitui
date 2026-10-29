@@ -30,6 +30,7 @@ const sources = (atHead: boolean, from = history) =>
 describe("listing the versions of a file", () => {
   it("reads each commit at the path the file had in that commit", () => {
     expect(sources(false)).toEqual([
+      ["Requested", "head", "src/new.ts"],
       ["Commit", "c3", "src/new.ts"],
       ["Commit", "c2", "src/new.ts"],
       ["Commit", "c1", "src/old.ts"],
@@ -42,12 +43,36 @@ describe("listing the versions of a file", () => {
   })
 
   it("shows a deleted file as it was in the deleting commit's parent", () => {
-    const deleted = { ...history, entries: [entry("c4", "deleted", "src/new.ts"), ...history.entries] }
+    const deleted = {
+      ...history,
+      revision: "c4" as Oid,
+      entries: [entry("c4", "deleted", "src/new.ts"), ...history.entries],
+    }
     expect(sources(false, deleted)[0]).toEqual(["BeforeDeletion", "c4-parent", "src/new.ts"])
   })
 
+  it("starts with the requested commit when the history doesn't list it, such as a merge", () => {
+    const merge = { ...history, revision: "merge" as Oid }
+    expect(sources(false, merge).slice(0, 2)).toEqual([
+      ["Requested", "merge", "src/new.ts"],
+      ["Commit", "c3", "src/new.ts"],
+    ])
+  })
+
+  it("doesn't repeat the requested commit when the history lists it", () => {
+    expect(sources(false, { ...history, revision: "c3" as Oid })).toEqual([
+      ["Commit", "c3", "src/new.ts"],
+      ["Commit", "c2", "src/new.ts"],
+      ["Commit", "c1", "src/old.ts"],
+    ])
+  })
+
   it("keys versions apart when one commit appears at two paths", () => {
-    const copied = { ...history, entries: [entry("c5", "modified", "a.ts"), entry("c5", "modified", "b.ts")] }
+    const copied = {
+      ...history,
+      revision: "c5" as Oid,
+      entries: [entry("c5", "modified", "a.ts"), entry("c5", "modified", "b.ts")],
+    }
     const keys = fileVersions(copied, false).map((version) => version.key)
     expect(new Set(keys).size).toBe(2)
   })

@@ -5,17 +5,20 @@ import { useDeferredValue, useEffect, useId, useMemo, useState } from "react"
 import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { trackedFilesAtom } from "@/lib/file-investigation"
+import { type FileTarget, trackedFilesAtom } from "@/lib/file-investigation"
+import { headTarget } from "@/lib/head-target"
 import { literalPath } from "@/lib/literal-path"
 import { basename, dirname } from "@/lib/format"
-import { latest, loadError } from "@/lib/git"
+import { latest, loadError, statusAtom } from "@/lib/git"
 import { searchPaths } from "@/lib/path-search"
 import { Loading, Nothing } from "./loading"
 
 const LIMIT = 200
 const PAGE = 10
 
-export function TrackedFilePicker({ repo, onPick }: { repo: RepoId; onPick: (path: RepoPath) => void }) {
+export function TrackedFilePicker({ repo, onPick }: { repo: RepoId; onPick: (target: FileTarget) => void }) {
+  const status = latest(useAtomValue(statusAtom(repo)))
+  const pick = (path: RepoPath) => onPick(headTarget(status?.entries ?? [], path))
   const atom = trackedFilesAtom(repo)
   const result = useAtomValue(atom)
   const refresh = useAtomRefresh(atom)
@@ -40,7 +43,7 @@ export function TrackedFilePicker({ repo, onPick }: { repo: RepoId; onPick: (pat
     PageUp: () => move(-PAGE),
     Enter: () => {
       const path = matches[current]
-      if (path !== undefined) onPick(path)
+      if (path !== undefined) pick(path)
     },
   }
 
@@ -109,7 +112,7 @@ export function TrackedFilePicker({ repo, onPick }: { repo: RepoId; onPick: (pat
                   index === current ? "bg-selection" : "hover:bg-muted/60",
                 )}
                 onMouseMove={() => setActive(index)}
-                onClick={() => onPick(path)}
+                onClick={() => pick(path)}
               >
                 <span className="truncate">
                   {literalPath(path) !== path ? (

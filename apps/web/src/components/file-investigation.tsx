@@ -1,5 +1,5 @@
 import { useAtom, useAtomRefresh, useAtomValue } from "@effect/atom-react"
-import type { FileHistory, Oid, RepoId, RepoPath } from "@gitui/contracts"
+import type { FileHistory, FileHistoryEntry, Oid, RepoId, RepoPath } from "@gitui/contracts"
 import { cn } from "cn"
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
@@ -40,10 +40,7 @@ export function FileInvestigationDialog({
     >
       <DialogContent className="flex h-[min(56rem,calc(100dvh-2rem))] w-[calc(100vw-2rem)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-7xl">
         {investigation?._tag === "Pick" ? (
-          <TrackedFilePicker
-            repo={repo}
-            onPick={(path) => setInvestigation({ _tag: "File", revision: "HEAD", path })}
-          />
+          <TrackedFilePicker repo={repo} onPick={(target) => setInvestigation({ _tag: "File", ...target })} />
         ) : investigation?._tag === "File" ? (
           <FileInvestigation
             key={JSON.stringify([repo, investigation])}
@@ -221,7 +218,12 @@ function HistoryList({
   )
 }
 
-const pathNote = (version: Exclude<FileVersion, { _tag: "Head" }>, investigatedPath: RepoPath) => {
+const anchorLabels = {
+  Head: { badge: "HEAD", title: "Committed version", detail: "without uncommitted changes" },
+  Requested: { badge: "Selected", title: "File at this commit", detail: "the commit you opened" },
+}
+
+const pathNote = (version: Extract<FileVersion, { entry: FileHistoryEntry }>, investigatedPath: RepoPath) => {
   const { entry } = version
   if (version._tag === "BeforeDeletion") return "Deleted here. Shows the version just before."
   if (entry.from !== null) return `${entry.change === "copied" ? "Copied" : "Renamed"} from ${literalPath(entry.from)}`
@@ -238,20 +240,22 @@ function VersionRow({
   investigatedPath: RepoPath
   date: (seconds: number) => string
 }) {
-  if (version._tag === "Head")
+  if (version._tag === "Head" || version._tag === "Requested") {
+    const label = anchorLabels[version._tag]
     return (
       <>
         <span className="flex min-w-0 items-center gap-2">
           <Badge variant="secondary" className="h-4 shrink-0 rounded-sm px-1 text-[10px]">
-            HEAD
+            {label.badge}
           </Badge>
-          <span className="truncate">Committed version</span>
+          <span className="truncate">{label.title}</span>
         </span>
         <span className="truncate text-[11px] text-muted-foreground">
-          <span className="font-mono">{shortOid(version.source.revision)}</span> · without uncommitted changes
+          <span className="font-mono">{shortOid(version.source.revision)}</span> · {label.detail}
         </span>
       </>
     )
+  }
   const { entry } = version
   const note = pathNote(version, investigatedPath)
   return (

@@ -105,10 +105,19 @@ const revisionFacts = (revision: FileRevision) =>
     .filter((fact) => fact !== null)
     .join(" · ")
 
-const absentReason = (version: FileVersion) =>
-  version._tag === "Head"
-    ? `${version.source.path} isn't in the HEAD commit. A new file shows up here after you commit it.`
-    : `${version.source.path} doesn't exist in commit ${shortOid(version.source.revision)}.`
+const absentReason = (version: FileVersion) => {
+  const path = literalPath(version.source.path)
+  const commit = shortOid(version.source.revision)
+  switch (version._tag) {
+    case "Head":
+      return `${path} isn't in the HEAD commit. A new file shows up here after you commit it.`
+    case "Requested":
+      return `${path} doesn't exist in the selected commit ${commit}.`
+    case "Commit":
+    case "BeforeDeletion":
+      return `${path} doesn't exist in commit ${commit}.`
+  }
+}
 
 function RevisionContents({ revision, absent }: { revision: FileRevision; absent: string }): ReactElement {
   const { content } = revision
@@ -174,6 +183,18 @@ function VersionSummary({ version, onOpenCommit }: { version: FileVersion; onOpe
     case "Head":
       return (
         <Summary title="Committed version at HEAD" note="Uncommitted changes in your working tree aren't shown here.">
+          <Fact label="Commit">
+            <Sha oid={version.source.revision} onOpen={onOpenCommit} />
+          </Fact>
+          <Fact label="Path">{literalPath(version.source.path)}</Fact>
+        </Summary>
+      )
+    case "Requested":
+      return (
+        <Summary
+          title="File at the selected commit"
+          note="Git's file history doesn't list this commit, for example because it's a merge or didn't change the file. This is the file as of this commit."
+        >
           <Fact label="Commit">
             <Sha oid={version.source.revision} onOpen={onOpenCommit} />
           </Fact>

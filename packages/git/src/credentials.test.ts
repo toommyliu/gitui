@@ -4,6 +4,7 @@ import { createConnection } from "node:net"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { expect, test } from "vite-plus/test"
+import * as Fiber from "effect/Fiber"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
 import { fixtureEnv, makeRepo } from "./testRepo.ts"
@@ -79,7 +80,7 @@ test("rejects forged operation tokens and unblocks helpers when their operation 
   }
 })
 
-test.each(["environment", "config"] as const)(
+test.each(["environment", "config", "ssh"] as const)(
   "matches native Git for literal %s askpass paths with shell characters",
   async (source) => {
     const fixture = makeRepo()
@@ -90,10 +91,18 @@ test.each(["environment", "config"] as const)(
       ...fixtureEnv(),
       GIT_TERMINAL_PROMPT: "0",
       GIT_ASKPASS: source === "environment" ? native : undefined,
+      SSH_ASKPASS: source === "ssh" ? native : undefined,
     }
     if (source === "config") fixture.git("config", "core.askpass", native)
     const bridge = await makeCredentialBridge()
     const operation = bridge.register(fixture.root)
+    const listening = Effect.runFork(
+      Stream.runForEach(bridge.prompts(fixture.root), (prompts) =>
+        Effect.sync(() => {
+          for (const prompt of prompts) bridge.answer(fixture.root, prompt.id, null)
+        }),
+      ),
+    )
     try {
       const nativeResult = execFileSync("git", ["-c", "credential.helper=", "credential", "fill"], {
         cwd: fixture.root,
@@ -109,11 +118,13 @@ test.each(["environment", "config"] as const)(
             GIT_CONFIG_GLOBAL: "/dev/null",
             GIT_CONFIG_NOSYSTEM: "1",
             GITUI_NATIVE_ASKPASS: source === "environment" ? native : "",
+            GITUI_NATIVE_SSH_ASKPASS: source === "ssh" ? native : "",
           },
           fixture.root,
         ),
       ).toEqual({ code: 0, output: "fake-literal-answer\n" })
     } finally {
+      await Effect.runPromise(Fiber.interrupt(listening))
       operation.close()
       bridge.close()
       rmSync(fixture.root, { recursive: true, force: true })

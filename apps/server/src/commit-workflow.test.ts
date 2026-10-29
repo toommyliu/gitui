@@ -288,4 +288,26 @@ exit 1`,
       expect(error.stderr).not.toContain("stderr hook 0\n")
     }).pipe(Effect.scoped),
   )
+  it.effect("can have a completed commit when interrupted during a post-commit hook", () =>
+    Effect.gen(function* () {
+      const c = yield* clientEffect
+      const fixture = yield* fixtureEffect
+      const { id: repo } = yield* c.OpenRepo({ path: fixture.root })
+      fixture.write("file.txt", "staged\n")
+      fixture.git("add", "file.txt")
+      fixture.git("config", "commit.gpgsign", "false")
+      const postCommit = join(fixture.root, ".git/hooks/post-commit")
+      writeFileSync(postCommit, "#!/bin/sh\necho post-commit-started\nsleep 5\ntouch post-hook-finished\n")
+      chmodSync(postCommit, 0o700)
+      yield* c.SetDraft({ repo, message: "Keep uncertain draft" })
+      const output = yield* Stream.runCollect(
+        c.Commit({ repo, message: "Commit before hook cancellation", amend: false }).pipe(Stream.take(1)),
+      )
+      expect(output).toEqual([{ _tag: "Output", text: "post-commit-started" }])
+      expect(fixture.git("log", "-1", "--format=%s")).toBe("Commit before hook cancellation")
+      expect(existsSync(join(fixture.root, "post-hook-finished"))).toBe(false)
+      expect(yield* c.GetDraft({ repo })).toBe("Keep uncertain draft")
+      expect((yield* c.GetStatus({ repo })).entries).toEqual([])
+    }).pipe(Effect.scoped),
+  )
 })

@@ -16,7 +16,7 @@ const cp = require('node:child_process');
 delete process.env.ELECTRON_RUN_AS_NODE;
 const kind = process.argv[2];
 const configAskpass = kind === 'git' ? cp.spawnSync('git', ['config','--get','core.askpass'], {encoding:'utf8'}).stdout?.trim() : '';
-const native = (kind === 'ssh' ? process.env.GITUI_NATIVE_SSH_ASKPASS : process.env.GITUI_NATIVE_ASKPASS) || configAskpass;
+const native = kind === 'ssh' ? process.env.GITUI_NATIVE_SSH_ASKPASS : process.env.GITUI_NATIVE_ASKPASS || configAskpass || process.env.GITUI_NATIVE_SSH_ASKPASS;
 let nativeAnswer;
 if (native) {
   const result = cp.spawnSync(native, process.argv.slice(3), {encoding:'utf8', env:{...process.env, GIT_ASKPASS:native, SSH_ASKPASS:native}});

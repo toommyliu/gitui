@@ -24,10 +24,10 @@ const startCommitAtom = Atom.family((repo: RepoId) =>
         if (Exit.isSuccess(exit))
           return { _tag: "Failed", amend, output, error: "Git exited without creating a commit." }
         if (Cause.hasInterruptsOnly(exit.cause) || isPromptCancel(exit.cause))
-          return { _tag: "Cancelled", amend, output }
+          return { _tag: "Stopped", amend, output, reason: null }
         const error = Cause.squash(exit.cause)
-        if (output.text === "" && error instanceof GitError && error.stderr.trim() !== "")
-          output = appendLine(output, error.stderr.trim())
+        if (!(error instanceof GitError)) return { _tag: "Stopped", amend, output, reason: describeFailure(exit.cause) }
+        if (output.text === "" && error.stderr.trim() !== "") output = appendLine(output, error.stderr.trim())
         return { _tag: "Failed", amend, output, error: describeFailure(exit.cause) }
       }
       return Effect.gen(function* () {

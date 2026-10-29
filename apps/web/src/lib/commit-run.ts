@@ -26,4 +26,4 @@ export type CommitRun =
   | (RunBase & { readonly _tag: "Running" })
   | (RunBase & { readonly _tag: "Committed"; readonly oid: Oid })
   | (RunBase & { readonly _tag: "Failed"; readonly error: string })
-  | (RunBase & { readonly _tag: "Cancelled" })
+  | (RunBase & { readonly _tag: "Stopped"; readonly reason: string | null })

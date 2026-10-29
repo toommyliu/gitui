@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react"
 import type { RepoId } from "@gitui/contracts"
 import { cn } from "cn"
-import { CheckIcon, CircleAlertIcon, XIcon } from "lucide-react"
+import { CheckIcon, CircleAlertIcon, TriangleAlertIcon, XIcon } from "lucide-react"
 import { useId, useLayoutEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -18,12 +18,12 @@ const headline = (run: CommitRun) => {
       return `${run.amend ? "Amended" : "Committed"} ${shortOid(run.oid)}`
     case "Failed":
       return run.amend ? "Amend failed" : "Commit failed"
-    case "Cancelled":
-      return `${run.amend ? "Amend" : "Commit"} cancelled. Your message is kept.`
+    case "Stopped":
+      return run.amend ? "Amend stopped" : "Commit stopped"
   }
 }
 
-const openByDefault = (run: CommitRun) => run._tag === "Running" || run._tag === "Failed"
+const openByDefault = (run: CommitRun) => run._tag !== "Committed"
 
 export function CommitFeedback({ repo, onEditIdentity }: { repo: RepoId; onEditIdentity: () => void }) {
   const run = useAtomValue(commitRunAtom(repo))
@@ -38,20 +38,32 @@ export function CommitFeedback({ repo, onEditIdentity }: { repo: RepoId; onEditI
   const showOutput = hasOutput && (run._tag === "Running" || expanded.open)
   return (
     <div className="space-y-1.5 rounded-md border bg-muted/30 p-2">
-      <div className="flex min-h-6 items-center gap-2">
-        {run._tag === "Running" ? (
-          <Spinner className="size-3.5 shrink-0" />
-        ) : run._tag === "Committed" ? (
-          <CheckIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        ) : run._tag === "Failed" ? (
-          <CircleAlertIcon className="size-3.5 shrink-0 text-destructive" />
-        ) : null}
-        <p
-          role="status"
-          className={cn("min-w-0 flex-1 truncate font-medium", run._tag === "Failed" && "text-destructive")}
-        >
-          {headline(run)}
-        </p>
+      <div className="flex items-start gap-2">
+        <span className="flex h-6 shrink-0 items-center">
+          {run._tag === "Running" ? (
+            <Spinner className="size-3.5" />
+          ) : run._tag === "Committed" ? (
+            <CheckIcon className="size-3.5 text-muted-foreground" />
+          ) : run._tag === "Failed" ? (
+            <CircleAlertIcon className="size-3.5 text-destructive" />
+          ) : (
+            <TriangleAlertIcon className="size-3.5" />
+          )}
+        </span>
+        <div role="status" className="min-w-0 flex-1 space-y-1 py-1 break-words">
+          <p className={cn("font-medium", run._tag === "Failed" && "text-destructive")}>{headline(run)}</p>
+          {run._tag === "Stopped" && (
+            <>
+              {run.reason !== null && <p className="whitespace-pre-line text-muted-foreground">{run.reason}</p>}
+              <p>
+                {run.amend
+                  ? "Git may already have amended the commit. Check the history before you retry."
+                  : "Git may already have created the commit. Check the history before you retry."}{" "}
+                Your message is kept.
+              </p>
+            </>
+          )}
+        </div>
         {run._tag === "Running" ? (
           <Button size="xs" variant="outline" onClick={commit.cancel}>
             Cancel

@@ -58,6 +58,7 @@ import {
   useRunGitAction,
 } from "@/lib/git"
 import type { Selection } from "@/lib/selection"
+import { stashBlocked } from "@/lib/stash"
 import { type Location, type LocationState, focusLocation, locationState, toggleLocation } from "@/lib/visibility"
 import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
 import { useConfirm } from "./confirm"
@@ -318,7 +319,7 @@ function CurrentBranch({ repo, status }: { repo: RepoId; status: Status | undefi
   const { head, upstream, operation } = status
   const name = head._tag === "Detached" ? `HEAD at ${shortOid(head.oid)}` : head.name
   return (
-    <div className="flex h-8 shrink-0 items-center gap-1.5 border-b pr-1 pl-2 whitespace-nowrap">
+    <div className="flex shrink-0 flex-wrap items-center gap-x-1.5 border-b px-2 py-1 whitespace-nowrap">
       <GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground" />
       <Tooltip>
         <TooltipTrigger render={<span className="min-w-0 truncate font-semibold" />}>{name}</TooltipTrigger>
@@ -330,7 +331,7 @@ function CurrentBranch({ repo, status }: { repo: RepoId; status: Status | undefi
           {operation} in progress
         </Badge>
       )}
-      <SyncButtons repo={repo} upstream={upstream} />
+      <SyncButtons repo={repo} branch={head._tag === "Branch" ? head.name : null} upstream={upstream} />
     </div>
   )
 }
@@ -612,8 +613,8 @@ function SidebarRow({
             >
               Rename…
             </ContextMenuItem>
-            <ContextMenuItem disabled={networkBusy} onClick={() => publishing.push(branch)}>
-              Push branch…
+            <ContextMenuItem disabled={networkBusy} onClick={() => void publishing.pushTo(branch)}>
+              Push to…
             </ContextMenuItem>
             <ContextMenuItem onClick={() => publishing.changeUpstream(branch)}>Change upstream…</ContextMenuItem>
             {isHead && upstream?._tag === "Tracking" && (
@@ -884,6 +885,7 @@ function SectionRow({
   const git = useGitAction()
   const prompt = usePrompt()
   const stash = useStashPrompt(repo)
+  const status = latest(useAtomValue(statusAtom(repo)))
   const publishing = usePublishing(repo)
   const networkBusy = useAtomValue(networkStateAtom(repo))?._tag === "Running"
   const header = (
@@ -902,7 +904,12 @@ function SectionRow({
       <ContextMenu>
         <ContextMenuTrigger className="block h-full">{header}</ContextMenuTrigger>
         <ContextMenuContent>
-          <ContextMenuItem onClick={stash}>Stash changes…</ContextMenuItem>
+          <ContextMenuItem
+            disabled={status === undefined || status.entries.length === 0 || stashBlocked(status)}
+            onClick={() => status !== undefined && stash(status, { _tag: "All", keepIndex: false })}
+          >
+            Stash changes…
+          </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
     )

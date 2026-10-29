@@ -58,6 +58,20 @@ export type UndoCommit = typeof UndoCommit.Type
 export const Recovery = Schema.Struct({ entries: Schema.Array(RecoveryEntry), undo: UndoCommit })
 export type Recovery = typeof Recovery.Type
 
+export const DiscardBackup = Schema.Struct({
+  id: Schema.String,
+  kind: Schema.Literals(["files", "lines", "restore"]),
+  time: Schema.Int,
+  paths: Schema.Array(RepoPath),
+})
+export type DiscardBackup = typeof DiscardBackup.Type
+
+export const DiscardRestore = Schema.Union([
+  Schema.TaggedStruct("Restored", {}),
+  Schema.TaggedStruct("Conflict", { paths: Schema.Array(RepoPath), version: Schema.String }),
+])
+export type DiscardRestore = typeof DiscardRestore.Type
+
 export const Operation = Schema.Literals(["merge", "rebase", "cherry-pick", "revert", "bisect"])
 export type Operation = typeof Operation.Type
 
@@ -154,6 +168,15 @@ export const PushDestination = Schema.Struct({
   remoteBranch: Schema.String,
 })
 export type PushDestination = typeof PushDestination.Type
+
+export const PushContext = Schema.Struct({
+  branch: Schema.String,
+  fingerprint: Schema.String,
+  configuration: Schema.String,
+  upstream: Schema.Struct({ remote: Schema.NullOr(Schema.String), merge: Schema.Array(Schema.String) }),
+  remotes: Schema.Array(Remote),
+})
+export type PushContext = typeof PushContext.Type
 
 export const PullTarget = Schema.Struct({ branch: Schema.String, upstream: Schema.String })
 export type PullTarget = typeof PullTarget.Type

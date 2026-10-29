@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "cn"
 import { filterFiles } from "@/lib/change-search"
 import { comparisonAtom, comparisonKey, comparisonLabel, comparisonModes, useCompare } from "@/lib/comparison"
+import type { FileTarget } from "@/lib/file-investigation"
 import { isTestFile } from "@/lib/file-kind"
 import { shortOid } from "@/lib/format"
 import { describeFailure, diffAtom, diffKey, latest, loadError } from "@/lib/git"
@@ -23,12 +24,12 @@ export function ComparisonDetail({
   repo,
   comparison,
   onSelect,
-  onHistory,
+  onInvestigate,
 }: {
   repo: RepoId
   comparison: Comparison
   onSelect: (selection: Selection) => void
-  onHistory: (path: string) => void
+  onInvestigate: (file: FileTarget) => void
 }) {
   const atom = comparisonAtom(comparisonKey(repo, comparison))
   const result = useAtomValue(atom)
@@ -82,7 +83,12 @@ export function ComparisonDetail({
           />
         )
       ) : (
-        <ComparisonFiles key={`${detail.start}:${detail.head}`} repo={repo} detail={detail} onHistory={onHistory} />
+        <ComparisonFiles
+          key={`${detail.start}:${detail.head}`}
+          repo={repo}
+          detail={detail}
+          onInvestigate={onInvestigate}
+        />
       )}
     </div>
   )
@@ -91,11 +97,11 @@ export function ComparisonDetail({
 function ComparisonFiles({
   repo,
   detail,
-  onHistory,
+  onInvestigate,
 }: {
   repo: RepoId
   detail: Detail
-  onHistory: (path: string) => void
+  onInvestigate: (file: FileTarget) => void
 }) {
   const [selected, setSelected] = useState<RepoPath | null>(null)
   const [allowLarge, setAllowLarge] = useState(false)
@@ -258,7 +264,9 @@ function ComparisonFiles({
                 repo={repo}
                 items={items}
                 collapse={collapse}
-                actions={(meta) => <HistoryButton onClick={() => onHistory(meta.path)} />}
+                actions={(meta) => (
+                  <HistoryButton onClick={() => onInvestigate({ revision: detail.head, path: meta.path })} />
+                )}
               />
             )}
           </ResizablePanel>

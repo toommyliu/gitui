@@ -1,4 +1,4 @@
-import { useAtom, useAtomMount } from "@effect/atom-react"
+import { useAtom, useAtomMount, useAtomSet } from "@effect/atom-react"
 import type { RepoId } from "@gitui/contracts"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -8,6 +8,7 @@ import { flushSync } from "react-dom"
 import { useCompare } from "@/lib/comparison"
 import { useCommand } from "@/lib/commands"
 import { useConflictSession } from "@/lib/conflict-session"
+import { type FileTarget, investigationAtom } from "@/lib/file-investigation"
 import { pathQuery, watchAtom } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
@@ -18,6 +19,7 @@ import { ComparisonDialog } from "./comparison-dialog"
 import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
 import { ConflictWorkspace } from "./conflict-workspace"
+import { FileInvestigationDialog } from "./file-investigation"
 import { useNetworkCommands } from "./network"
 import { Sidebar } from "./sidebar"
 import { RemotesDialog } from "./remotes"
@@ -67,6 +69,9 @@ export function Workspace({
     setQuery(pathQuery(path))
     if (narrow) setPane("history")
   }
+  const setInvestigation = useAtomSet(investigationAtom(repo))
+  const investigate = (file: FileTarget) => setInvestigation({ _tag: "File", ...file })
+  useCommand("history.file", () => setInvestigation({ _tag: "Pick" }))
 
   const select = (next: Selection) => {
     setSelection(next)
@@ -80,10 +85,10 @@ export function Workspace({
         repo={repo}
         comparison={selection.comparison}
         onSelect={select}
-        onHistory={showHistory}
+        onInvestigate={investigate}
       />
     ) : selection._tag === "Commit" ? (
-      <CommitDetail key={selection.oid} repo={repo} oid={selection.oid} onSelect={select} onHistory={showHistory} />
+      <CommitDetail key={selection.oid} repo={repo} oid={selection.oid} onSelect={select} onInvestigate={investigate} />
     ) : selection._tag === "Worktree" ? (
       <WorktreePreview
         key={selection.path}
@@ -94,7 +99,7 @@ export function Workspace({
         onHistory={showHistory}
       />
     ) : (
-      <WorkingCopy key={repo} repo={repo} onHistory={showHistory} />
+      <WorkingCopy key={repo} repo={repo} onInvestigate={investigate} />
     )
   const sidebar = (
     <Sidebar
@@ -123,6 +128,7 @@ export function Workspace({
       <RecoveryDialog repo={repo} onInspect={(oid) => select({ _tag: "Commit", oid })} />
       <RemotesDialog repo={repo} />
       <ComparisonDialog repo={repo} onSelect={select} />
+      <FileInvestigationDialog repo={repo} onSelect={select} />
       <RewriteDialog repo={repo} onWorktree={() => select({ _tag: "WorkingCopy" })} />
       <CommandLogDrawer repo={repo}>
         {conflictSession.open ? (

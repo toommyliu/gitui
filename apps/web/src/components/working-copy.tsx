@@ -14,7 +14,15 @@ import type { CodeViewHandle } from "@pierre/diffs/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ButtonGroup } from "@/components/ui/button-group"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -37,16 +45,22 @@ import {
 import { filterFiles } from "@/lib/change-search"
 import { useAppHotkeys } from "@tanstack/react-hotkeys"
 import { commitAtom, diffAtom, diffKey, latest, loadError, statusAtom, useGitAction } from "@/lib/git"
+import type { FileTarget } from "@/lib/file-investigation"
+import { commitRunAtom, useCommit } from "@/lib/commit-workflow"
 import { settingsAtom } from "@/lib/settings"
-import { hunkChanges, selectedChanges } from "@/lib/lines"
+import { hunkChanges, selectedChanges, type WholeFile, wholeFile } from "@/lib/lines"
+import { stashBlocked, stashFiles } from "@/lib/stash"
 import { type CommandId, type KeyBinding, useCommand, useCommandKeys } from "@/lib/commands"
 import { ChangeLetter } from "./change-letter"
+import { CommitFeedback } from "./commit-feedback"
+import { IdentityDialog, IdentityLine } from "./commit-identity"
 import { useConflictActions } from "./conflict-view"
 import { OperationBanner, openConflicts } from "./conflict-workspace"
 import { OpenInButton } from "./open-in"
 import { HistoryButton, NoMatchingFiles } from "./commit-detail"
 import { useConfirm } from "./confirm"
 import { FileFilter } from "./search-fields"
+import { useDiscard } from "./discard-recovery"
 import { LargeDiff, Loading, Nothing } from "./loading"
 import { Shortcut } from "./shortcut"
 import { useStashPrompt } from "./stash-prompt"
@@ -77,11 +91,24 @@ interface FileRow {
   readonly path: RepoPath
   readonly paths: ReadonlyArray<RepoPath>
   readonly from: RepoPath | null
+  readonly historyPath: RepoPath
   readonly change: Change
   readonly label: string
 }
 
 const withoutConflicts = (rows: ReadonlyArray<FileRow>) => rows.filter((row) => row.area !== "conflicted")
+
+const wholeFileNames: Record<WholeFile, string> = {
+  symlink: "Symlinks",
+  submodule: "Submodules",
+  mode: "Files with a mode change",
+  type: "File type changes",
+}
+
+const wholeFileNote = (kind: WholeFile, section: string) =>
+  `${wholeFileNames[kind]} ${section === "staged" ? "unstage" : "stage"} as a whole.`
+
+const noPaths: ReadonlySet<RepoPath> = new Set()
 
 const MAX_UNTRACKED_PREVIEWS = 50
 const ROW = 28
@@ -97,6 +124,7 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
           path: entry.path,
           paths: [entry.path],
           from: null,
+          historyPath: entry.path,
           change: "added",
           label: "untracked",
         })
@@ -107,6 +135,7 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
           path: entry.path,
           paths: [entry.path],
           from: null,
+          historyPath: entry.path,
           change: "modified",
           label: "conflict",
         })
@@ -117,7 +146,8 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
             area: "unstaged",
             path: entry.path,
             paths: [entry.path],
-            from: null,
+            from: entry.from,
+            historyPath: entry.from ?? entry.path,
             change: entry.unstaged,
             label: "",
           })
@@ -129,6 +159,7 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
             path: entry.path,
             paths,
             from: entry.from,
+            historyPath: entry.from ?? entry.path,
             change: entry.staged,
             label: entry.from === null ? "" : `from ${entry.from}`,
           })
@@ -170,7 +201,7 @@ function useLastLoaded<A>(key: string, value: A | undefined): A | undefined {
   return value ?? (kept?.key === key ? kept.value : undefined)
 }
 
-export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (path: string) => void }) {
+export function WorkingCopy({ repo, onInvestigate }: { repo: RepoId; onInvestigate: (file: FileTarget) => void }) {
   const [allowLarge, setAllowLarge] = useState(false)
   const statusResult = useAtomValue(statusAtom(repo))
   const refreshStatus = useAtomRefresh(statusAtom(repo))
@@ -274,24 +305,37 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     : 0
 
   const git = useGitAction()
+  const runDiscard = useDiscard()
   const confirm = useConfirm()
   const conflictActions = useConflictActions(repo)
   const [conflictSession, openSession] = useConflictSession(repo)
   const stage = (paths: ReadonlyArray<RepoPath>) => git("Stage", repo, (c) => c("Stage", { repo, paths }))
   const unstage = (paths: ReadonlyArray<RepoPath>) => git("Unstage", repo, (c) => c("Unstage", { repo, paths }))
+  const investigate = (row: FileRow) =>
+    onInvestigate({ revision: "HEAD", path: row.historyPath, destination: row.path })
   const discard = (rows: ReadonlyArray<FileRow>) =>
     confirm({
       title: rows.length === 1 ? `Discard changes to ${basename(rows[0]!.path)}?` : `Discard ${rows.length} files?`,
       body: rows.some((r) => r.area === "untracked") ? (
-        <p>Untracked files will be deleted. This can't be undone.</p>
+        <p>Untracked files will be deleted. You can undo this, or restore them later from Recovery.</p>
       ) : (
-        <p>The working tree copy will be reset to the staged version. This can't be undone.</p>
+        <p>
+          The working tree copy will be reset to the staged version. You can undo this, or restore it later from
+          Recovery.
+        </p>
       ),
       confirmLabel: "Discard",
       destructive: true,
-      onConfirm: () => git("Discard", repo, (c) => c("Discard", { repo, paths: rows.flatMap((r) => r.paths) })),
+      onConfirm: () => void runDiscard({ _tag: "Files", repo, paths: rows.flatMap((r) => r.paths) }),
     })
 
+  const fileTypeChanges = useMemo(
+    () =>
+      new Set(
+        [...unstaged, ...staged].filter((row) => row.change === "typechange").map((row) => `${row.area}\n${row.path}`),
+      ),
+    [unstaged, staged],
+  )
   const [storedLineSelection, setSelection] = useState<CodeViewLineSelection | null>(null)
   const itemsById = useMemo(() => new Map(shownItems.map((item) => [item.id, item])), [shownItems])
   const selection = storedLineSelection !== null && itemsById.has(storedLineSelection.id) ? storedLineSelection : null
@@ -299,25 +343,38 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     const item = selection === null ? undefined : itemsById.get(selection.id)
     if (selection === null || item === undefined) return null
     const changes = selectedChanges(item.fileDiff, selection.range)
-    return changes.length === 0 ? null : { meta: itemMeta(item.id), changes }
-  }, [selection, itemsById])
+    return changes.length === 0
+      ? null
+      : {
+          meta: itemMeta(item.id),
+          changes,
+          whole: fileTypeChanges.has(item.id) ? ("type" as const) : wholeFile(item.fileDiff),
+        }
+  }, [selection, itemsById, fileTypeChanges])
 
   const applyLines = async (action: LineAction, path: RepoPath, lines: ReadonlyArray<LineSelection>) => {
-    const label = action === "stage" ? "Stage lines" : action === "unstage" ? "Unstage lines" : "Discard lines"
-    if (await git(label, repo, (c) => c("ApplyLines", { repo, action, path, lines }))) setSelection(null)
+    const applied =
+      action === "discard"
+        ? await runDiscard({ _tag: "Lines", repo, path, lines })
+        : await git(action === "stage" ? "Stage lines" : "Unstage lines", repo, (c) =>
+            c("ApplyLines", { repo, action, path, lines }),
+          )
+    if (applied) setSelection(null)
   }
   const discardLines = (path: RepoPath, lines: ReadonlyArray<LineSelection>) =>
     confirm({
       title: `Discard ${lines.length} ${lines.length === 1 ? "line" : "lines"} in ${basename(path)}?`,
-      body: <p>The working tree will lose these changes. This can't be undone.</p>,
+      body: (
+        <p>The working tree will lose these changes. You can undo this, or restore the file later from Recovery.</p>
+      ),
       confirmLabel: "Discard",
       destructive: true,
       onConfirm: () => void applyLines("discard", path, lines),
     })
 
   const hunkAt = (line: HoveredLine, item: CodeViewDiffItem) => {
+    if (fileTypeChanges.has(item.id) || wholeFile(item.fileDiff) !== null) return null
     const meta = itemMeta(item.id)
-    if (meta.section === "untracked") return null
     const lines = hunkChanges(item.fileDiff, line.lineNumber, line.side)
     return lines.length === 0 ? null : { meta, lines, staged: meta.section === "staged" }
   }
@@ -373,7 +430,7 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
   const actions = (meta: DiffItemMeta) => {
     const row = rowsByItem.get(`${meta.section}\n${meta.path}`)
     if (row === undefined) return null
-    const history = row.area !== "untracked" && <HistoryButton onClick={() => onHistory(row.path)} />
+    const history = row.area !== "untracked" && <HistoryButton onClick={() => investigate(row)} />
     return row.area === "staged" ? (
       <span className="flex gap-1">
         {history}
@@ -419,7 +476,12 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
           {(status.operation !== null || conflicts.length > 0 || dirtyPaths(conflictSession).length > 0) && (
             <OperationBanner repo={repo} status={status} conflicts={conflicts.length} />
           )}
-          <CommitBox repo={repo} status={status} stagedCount={staged.length} />
+          <CommitBox
+            repo={repo}
+            status={status}
+            stagedCount={staged.length}
+            selection={fileSelection?.paths ?? noPaths}
+          />
           <FileFilter
             value={filter}
             onChange={changeFilter}
@@ -448,6 +510,7 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
             }
             onMarkResolved={(row) => conflictActions.markResolved(row.path)}
             onOpenConflict={(row) => openSession(openConflicts(row.path))}
+            onHistory={investigate}
           />
         </div>
       </ResizablePanel>
@@ -495,9 +558,9 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
                   {selected.changes.length} {selected.changes.length === 1 ? "line" : "lines"} in{" "}
                   {basename(selected.meta.path)}
                 </span>
-                {selected.meta.section === "untracked" ? (
+                {selected.whole !== null ? (
                   <span className="shrink-0 whitespace-nowrap text-muted-foreground">
-                    Untracked files stage as a whole.
+                    {wholeFileNote(selected.whole, selected.meta.section)}
                   </span>
                 ) : selected.meta.section === "staged" ? (
                   <Button size="xs" onClick={() => void applyLines("unstage", selected.meta.path, selected.changes)}>
@@ -505,13 +568,15 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
                   </Button>
                 ) : (
                   <>
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => discardLines(selected.meta.path, selected.changes)}
-                    >
-                      Discard
-                    </Button>
+                    {selected.meta.section !== "untracked" && (
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => discardLines(selected.meta.path, selected.changes)}
+                      >
+                        Discard
+                      </Button>
+                    )}
                     <Button size="xs" onClick={() => void applyLines("stage", selected.meta.path, selected.changes)}>
                       Stage
                     </Button>
@@ -531,16 +596,29 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
 
 const noCommit = Atom.make(AsyncResult.initial<CommitDetail, never>())
 
-function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status; stagedCount: number }) {
+function CommitBox({
+  repo,
+  status,
+  stagedCount,
+  selection,
+}: {
+  repo: RepoId
+  status: Status
+  stagedCount: number
+  selection: ReadonlySet<RepoPath>
+}) {
   const rebase = latest(useAtomValue(rebaseStateAtom(repo)))
   const editing = status.operation === "rebase" && rebase?._tag === "Rebase" && rebase.phase === "edit"
   const splitting = editing && rebase.split
   const draft = useDraft(repo)
   const [amend, setAmend] = useState(false)
   const [amendEdit, setAmendEdit] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const git = useGitAction()
+  const [identityOpen, setIdentityOpen] = useState(false)
+  const running = useAtomValue(commitRunAtom(repo))?._tag === "Running"
+  const committer = useCommit(repo)
   const stash = useStashPrompt(repo)
+  const stashDisabled = running || status.entries.length === 0 || stashBlocked(status)
+  const selectedFiles = useMemo(() => stashFiles(status, selection).files.length, [status, selection])
 
   const amendOid =
     status.head._tag === "Unborn" ||
@@ -558,13 +636,10 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
   }
 
   const canCommit =
-    !busy && message.trim() !== "" && (stagedCount > 0 || amending) && (status.operation !== "rebase" || editing)
+    !running && message.trim() !== "" && (stagedCount > 0 || amending) && (status.operation !== "rebase" || editing)
   const commit = async () => {
     if (!canCommit) return
-    setBusy(true)
-    const ok = await git(amending ? "Amend" : "Commit", repo, (c) => c("Commit", { repo, message, amend: amending }))
-    setBusy(false)
-    if (!ok) return
+    if (!(await committer.run({ message, amend: amending }))) return
     if (amending) toggleAmend(false)
     else draft.clear()
   }
@@ -583,6 +658,7 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
           onChange={(event) => setMessage(event.target.value)}
           onFocus={draft.onFocus}
           onBlur={draft.onBlur}
+          readOnly={running}
           placeholder={
             amending && head === undefined
               ? "Loading the previous commit message…"
@@ -604,12 +680,18 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
           </span>
         )}
       </div>
+      <IdentityLine
+        repo={repo}
+        amending={amending}
+        originalAuthor={head?.author}
+        onEdit={() => setIdentityOpen(true)}
+      />
       <div className="flex items-center gap-2">
-        <Field orientation="horizontal" className="w-auto" data-disabled={amendOid === null}>
+        <Field orientation="horizontal" className="w-auto" data-disabled={amendOid === null || running}>
           <Checkbox
             id={`amend-${repo}`}
             checked={amending}
-            disabled={amendOid === null}
+            disabled={amendOid === null || running}
             onCheckedChange={toggleAmend}
           />
           <FieldLabel
@@ -619,17 +701,53 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
             Amend previous commit
           </FieldLabel>
         </Field>
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-auto"
-          disabled={status.entries.length === 0 || status.operation !== null}
-          onClick={stash}
-        >
-          Stash…
-        </Button>
+        <ButtonGroup className="ml-auto">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={stashDisabled}
+            onClick={() => stash(status, { _tag: "All", keepIndex: false })}
+          >
+            Stash…
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  disabled={stashDisabled}
+                  aria-label="More ways to stash"
+                  title="More ways to stash"
+                />
+              }
+            >
+              <ChevronDownIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-auto">
+              <DropdownMenuItem onClick={() => stash(status, { _tag: "All", keepIndex: false })}>
+                Stash all changes…
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={stagedCount === 0}
+                onClick={() => stash(status, { _tag: "All", keepIndex: true })}
+              >
+                Stash unstaged, keep staged…
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={selectedFiles === 0}
+                onClick={() => stash(status, { _tag: "Files", paths: selection })}
+              >
+                {selectedFiles === 0
+                  ? "Stash selected files…"
+                  : `Stash ${selectedFiles} selected ${selectedFiles === 1 ? "file" : "files"}…`}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </ButtonGroup>
         <Button size="sm" disabled={!canCommit} onClick={() => void commit()}>
-          {busy && <Spinner data-icon="inline-start" />}
+          {running && <Spinner data-icon="inline-start" />}
           {amending
             ? "Amend"
             : stagedCount > 0
@@ -638,6 +756,8 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
           {commitHotkey !== null && <Shortcut hotkey={commitHotkey} className="max-md:hidden" />}
         </Button>
       </div>
+      <CommitFeedback repo={repo} onEditIdentity={() => setIdentityOpen(true)} />
+      <IdentityDialog repo={repo} open={identityOpen} onOpenChange={setIdentityOpen} />
     </div>
   )
 }
@@ -776,6 +896,7 @@ interface RowActions {
   readonly onResolve: (rows: ReadonlyArray<FileRow>, side: "ours" | "theirs") => void
   readonly onMarkResolved: (row: FileRow) => void
   readonly onOpenConflict: (row: FileRow) => void
+  readonly onHistory: (row: FileRow) => void
 }
 
 function FileSection({
@@ -978,6 +1099,7 @@ function FileRowView({
   onResolve,
   onMarkResolved,
   onOpenConflict,
+  onHistory,
 }: RowActions & {
   repo: RepoId
   row: FileRow
@@ -1016,6 +1138,7 @@ function FileRowView({
         )}
       </button>
       <span className="flex shrink-0 gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
+        {row.area !== "untracked" && <HistoryButton onClick={() => onHistory(row)} />}
         <OpenInButton repo={repo} file={{ path: row.path }} compact disabled={row.change === "deleted"} />
         {row.area === "staged" ? (
           <Button size="sm" variant="ghost" onClick={() => onUnstage([row])}>

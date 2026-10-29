@@ -1,4 +1,4 @@
-import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react"
+import { RegistryContext, useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { Comparison, CommitRow, Head, Oid, Refs, RefVisibility, RepoId, Status } from "@gitui/contracts"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,6 +24,7 @@ import { useCompare } from "@/lib/comparison"
 import { copyWithToast } from "@/lib/clipboard"
 import { useCommandKeys } from "@/lib/commands"
 import { useHistoryDate } from "@/lib/dates"
+import { investigationAtom } from "@/lib/file-investigation"
 import { shortOid } from "@/lib/format"
 import {
   LOG_PAGE_SIZE,
@@ -173,6 +174,7 @@ export function CommitList({
   searchRef: React.RefObject<HTMLInputElement | null>
 }) {
   const openCompare = useCompare(repo)
+  const setInvestigation = useAtomSet(investigationAtom(repo))
   const [range, setRange] = useState<{ anchor: Oid; cursor: Oid; comparison: Comparison } | null>(null)
   const selectionRequest = useRef(0)
   const search = useDebounced(query.trim(), 250)
@@ -383,6 +385,13 @@ export function CommitList({
             }
           >
             Compare…
+          </InputGroupButton>
+          <InputGroupButton
+            size="xs"
+            title="Browse any tracked file's history, contents, and blame"
+            onClick={() => setInvestigation({ _tag: "Pick" })}
+          >
+            File history…
           </InputGroupButton>
         </InputGroupAddon>
         {summary !== null && (

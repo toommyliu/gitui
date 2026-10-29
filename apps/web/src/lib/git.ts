@@ -433,7 +433,12 @@ export const useCheckout = () => {
 export type NetworkRequest =
   | { readonly action: "Fetch" }
   | { readonly action: "Pull"; readonly strategy: PullStrategy; readonly target: PullTarget }
-  | { readonly action: "Push"; readonly destination: PushDestination; readonly setUpstream: boolean }
+  | {
+      readonly action: "Push"
+      readonly destination: PushDestination
+      readonly setUpstream: boolean
+      readonly expectedContext?: string
+    }
   | { readonly action: "ForcePush"; readonly destination: PushDestination; readonly expected: Oid }
   | { readonly action: "PushTags"; readonly remote: string; readonly tags: ReadonlyArray<string> }
   | { readonly action: "DeleteRemoteBranch"; readonly remote: string; readonly branch: string; readonly expected: Oid }
@@ -483,7 +488,12 @@ export const networkAtom = Atom.family((repo: RepoId) =>
             case "Pull":
               return client("Pull", { repo, strategy: request.strategy, target: request.target })
             case "Push":
-              return client("Push", { repo, destination: request.destination, setUpstream: request.setUpstream })
+              return client("Push", {
+                repo,
+                destination: request.destination,
+                setUpstream: request.setUpstream,
+                expectedContext: request.expectedContext,
+              })
             case "ForcePush":
               return client("ForcePush", { repo, destination: request.destination, expected: request.expected })
             case "PushTags":

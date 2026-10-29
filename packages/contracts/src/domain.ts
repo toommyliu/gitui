@@ -169,6 +169,15 @@ export const PushDestination = Schema.Struct({
 })
 export type PushDestination = typeof PushDestination.Type
 
+export const PushContext = Schema.Struct({
+  branch: Schema.String,
+  fingerprint: Schema.String,
+  configuration: Schema.String,
+  upstream: Schema.Struct({ remote: Schema.NullOr(Schema.String), merge: Schema.Array(Schema.String) }),
+  remotes: Schema.Array(Remote),
+})
+export type PushContext = typeof PushContext.Type
+
 export const PullTarget = Schema.Struct({ branch: Schema.String, upstream: Schema.String })
 export type PullTarget = typeof PullTarget.Type
 

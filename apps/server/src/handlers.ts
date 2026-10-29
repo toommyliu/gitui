@@ -32,6 +32,13 @@ export const handlers = GitRpcs.toLayer(
       OpenLog: ({ repo: id, query, refs }) => repo.openLog(id, query, refs),
       GetLogPage: ({ repo: id, logId, start, count }) => repo.logPage(id, logId, start, count),
       GetLogIndex: ({ repo: id, logId, oid }) => repo.logIndex(id, logId, oid),
+      GetTrackedFiles: ({ repo: id }) => repo.trackedFiles(id),
+      GetFileHistory: ({ repo: id, revision, path }) => repo.fileHistory(id, revision, path),
+      GetFileRevision: ({ repo: id, revision, path }) => repo.fileRevision(id, revision, path),
+      GetFileBlame: ({ repo: id, revision, path }) => repo.fileBlame(id, revision, path),
+      PreviewFileRestore: ({ repo: id, source, destination }) => repo.previewFileRestore(id, source, destination),
+      RestoreFile: ({ repo: id, source, destination, expectedVersion, overwrite }) =>
+        repo.restoreFile(id, source, destination, expectedVersion, overwrite),
       GetCommit: ({ repo: id, oid }) => repo.commit(id, oid),
       GetComparison: ({ repo: id, comparison }) => repo.comparison(id, comparison),
       GetDiff: ({ repo: id, target, paths, ignoreWhitespace, allowLarge }) =>

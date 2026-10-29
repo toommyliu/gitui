@@ -43,6 +43,7 @@ import {
 } from "@/lib/file-selection"
 import { useAppHotkeys } from "@tanstack/react-hotkeys"
 import { commitAtom, diffAtom, diffKey, latest, loadError, statusAtom, useGitAction } from "@/lib/git"
+import type { FileTarget } from "@/lib/file-investigation"
 import { commitRunAtom, useCommit } from "@/lib/commit-workflow"
 import { settingsAtom } from "@/lib/settings"
 import { hunkChanges, selectedChanges, type WholeFile, wholeFile } from "@/lib/lines"
@@ -85,6 +86,7 @@ interface FileRow {
   readonly area: Area
   readonly path: RepoPath
   readonly paths: ReadonlyArray<RepoPath>
+  readonly historyPath: RepoPath
   readonly change: Change
   readonly label: string
 }
@@ -112,24 +114,46 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
   for (const entry of entries) {
     switch (entry._tag) {
       case "Untracked":
-        unstaged.push({ area: "untracked", path: entry.path, paths: [entry.path], change: "added", label: "untracked" })
+        unstaged.push({
+          area: "untracked",
+          path: entry.path,
+          paths: [entry.path],
+          historyPath: entry.path,
+          change: "added",
+          label: "untracked",
+        })
         break
       case "Conflicted":
         unstaged.push({
           area: "conflicted",
           path: entry.path,
           paths: [entry.path],
+          historyPath: entry.path,
           change: "modified",
           label: "conflict",
         })
         break
       case "Tracked": {
         if (entry.unstaged !== null) {
-          unstaged.push({ area: "unstaged", path: entry.path, paths: [entry.path], change: entry.unstaged, label: "" })
+          unstaged.push({
+            area: "unstaged",
+            path: entry.path,
+            paths: [entry.path],
+            historyPath: entry.from ?? entry.path,
+            change: entry.unstaged,
+            label: "",
+          })
         }
         if (entry.staged !== null) {
           const paths = entry.from === null ? [entry.path] : [entry.from, entry.path]
-          staged.push({ area: "staged", path: entry.path, paths, change: entry.staged, label: entry.from ?? "" })
+          staged.push({
+            area: "staged",
+            path: entry.path,
+            paths,
+            historyPath: entry.from ?? entry.path,
+            change: entry.staged,
+            label: entry.from ?? "",
+          })
         }
         break
       }
@@ -161,7 +185,7 @@ function useLastLoaded<A>(key: string, value: A | undefined): A | undefined {
   return value ?? (kept?.key === key ? kept.value : undefined)
 }
 
-export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (path: string) => void }) {
+export function WorkingCopy({ repo, onInvestigate }: { repo: RepoId; onInvestigate: (file: FileTarget) => void }) {
   const [allowLarge, setAllowLarge] = useState(false)
   const statusResult = useAtomValue(statusAtom(repo))
   const refreshStatus = useAtomRefresh(statusAtom(repo))
@@ -263,6 +287,8 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
   const [conflictSession, openSession] = useConflictSession(repo)
   const stage = (paths: ReadonlyArray<RepoPath>) => git("Stage", repo, (c) => c("Stage", { repo, paths }))
   const unstage = (paths: ReadonlyArray<RepoPath>) => git("Unstage", repo, (c) => c("Unstage", { repo, paths }))
+  const investigate = (row: FileRow) =>
+    onInvestigate({ revision: "HEAD", path: row.historyPath, destination: row.path })
   const discard = (rows: ReadonlyArray<FileRow>) =>
     confirm({
       title: rows.length === 1 ? `Discard changes to ${basename(rows[0]!.path)}?` : `Discard ${rows.length} files?`,
@@ -379,7 +405,7 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
   const actions = (meta: DiffItemMeta) => {
     const row = rowsByItem.get(`${meta.section}\n${meta.path}`)
     if (row === undefined) return null
-    const history = row.area !== "untracked" && <HistoryButton onClick={() => onHistory(row.path)} />
+    const history = row.area !== "untracked" && <HistoryButton onClick={() => investigate(row)} />
     return row.area === "staged" ? (
       <span className="flex gap-1">
         {history}
@@ -451,6 +477,7 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
             }
             onMarkResolved={(row) => conflictActions.markResolved(row.path)}
             onOpenConflict={(row) => openSession(openConflicts(row.path))}
+            onHistory={investigate}
           />
         </div>
       </ResizablePanel>
@@ -830,6 +857,7 @@ interface RowActions {
   readonly onResolve: (rows: ReadonlyArray<FileRow>, side: "ours" | "theirs") => void
   readonly onMarkResolved: (row: FileRow) => void
   readonly onOpenConflict: (row: FileRow) => void
+  readonly onHistory: (row: FileRow) => void
 }
 
 function FileSection({
@@ -1020,6 +1048,7 @@ function FileRowView({
   onResolve,
   onMarkResolved,
   onOpenConflict,
+  onHistory,
 }: RowActions & {
   repo: RepoId
   row: FileRow
@@ -1058,6 +1087,7 @@ function FileRowView({
         )}
       </button>
       <span className="flex shrink-0 gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
+        {row.area !== "untracked" && <HistoryButton onClick={() => onHistory(row)} />}
         <OpenInButton repo={repo} file={{ path: row.path }} compact disabled={row.change === "deleted"} />
         {row.area === "staged" ? (
           <Button size="sm" variant="ghost" onClick={() => onUnstage([row])}>

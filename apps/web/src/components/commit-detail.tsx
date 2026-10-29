@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
 import { type ReactNode, useMemo, useRef, useState } from "react"
+import type { FileTarget } from "@/lib/file-investigation"
 import { FILE_KINDS, type FileKind, type LineCounts, changeBreakdown, isTestFile } from "@/lib/file-kind"
 import { longDate, shortOid } from "@/lib/format"
 import { commitAtom, diffAtom, diffKey, latest, loadError } from "@/lib/git"
@@ -140,12 +141,12 @@ export function CommitDetail({
   repo,
   oid,
   onSelect,
-  onHistory,
+  onInvestigate,
 }: {
   repo: RepoId
   oid: Oid
   onSelect: (selection: Selection) => void
-  onHistory?: (path: string) => void
+  onInvestigate?: (file: FileTarget) => void
 }) {
   const [allowLarge, setAllowLarge] = useState(false)
   const commit = commitAtom(`${repo}\n${oid}`)
@@ -183,7 +184,7 @@ export function CommitDetail({
         bytes={diff.bytes}
         onShow={() => setAllowLarge(true)}
         summary={<Summary detail={detail} onSelect={onSelect} />}
-        onHistory={onHistory}
+        onInvestigate={onInvestigate}
       />
     )
   }
@@ -215,7 +216,11 @@ export function CommitDetail({
             items={items}
             collapse={collapse}
             header={() => <Summary detail={detail} onSelect={onSelect} />}
-            actions={(meta) => onHistory !== undefined && <HistoryButton onClick={() => onHistory(meta.path)} />}
+            actions={(meta) =>
+              onInvestigate !== undefined && (
+                <HistoryButton onClick={() => onInvestigate({ revision: oid, path: meta.path })} />
+              )
+            }
           />
         </div>
       ) : (
@@ -290,14 +295,14 @@ function LargeCommit({
   bytes,
   onShow,
   summary,
-  onHistory,
+  onInvestigate,
 }: {
   repo: RepoId
   detail: Detail
   bytes: number
   onShow: () => void
   summary: ReactNode
-  onHistory: ((path: string) => void) | undefined
+  onInvestigate: ((file: FileTarget) => void) | undefined
 }) {
   const [open, setOpen] = useState<FileChange | null>(null)
   const [detailsShown, setDetailsShown] = useState(true)
@@ -396,6 +401,9 @@ function LargeCommit({
                       <ChangeLetter change={file.change} />
                       <span className="truncate">{file.path}</span>
                     </button>
+                    {onInvestigate !== undefined && (
+                      <HistoryButton onClick={() => onInvestigate({ revision: detail.oid, path: file.path })} />
+                    )}
                     <OpenInButton repo={repo} file={{ path: file.path }} compact disabled={file.change === "deleted"} />
                   </div>
                 )
@@ -413,7 +421,7 @@ function LargeCommit({
           {open === null ? (
             <LargeDiff bytes={bytes} onShow={onShow} hint="You can also select a file to view its diff." />
           ) : (
-            <SingleFileDiff key={open.path} repo={repo} oid={detail.oid} file={open} onHistory={onHistory} />
+            <SingleFileDiff key={open.path} repo={repo} oid={detail.oid} file={open} onInvestigate={onInvestigate} />
           )}
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -425,12 +433,12 @@ function SingleFileDiff({
   repo,
   oid,
   file,
-  onHistory,
+  onInvestigate,
 }: {
   repo: RepoId
   oid: Oid
   file: FileChange
-  onHistory: ((path: string) => void) | undefined
+  onInvestigate: ((file: FileTarget) => void) | undefined
 }) {
   const [allowLarge, setAllowLarge] = useState(false)
   const paths = file.from === null ? [file.path] : [file.from, file.path]
@@ -453,7 +461,11 @@ function SingleFileDiff({
     <DiffStack
       repo={repo}
       items={items}
-      actions={(meta) => onHistory !== undefined && <HistoryButton onClick={() => onHistory(meta.path)} />}
+      actions={(meta) =>
+        onInvestigate !== undefined && (
+          <HistoryButton onClick={() => onInvestigate({ revision: oid, path: meta.path })} />
+        )
+      }
     />
   )
 }

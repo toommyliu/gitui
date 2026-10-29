@@ -1,5 +1,5 @@
 import { lstatSync, readFileSync, readdirSync, rmSync } from "node:fs"
-import { open, rename } from "node:fs/promises"
+import { open, rename, unlink } from "node:fs/promises"
 import { basename, join } from "node:path"
 import { NodeServices } from "@effect/platform-node"
 import { expect, layer } from "@effect/vitest"
@@ -14,7 +14,7 @@ import { makeRepo } from "./testRepo.ts"
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>()
-  return { ...fs, open: vi.fn(fs.open), rename: vi.fn(fs.rename) }
+  return { ...fs, open: vi.fn(fs.open), rename: vi.fn(fs.rename), unlink: vi.fn(fs.unlink) }
 })
 const real = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
 const denied = () => Object.assign(new Error("Access denied"), { code: "EACCES" })
@@ -33,6 +33,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.mocked(open).mockReset().mockImplementation(real.open)
   vi.mocked(rename).mockReset().mockImplementation(real.rename)
+  vi.mocked(unlink).mockReset().mockImplementation(real.unlink)
 })
 
 layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeServices.layer)))(
@@ -130,6 +131,59 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
         expect(f.git("show", ":z")).toBe("discarded original")
         f.write("z", "newer after cancel\n")
         expect(readFileSync(join(f.root, "z"), "utf8")).toBe("newer after cancel\n")
+      }),
+    )
+
+    it.effect("keeps a cancelled untracked discard locked until deletion settles", () =>
+      Effect.gen(function* () {
+        const f = fixture()
+        const r = yield* Repo
+        f.write("new", "discarded original\n")
+        f.write("z", "unrelated staged edit\n")
+        let pause = () => {}
+        let release = () => {}
+        const paused = new Promise<void>((resolve) => {
+          pause = resolve
+        })
+        const gate = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        vi.mocked(unlink).mockImplementation(async (path) => {
+          if (String(path) === join(f.root, "new")) {
+            pause()
+            await gate
+          }
+          await real.unlink(path)
+        })
+        const discarding = yield* Effect.forkChild(r.discard(id(f.root), [p("new")]))
+        yield* Effect.promise(() => paused)
+        let cancelled = false
+        const cancellation = yield* Effect.forkChild(
+          Fiber.interrupt(discarding).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                cancelled = true
+              }),
+            ),
+          ),
+          { startImmediately: true },
+        )
+        const cancelledBeforeDeletionSettled = cancelled
+        const staging = yield* Effect.forkChild(r.stage(id(f.root), [p("z")]), { startImmediately: true })
+        release()
+        yield* Fiber.join(cancellation)
+        yield* Fiber.join(staging)
+        expect(cancelledBeforeDeletionSettled).toBe(false)
+        expect(lstatSync(join(f.root, "new"), { throwIfNoEntry: false })).toBeUndefined()
+        expect(f.git("show", ":z")).toBe("unrelated staged edit")
+        f.write("new", "newer after cancel\n")
+        const backup = (yield* r.discardRecovery(id(f.root)))[0]!
+        expect(readFileSync(join(f.root, "new"), "utf8")).toBe("newer after cancel\n")
+        const conflict = yield* r.restoreDiscard(id(f.root), backup.id, null)
+        if (conflict._tag !== "Conflict") return yield* Effect.die("Expected newer edit conflict")
+        yield* r.restoreDiscard(id(f.root), backup.id, conflict.version)
+        expect(readFileSync(join(f.root, "new"), "utf8")).toBe("discarded original\n")
+        expect(f.git("show", ":z")).toBe("unrelated staged edit")
       }),
     )
 

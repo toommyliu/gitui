@@ -670,7 +670,7 @@ export class Repo extends Context.Service<
                   exitCode: -1,
                   stderr: "Could not remove the untracked file. Its backup is available in Recovery.",
                 }),
-            })
+            }).pipe(Effect.uninterruptible)
           }),
         )
       })

@@ -23,6 +23,8 @@ export const handlers = GitRpcs.toLayer(
         ),
       GetStatus: ({ repo: id }) => repo.status(id),
       GetRefs: ({ repo: id }) => repo.refs(id),
+      GetDiscardRecovery: ({ repo: id }) => repo.discardRecovery(id),
+      RestoreDiscard: ({ repo: id, id: backup, overwriteVersion }) => repo.restoreDiscard(id, backup, overwriteVersion),
       GetRecovery: ({ repo: id }) => repo.recovery(id),
       RecoverCommit: ({ repo: id, oid, name }) => repo.recoverCommit(id, oid, name),
       UndoCommit: ({ repo: id, expected, branch }) => repo.undoCommit(id, expected, branch),

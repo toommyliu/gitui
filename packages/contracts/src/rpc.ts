@@ -1,3 +1,4 @@
+import { CommitIdentity, IdentitySettings, CommitUpdate, CredentialPrompt } from "./commit-workflow.ts"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import * as Rpc from "effect/rpc/Rpc"
@@ -42,6 +43,12 @@ export class GitError extends Schema.TaggedError<GitError>()("GitError", {
   stderr: Schema.String,
 }) {
   get summary(): string {
+    if (/authentication failed|could not read (?:username|password)|terminal prompts disabled/i.test(this.stderr))
+      return "Authentication failed. Check your credential helper or retry with a valid username and token."
+    if (/permission denied \(publickey|could not read from remote repository/i.test(this.stderr))
+      return "SSH authentication failed. Check your SSH agent, loaded keys, and repository access."
+    if (/host key verification failed/i.test(this.stderr))
+      return "SSH host verification failed. Verify the host fingerprint and update known_hosts from a terminal."
     const raw = this.stderr.split("\n").filter((line) => line.trim() !== "" && !line.trimStart().startsWith("hint:"))
     const lines = raw.map((line) => line.trim())
     const problems = lines.flatMap((line, index) => {
@@ -154,7 +161,20 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("SetDraft", { payload: { repo: RepoId, message: Schema.String }, error: GitError }),
   Rpc.make("Commit", {
     payload: { repo: RepoId, message: Schema.String, amend: Schema.Boolean },
+    success: CommitUpdate,
     error: GitError,
+    stream: true,
+  }),
+  Rpc.make("GetCommitIdentity", { payload: repo, success: CommitIdentity, error: GitError }),
+  Rpc.make("SetCommitIdentity", { payload: { ...repo, settings: IdentitySettings }, error: GitError }),
+  Rpc.make("CredentialPrompts", { payload: repo, success: Schema.Array(CredentialPrompt), stream: true }),
+  Rpc.make("AnswerCredentialPrompt", {
+    payload: {
+      ...repo,
+      id: Schema.String,
+      answer: Schema.NullOr(Schema.Redacted(Schema.String.check(Schema.isMaxLength(4096)))),
+    },
+    success: Schema.Boolean,
   }),
   Rpc.make("ContinueOperation", { payload: repo, error: GitError }),
   Rpc.make("SkipOperation", { payload: repo, error: GitError }),

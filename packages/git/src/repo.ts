@@ -4,6 +4,10 @@ import { existsSync, lstatSync, statSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import {
   type CommitDetail,
+  type CommitIdentity,
+  type IdentitySettings,
+  type CommitUpdate,
+  type CredentialPrompt,
   type CommitRow,
   type Comparison,
   type ComparisonDetail,
@@ -45,6 +49,7 @@ import * as Stream from "effect/Stream"
 import { diffTreeArgs, parseCommit, parseFileChanges, showArgs } from "./commit.ts"
 import { makeComparison, resolveRevision } from "./comparison.ts"
 import { makeConflicts } from "./conflict.ts"
+import { makeIdentity } from "./identity.ts"
 import { Git, nulList } from "./git.ts"
 import {
   hasGraph,
@@ -249,6 +254,11 @@ export class Repo extends Context.Service<
     readonly readDraft: (repo: RepoId) => Effect.Effect<string, GitError>
     readonly writeDraft: (repo: RepoId, message: string) => Effect.Effect<void, GitError>
     readonly commitIndex: (repo: RepoId, message: string, amend: boolean) => Effect.Effect<void, GitError>
+    readonly commitStream: (repo: RepoId, message: string, amend: boolean) => Stream.Stream<CommitUpdate, GitError>
+    readonly identity: (repo: RepoId) => Effect.Effect<CommitIdentity, GitError>
+    readonly setIdentity: (repo: RepoId, settings: IdentitySettings) => Effect.Effect<void, GitError>
+    readonly credentialPrompts: (repo: RepoId) => Stream.Stream<ReadonlyArray<CredentialPrompt>>
+    readonly answerCredential: (repo: RepoId, id: string, answer: string | null) => boolean
     readonly continueOperation: (repo: RepoId) => Effect.Effect<void, GitError>
     readonly skipOperation: (repo: RepoId) => Effect.Effect<void, GitError>
     readonly abortOperation: (repo: RepoId) => Effect.Effect<void, GitError>
@@ -319,6 +329,7 @@ export class Repo extends Context.Service<
       const git = yield* Git
       const fs = yield* FileSystem.FileSystem
       const conflicts = makeConflicts(git, fs)
+      const identity = makeIdentity(git)
       const sessions = new Map<RepoId, Map<string, LogSession>>()
       const locks = new Map<RepoId, Semaphore.Semaphore>()
       const lockFor = (repo: RepoId) => {
@@ -825,15 +836,29 @@ export class Repo extends Context.Service<
             Effect.mapError((error) => draftError("write", error)),
           )
         }),
-        commitIndex: Effect.fn("Repo.commitIndex")(function* (repo, message, amend) {
-          yield* rewrite.checkCommit(repo, amend)
-          yield* run(
-            repo,
-            ["commit", "--cleanup=strip", "-F", "-", ...(amend ? ["--amend"] : [])],
-            new TextEncoder().encode(message),
-          )
-          if (!amend) yield* fs.remove(yield* draftPath(repo), { force: true }).pipe(Effect.ignore)
-        }),
+        identity: identity.read,
+        setIdentity: identity.write,
+        credentialPrompts: (repo) => git.prompts(repo),
+        answerCredential: (repo, id, answer) => git.answerPrompt(repo, id, answer),
+        commitStream: (repo, message, amend) =>
+          Stream.unwrap(
+            Effect.gen(function* () {
+              yield* rewrite.checkCommit(repo, amend)
+              const output = git
+                .output(repo, ["commit", "--cleanup=strip", "-F", "-", ...(amend ? ["--amend"] : [])], {
+                  stdin: new TextEncoder().encode(message),
+                  write: true,
+                })
+                .pipe(Stream.map((text): CommitUpdate => ({ _tag: "Output", text })))
+              const completed = Effect.gen(function* () {
+                const oid = (yield* git.text(repo, ["rev-parse", "HEAD"])).trim() as Oid
+                if (!amend) yield* fs.remove(yield* draftPath(repo), { force: true }).pipe(Effect.ignore)
+                return { _tag: "Committed", oid } as const
+              })
+              return output.pipe(Stream.concat(Stream.fromEffect(completed)))
+            }),
+          ),
+        commitIndex: (repo, message, amend) => Stream.runDrain(service.commitStream(repo, message, amend)),
         continueOperation: stepOperation("continue"),
         skipOperation: stepOperation("skip"),
         abortOperation: stepOperation("abort"),
@@ -1111,6 +1136,14 @@ export class Repo extends Context.Service<
         discard: locked(service.discard),
         applyLines: locked(service.applyLines),
         commitIndex: locked(service.commitIndex),
+        setIdentity: locked(service.setIdentity),
+        commitStream: (repo, message, amend) =>
+          Stream.unwrap(
+            Effect.as(
+              Effect.acquireRelease(lockFor(repo).take(1), () => lockFor(repo).release(1)),
+              service.commitStream(repo, message, amend),
+            ),
+          ),
         continueOperation: locked(service.continueOperation),
         skipOperation: locked(service.skipOperation),
         abortOperation: locked(service.abortOperation),

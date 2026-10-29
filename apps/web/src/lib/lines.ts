@@ -57,6 +57,15 @@ export const hunkChanges = (file: FileDiffMetadata, line: number, side: Selectio
   return hit === undefined ? [] : all.filter((row) => row.hunk === hit.hunk).flatMap(toSelection)
 }
 
+export type WholeFile = "symlink" | "submodule" | "mode" | "type"
+
+export const wholeFile = ({ mode, prevMode }: Pick<FileDiffMetadata, "mode" | "prevMode">): WholeFile | null => {
+  if (mode === "160000" || prevMode === "160000") return "submodule"
+  if (mode === "120000" || prevMode === "120000") return "symlink"
+  if (prevMode !== undefined && prevMode !== mode) return "mode"
+  return null
+}
+
 export const editorLine = (file: FileDiffMetadata, range: SelectedLineRange): number => {
   if (range.side !== "deletions") return range.start
   for (const hunk of file.hunks) {

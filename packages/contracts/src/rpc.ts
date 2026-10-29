@@ -253,7 +253,13 @@ export class GitRpcs extends RpcGroup.make(
   }),
   Rpc.make("DeleteRemoteTrackingBranch", { payload: { ...repo, name: Schema.String }, error: GitError }),
   Rpc.make("StashPush", {
-    payload: { repo: RepoId, message: Schema.String, includeUntracked: Schema.Boolean },
+    payload: {
+      repo: RepoId,
+      message: Schema.String,
+      includeUntracked: Schema.Boolean,
+      paths: Schema.NullOr(Schema.Array(RepoPath)).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
+      keepIndex: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+    },
     error: GitError,
   }),
   Rpc.make("AddWorktree", {

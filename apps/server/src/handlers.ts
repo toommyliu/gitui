@@ -55,7 +55,9 @@ export const handlers = GitRpcs.toLayer(
       PruneWorktrees: ({ repo: id }) => repo.pruneWorktrees(id),
       Fetch: ({ repo: id }) => repo.fetch(id),
       Pull: ({ repo: id, strategy, target }) => repo.pull(id, strategy, target),
-      Push: ({ repo: id, destination, setUpstream }) => repo.push(id, destination, setUpstream),
+      Push: ({ repo: id, destination, setUpstream, expectedContext }) =>
+        repo.push(id, destination, setUpstream, expectedContext),
+      GetPushContext: ({ repo: id, branch }) => repo.pushContext(id, branch),
       ForcePush: ({ repo: id, destination, expected }) => repo.forcePush(id, destination, expected),
       AddRemote: ({ repo: id, remote }) => repo.addRemote(id, remote),
       EditRemote: ({ repo: id, name, remote }) => repo.editRemote(id, name, remote),

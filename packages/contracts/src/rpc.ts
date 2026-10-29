@@ -23,6 +23,7 @@ import {
   PullStrategy,
   PullTarget,
   PushDestination,
+  PushContext,
   Remote,
   Recovery,
   Refs,
@@ -202,10 +203,20 @@ export class GitRpcs extends RpcGroup.make(
     stream: true,
   }),
   Rpc.make("Push", {
-    payload: { ...repo, destination: PushDestination, setUpstream: Schema.Boolean },
+    payload: {
+      ...repo,
+      destination: PushDestination,
+      setUpstream: Schema.Boolean,
+      expectedContext: Schema.optional(Schema.String),
+    },
     success: Progress,
     error: GitError,
     stream: true,
+  }),
+  Rpc.make("GetPushContext", {
+    payload: { ...repo, branch: Schema.String },
+    success: PushContext,
+    error: GitError,
   }),
   Rpc.make("ForcePush", {
     payload: { ...repo, destination: PushDestination, expected: Oid },

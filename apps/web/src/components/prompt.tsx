@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -28,6 +28,7 @@ export interface PromptField<F extends string> {
 export interface PromptOption<O extends string> {
   readonly key: O
   readonly label: string
+  readonly description?: string
   readonly initial?: boolean
 }
 
@@ -184,16 +185,28 @@ function PromptForm({ request, onDone }: { request: AnyRequest; onDone: () => vo
         })}
         {request.options?.map((option) => {
           const optionId = `${id}-${option.key}`
+          const descriptionId = option.description === undefined ? undefined : `${optionId}-description`
+          const label = (
+            <FieldLabel htmlFor={optionId} className="font-normal">
+              {option.label}
+            </FieldLabel>
+          )
           return (
             <Field key={option.key} orientation="horizontal">
               <Checkbox
                 id={optionId}
+                aria-describedby={descriptionId}
                 checked={options[option.key]}
                 onCheckedChange={(checked) => setOptions((current) => ({ ...current, [option.key]: checked }))}
               />
-              <FieldLabel htmlFor={optionId} className="font-normal">
-                {option.label}
-              </FieldLabel>
+              {descriptionId === undefined ? (
+                label
+              ) : (
+                <FieldContent>
+                  {label}
+                  <FieldDescription id={descriptionId}>{option.description}</FieldDescription>
+                </FieldContent>
+              )}
             </Field>
           )
         })}

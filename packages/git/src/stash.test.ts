@@ -22,6 +22,34 @@ const paths = (...paths: Array<string>) => paths as Array<RepoPath>
 const disk = (repo: ReturnType<typeof makeRepo>, path: string) => readFileSync(join(repo.root, path), "utf8")
 
 layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeServices.layer)))("Repo.stashPush", (it) => {
+  it.effect("saves a copy of staged-only changes while keeping them staged in either scope", () =>
+    Effect.gen(function* () {
+      const r = yield* Repo
+      for (const scope of [paths("selected"), null]) {
+        const repo = setup()
+        repo.write("selected", "staged only\n")
+        repo.git("add", "selected")
+        const index = repo.git("write-tree")
+        yield* r.stashPush(id(repo.root), "staged copy", false, scope, true)
+        expect(repo.git("stash", "list")).toContain("staged copy")
+        expect(repo.raw("show", "stash:selected").toString()).toBe("staged only\n")
+        expect(repo.raw("show", "stash^2:selected").toString()).toBe("staged only\n")
+        expect(repo.git("write-tree")).toBe(index)
+        expect(disk(repo, "selected")).toBe("staged only\n")
+        expect(repo.git("diff")).toBe("")
+      }
+    }),
+  )
+
+  it.effect("creates no keep-index stash when the selected file is unchanged", () =>
+    Effect.gen(function* () {
+      const repo = setup()
+      yield* (yield* Repo).stashPush(id(repo.root), "unchanged", false, paths("selected"), true)
+      expect(repo.git("stash", "list")).toBe("")
+      expect(repo.git("status", "--porcelain")).toBe("")
+    }),
+  )
+
   it.effect("stashes only selected tracked and untracked literal paths and applies/drops the stash", () =>
     Effect.gen(function* () {
       const repo = setup()

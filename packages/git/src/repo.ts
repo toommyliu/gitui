@@ -984,12 +984,7 @@ export class Repo extends Context.Service<
                   write: true,
                 })).trim()
               }
-              if (
-                workTree === (keepIndex ? indexTree : headTree) &&
-                (keepIndex || indexTree === headTree) &&
-                untrackedCommit === null
-              )
-                return
+              if (workTree === headTree && indexTree === headTree && untrackedCommit === null) return
               const indexCommit = (yield* git.text(
                 repo,
                 ["commit-tree", indexTree, "-p", head, "-m", "index on selected files"],

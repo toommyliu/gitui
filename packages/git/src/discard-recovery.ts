@@ -19,7 +19,7 @@ const io = <A>(run: () => Promise<A>) =>
       error instanceof GitError
         ? error
         : failure("Discard recovery could not complete. Any saved backup remains available in Recovery."),
-  })
+  }).pipe(Effect.uninterruptible)
 const missing = (error: unknown) => error instanceof Error && "code" in error && error.code === "ENOENT"
 const State = Schema.Union([
   Schema.TaggedStruct("Missing", {}),
@@ -292,7 +292,7 @@ export const makeDiscardRecovery = (git: Git["Service"]) => {
         }
         await atomicSave(dir, { ...displaced, after: fingerprint(saved.before) })
         return { _tag: "Restored" }
-      }).pipe(Effect.uninterruptible)
+      })
     }),
   }
 }

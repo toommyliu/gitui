@@ -187,6 +187,57 @@ layer(Repo.layer.pipe(Layer.provide(CommandLog.layer), Layer.provide(NodeService
       }),
     )
 
+    it.effect("keeps post-discard capture locked through cancellation so later edits require confirmation", () =>
+      Effect.gen(function* () {
+        const f = fixture()
+        const r = yield* Repo
+        f.write("z", "discarded original\n")
+        let pause = () => {}
+        let release = () => {}
+        const paused = new Promise<void>((resolve) => {
+          pause = resolve
+        })
+        const gate = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        let held = false
+        vi.mocked(open).mockImplementation(async (path, flags, mode) => {
+          const handle = await real.open(path, flags, mode)
+          if (!held && String(path) === join(f.root, "z") && readFileSync(path, "utf8") === "base z\n") {
+            held = true
+            pause()
+            await gate
+          }
+          return handle
+        })
+        const discarding = yield* Effect.forkChild(r.discard(id(f.root), [p("z")]))
+        yield* Effect.promise(() => paused)
+        let cancelled = false
+        const cancellation = yield* Effect.forkChild(
+          Fiber.interrupt(discarding).pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                cancelled = true
+              }),
+            ),
+          ),
+          { startImmediately: true },
+        )
+        const cancelledBeforeCaptureSettled = cancelled
+        const staging = yield* Effect.forkChild(r.stage(id(f.root), [p("z")]), { startImmediately: true })
+        release()
+        yield* Fiber.join(cancellation)
+        yield* Fiber.join(staging)
+        expect(cancelledBeforeCaptureSettled).toBe(false)
+        f.write("z", "newer after cancel\n")
+        const backup = (yield* r.discardRecovery(id(f.root)))[0]!
+        const result = yield* r.restoreDiscard(id(f.root), backup.id, null)
+        expect(result._tag).toBe("Conflict")
+        expect(readFileSync(join(f.root, "z"), "utf8")).toBe("newer after cancel\n")
+        expect(f.git("show", ":z")).toBe("base z")
+      }),
+    )
+
     for (const phase of ["write", "sync", "rename"] as const) {
       it.effect(`cleans up temporary contents after a restore ${phase} failure and permits retry`, () =>
         Effect.gen(function* () {

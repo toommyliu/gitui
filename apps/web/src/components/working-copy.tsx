@@ -44,6 +44,7 @@ import { OperationBanner, openConflicts } from "./conflict-workspace"
 import { OpenInButton } from "./open-in"
 import { HistoryButton } from "./commit-detail"
 import { useConfirm } from "./confirm"
+import { useDiscard } from "./discard-recovery"
 import { LargeDiff, Loading, Nothing } from "./loading"
 import { Shortcut } from "./shortcut"
 import { useStashPrompt } from "./stash-prompt"
@@ -232,6 +233,7 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     : 0
 
   const git = useGitAction()
+  const runDiscard = useDiscard()
   const confirm = useConfirm()
   const conflictActions = useConflictActions(repo)
   const [conflictSession, openSession] = useConflictSession(repo)
@@ -241,13 +243,16 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
     confirm({
       title: rows.length === 1 ? `Discard changes to ${basename(rows[0]!.path)}?` : `Discard ${rows.length} files?`,
       body: rows.some((r) => r.area === "untracked") ? (
-        <p>Untracked files will be deleted. This can't be undone.</p>
+        <p>Untracked files will be deleted. You can undo this, or restore them later from Recovery.</p>
       ) : (
-        <p>The working tree copy will be reset to the staged version. This can't be undone.</p>
+        <p>
+          The working tree copy will be reset to the staged version. You can undo this, or restore it later from
+          Recovery.
+        </p>
       ),
       confirmLabel: "Discard",
       destructive: true,
-      onConfirm: () => git("Discard", repo, (c) => c("Discard", { repo, paths: rows.flatMap((r) => r.paths) })),
+      onConfirm: () => void runDiscard({ _tag: "Files", repo, paths: rows.flatMap((r) => r.paths) }),
     })
 
   const [selection, setSelection] = useState<CodeViewLineSelection | null>(null)
@@ -260,13 +265,20 @@ export function WorkingCopy({ repo, onHistory }: { repo: RepoId; onHistory: (pat
   }, [selection, itemsById])
 
   const applyLines = async (action: LineAction, path: RepoPath, lines: ReadonlyArray<LineSelection>) => {
-    const label = action === "stage" ? "Stage lines" : action === "unstage" ? "Unstage lines" : "Discard lines"
-    if (await git(label, repo, (c) => c("ApplyLines", { repo, action, path, lines }))) setSelection(null)
+    const applied =
+      action === "discard"
+        ? await runDiscard({ _tag: "Lines", repo, path, lines })
+        : await git(action === "stage" ? "Stage lines" : "Unstage lines", repo, (c) =>
+            c("ApplyLines", { repo, action, path, lines }),
+          )
+    if (applied) setSelection(null)
   }
   const discardLines = (path: RepoPath, lines: ReadonlyArray<LineSelection>) =>
     confirm({
       title: `Discard ${lines.length} ${lines.length === 1 ? "line" : "lines"} in ${basename(path)}?`,
-      body: <p>The working tree will lose these changes. This can't be undone.</p>,
+      body: (
+        <p>The working tree will lose these changes. You can undo this, or restore the file later from Recovery.</p>
+      ),
       confirmLabel: "Discard",
       destructive: true,
       onConfirm: () => void applyLines("discard", path, lines),

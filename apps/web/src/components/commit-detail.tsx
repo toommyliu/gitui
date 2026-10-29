@@ -19,14 +19,16 @@ import { type ReactNode, useMemo, useRef, useState } from "react"
 import type { FileTarget } from "@/lib/file-investigation"
 import { FILE_KINDS, type FileKind, type LineCounts, changeBreakdown, isTestFile } from "@/lib/file-kind"
 import { longDate, shortOid } from "@/lib/format"
+import { filterFiles } from "@/lib/change-search"
 import { commitAtom, diffAtom, diffKey, latest, loadError } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
 import { settingsAtom } from "@/lib/settings"
-import { DiffStack, expandableIds, patchItems, useCollapse } from "./diff-view"
+import { DiffStack, expandableIds, filterItems, patchItems, useCollapse } from "./diff-view"
 import { ChangeLetter } from "./change-letter"
 import { OpenInButton } from "./open-in"
 import { LargeDiff, Loading, Nothing } from "./loading"
+import { FileFilter } from "./search-fields"
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -163,8 +165,10 @@ export function CommitDetail({
     const all = diff?._tag === "Patch" ? patchItems(oid, diff.patch) : []
     return hideTests ? all.filter((item) => !isTestFile(item.fileDiff.name)) : all
   }, [diff, oid, hideTests])
+  const [filter, setFilter] = useState("")
+  const shown = useMemo(() => filterItems(items, filter), [items, filter])
   const collapse = useCollapse()
-  const expandable = useMemo(() => expandableIds(items), [items])
+  const expandable = useMemo(() => expandableIds(shown), [shown])
   const allCollapsed = expandable.every((id) => collapse.ids.has(id))
 
   if (detail === undefined || detail.oid !== oid) {
@@ -209,20 +213,32 @@ export function CommitDetail({
       {diff === undefined && diffError === undefined ? (
         <Loading label="Loading diff" />
       ) : diffError === undefined ? (
-        <div className="min-h-0 flex-1">
-          <DiffStack
-            key={oid}
-            repo={repo}
-            items={items}
-            collapse={collapse}
-            header={() => <Summary detail={detail} onSelect={onSelect} />}
-            actions={(meta) =>
-              onInvestigate !== undefined && (
-                <HistoryButton onClick={() => onInvestigate({ revision: oid, path: meta.path })} />
-              )
-            }
-          />
-        </div>
+        <>
+          <FileFilter value={filter} onChange={setFilter} shown={shown.length} total={items.length} />
+          {shown.length === 0 && filter.trim() !== "" ? (
+            <>
+              <Summary detail={detail} onSelect={onSelect} />
+              <div className="min-h-0 flex-1">
+                <NoMatchingFiles filter={filter} onClear={() => setFilter("")} />
+              </div>
+            </>
+          ) : (
+            <div className="min-h-0 flex-1">
+              <DiffStack
+                key={oid}
+                repo={repo}
+                items={shown}
+                collapse={collapse}
+                header={() => <Summary detail={detail} onSelect={onSelect} />}
+                actions={(meta) =>
+                  onInvestigate !== undefined && (
+                    <HistoryButton onClick={() => onInvestigate({ revision: oid, path: meta.path })} />
+                  )
+                }
+              />
+            </div>
+          )}
+        </>
       ) : (
         <>
           <Summary detail={detail} onSelect={onSelect} />
@@ -236,6 +252,10 @@ export function CommitDetail({
 }
 
 const FILE_ROW = 24
+
+export function NoMatchingFiles({ filter, onClear }: { filter: string; onClear: () => void }) {
+  return <Nothing title={`No files match "${filter.trim()}"`} action={{ label: "Clear filter", onClick: onClear }} />
+}
 
 export function HistoryButton({ onClick }: { onClick: () => void }) {
   return (
@@ -312,10 +332,13 @@ function LargeCommit({
   const diff = usePanelRef()
   const narrow = useNarrow()
   const { hideTests } = useAtomValue(settingsAtom)
-  const listed = useMemo(
+  const [filter, setFilter] = useState("")
+  const tested = useMemo(
     () => (hideTests ? detail.files.filter((file) => !isTestFile(file.path)) : detail.files),
     [detail.files, hideTests],
   )
+  const listed = useMemo(() => filterFiles(tested, filter), [tested, filter])
+  const shownOpen = open !== null && listed.includes(open) ? open : null
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
     count: listed.length,
@@ -372,44 +395,56 @@ function LargeCommit({
           panelRef={files}
           onResize={(size) => setFilesShown(size.asPercentage > 0)}
         >
-          <ScrollArea
-            className="h-full"
-            viewportRef={scrollRef}
-            viewportProps={{ className: "[contain:strict] data-has-overflow-y:pr-2.5" }}
-          >
-            <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-              {virtualizer.getVirtualItems().map((item) => {
-                const file = listed[item.index]!
-                return (
-                  <div
-                    key={item.key}
-                    className={cn(
-                      "absolute top-0 left-0 flex w-full items-center gap-2 px-3 text-left hover:bg-muted/60",
-                      open?.path === file.path && "bg-selection",
-                    )}
-                    style={{ height: FILE_ROW, transform: `translateY(${item.start}px)` }}
-                  >
-                    <button
-                      type="button"
-                      className="flex h-full min-w-0 flex-1 items-center gap-2 text-left"
-                      onClick={() => {
-                        setOpen(file)
-                        diff.current?.expand()
-                        if (narrow) files.current?.collapse()
-                      }}
-                    >
-                      <ChangeLetter change={file.change} />
-                      <span className="truncate">{file.path}</span>
-                    </button>
-                    {onInvestigate !== undefined && (
-                      <HistoryButton onClick={() => onInvestigate({ revision: detail.oid, path: file.path })} />
-                    )}
-                    <OpenInButton repo={repo} file={{ path: file.path }} compact disabled={file.change === "deleted"} />
-                  </div>
-                )
-              })}
-            </div>
-          </ScrollArea>
+          <div className="flex h-full flex-col">
+            <FileFilter value={filter} onChange={setFilter} shown={listed.length} total={tested.length} />
+            {listed.length === 0 && filter.trim() !== "" ? (
+              <NoMatchingFiles filter={filter} onClear={() => setFilter("")} />
+            ) : (
+              <ScrollArea
+                className="min-h-0 flex-1"
+                viewportRef={scrollRef}
+                viewportProps={{ className: "[contain:strict] data-has-overflow-y:pr-2.5" }}
+              >
+                <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+                  {virtualizer.getVirtualItems().map((item) => {
+                    const file = listed[item.index]!
+                    return (
+                      <div
+                        key={item.key}
+                        className={cn(
+                          "absolute top-0 left-0 flex w-full items-center gap-2 px-3 text-left hover:bg-muted/60",
+                          shownOpen?.path === file.path && "bg-selection",
+                        )}
+                        style={{ height: FILE_ROW, transform: `translateY(${item.start}px)` }}
+                      >
+                        <button
+                          type="button"
+                          className="flex h-full min-w-0 flex-1 items-center gap-2 text-left"
+                          onClick={() => {
+                            setOpen(file)
+                            diff.current?.expand()
+                            if (narrow) files.current?.collapse()
+                          }}
+                        >
+                          <ChangeLetter change={file.change} />
+                          <span className="truncate">{file.path}</span>
+                        </button>
+                        {onInvestigate !== undefined && (
+                          <HistoryButton onClick={() => onInvestigate({ revision: detail.oid, path: file.path })} />
+                        )}
+                        <OpenInButton
+                          repo={repo}
+                          file={{ path: file.path }}
+                          compact
+                          disabled={file.change === "deleted"}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
         </ResizablePanel>
         <ResizableHandle />
         <ResizablePanel
@@ -418,10 +453,16 @@ function LargeCommit({
           panelRef={diff}
           onResize={(size) => setDiffShown(size.asPercentage > 0)}
         >
-          {open === null ? (
+          {shownOpen === null ? (
             <LargeDiff bytes={bytes} onShow={onShow} hint="You can also select a file to view its diff." />
           ) : (
-            <SingleFileDiff key={open.path} repo={repo} oid={detail.oid} file={open} onInvestigate={onInvestigate} />
+            <SingleFileDiff
+              key={shownOpen.path}
+              repo={repo}
+              oid={detail.oid}
+              file={shownOpen}
+              onInvestigate={onInvestigate}
+            />
           )}
         </ResizablePanel>
       </ResizablePanelGroup>

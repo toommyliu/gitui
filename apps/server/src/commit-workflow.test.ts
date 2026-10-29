@@ -15,6 +15,7 @@ import * as RpcClient from "effect/rpc/RpcClient"
 import * as RpcSerialization from "effect/rpc/RpcSerialization"
 import { makeRepo } from "../../../packages/git/src/testRepo.ts"
 import { serverLayer } from "./server.ts"
+import { filterFiles } from "../../web/src/lib/change-search.ts"
 
 const clientEffect = Effect.gen(function* () {
   const { address } = yield* HttpServer.HttpServer
@@ -36,6 +37,32 @@ const hook = (root: string, source: string) => {
 }
 
 layer(serverLayer({ host: "127.0.0.1", port: 0, webDist: null, trustedOrigins: [] }))("Commit workflow RPC", (it) => {
+  it.effect("commits hidden staged files while limiting matching-file stage actions", () =>
+    Effect.gen(function* () {
+      const c = yield* clientEffect
+      const f = yield* fixtureEffect
+      f.commit("Base")
+      f.write("hidden.txt", "already staged\n")
+      f.git("add", "hidden.txt")
+      f.write("visible.txt", "stage this match\n")
+      f.write("unrelated.txt", "leave unstaged\n")
+      const { id: repo } = yield* c.OpenRepo({ path: f.root })
+      const matching = filterFiles((yield* c.GetStatus({ repo })).entries, "visible")
+      yield* c.Stage({ repo, paths: matching.map((file) => file.path) })
+      expect(f.git("diff", "--cached", "--name-only").split("\n")).toEqual(["hidden.txt", "visible.txt"])
+      const updates = yield* Stream.runCollect(c.Commit({ repo, message: "Commit every staged file", amend: false }))
+      expect(updates.at(-1)).toEqual({ _tag: "Committed", oid: f.git("rev-parse", "HEAD") })
+      expect(f.git("ls-tree", "-r", "--name-only", "HEAD").split("\n")).toEqual(["hidden.txt", "visible.txt"])
+      expect((yield* c.GetFileRevision({ repo, revision: "HEAD", path: RepoPath.make("hidden.txt") })).content).toEqual(
+        {
+          _tag: "Text",
+          content: "already staged\n",
+        },
+      )
+      expect(f.git("status", "--porcelain")).toBe("?? unrelated.txt")
+    }).pipe(Effect.scoped),
+  )
+
   it.effect("commits partially staged new files without consuming a selected-file stash", () =>
     Effect.gen(function* () {
       const c = yield* clientEffect

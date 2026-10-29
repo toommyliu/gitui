@@ -40,7 +40,9 @@ import {
   selectAll,
   selectedRows,
   type Side,
+  visibleSelection,
 } from "@/lib/file-selection"
+import { filterFiles } from "@/lib/change-search"
 import { useAppHotkeys } from "@tanstack/react-hotkeys"
 import { commitAtom, diffAtom, diffKey, latest, loadError, statusAtom, useGitAction } from "@/lib/git"
 import type { FileTarget } from "@/lib/file-investigation"
@@ -55,8 +57,9 @@ import { IdentityDialog, IdentityLine } from "./commit-identity"
 import { useConflictActions } from "./conflict-view"
 import { OperationBanner, openConflicts } from "./conflict-workspace"
 import { OpenInButton } from "./open-in"
-import { HistoryButton } from "./commit-detail"
+import { HistoryButton, NoMatchingFiles } from "./commit-detail"
 import { useConfirm } from "./confirm"
+import { FileFilter } from "./search-fields"
 import { useDiscard } from "./discard-recovery"
 import { LargeDiff, Loading, Nothing } from "./loading"
 import { Shortcut } from "./shortcut"
@@ -72,6 +75,7 @@ import {
   type Collapse,
   DiffStack,
   type DiffItemMeta,
+  filterItems,
   GutterButton,
   hasText,
   type HoveredLine,
@@ -86,6 +90,7 @@ interface FileRow {
   readonly area: Area
   readonly path: RepoPath
   readonly paths: ReadonlyArray<RepoPath>
+  readonly from: RepoPath | null
   readonly historyPath: RepoPath
   readonly change: Change
   readonly label: string
@@ -118,6 +123,7 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
           area: "untracked",
           path: entry.path,
           paths: [entry.path],
+          from: null,
           historyPath: entry.path,
           change: "added",
           label: "untracked",
@@ -128,6 +134,7 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
           area: "conflicted",
           path: entry.path,
           paths: [entry.path],
+          from: null,
           historyPath: entry.path,
           change: "modified",
           label: "conflict",
@@ -139,6 +146,7 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
             area: "unstaged",
             path: entry.path,
             paths: [entry.path],
+            from: entry.from,
             historyPath: entry.from ?? entry.path,
             change: entry.unstaged,
             label: "",
@@ -150,9 +158,10 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
             area: "staged",
             path: entry.path,
             paths,
+            from: entry.from,
             historyPath: entry.from ?? entry.path,
             change: entry.staged,
-            label: entry.from ?? "",
+            label: entry.from === null ? "" : `from ${entry.from}`,
           })
         }
         break
@@ -161,6 +170,13 @@ const classify = (entries: ReadonlyArray<StatusEntry>) => {
   }
   return { unstaged, staged }
 }
+
+type Lists = Readonly<Record<Side, ReadonlyArray<FileRow>>>
+
+const filterLists = (lists: Lists, query: string): Lists => ({
+  unstaged: filterFiles(lists.unstaged, query),
+  staged: filterFiles(lists.staged, query),
+})
 
 function DiffToggle({ side, ids, collapse }: { side: Side; ids: ReadonlyArray<string>; collapse: Collapse }) {
   if (ids.length === 0) return null
@@ -197,10 +213,17 @@ export function WorkingCopy({ repo, onInvestigate }: { repo: RepoId; onInvestiga
   )
   const conflictPaths = useMemo(() => conflicts.map((entry) => entry.path), [conflicts])
   const lists = useMemo(() => ({ unstaged, staged }), [unstaged, staged])
+  const [filter, setFilter] = useState("")
+  const filtering = filter.trim() !== ""
+  const visibleLists = useMemo(() => filterLists(lists, filter), [lists, filter])
   const [storedFileSelection, setFileSelection] = useState<FileSelection | null>(null)
-  const fileSelection = reconcile(storedFileSelection, lists)
+  const fileSelection = reconcile(storedFileSelection, visibleLists)
   if (fileSelection !== storedFileSelection) setFileSelection(fileSelection)
-  const lead = fileSelection === null ? undefined : lists[fileSelection.side][fileSelection.leadIndex]
+  const changeFilter = (next: string) => {
+    setFilter(next)
+    setFileSelection(visibleSelection(fileSelection, filterLists(lists, next)))
+  }
+  const lead = fileSelection === null ? undefined : visibleLists[fileSelection.side][fileSelection.leadIndex]
   const inspected = lead?.area === "conflicted" && fileSelection?.paths.has(lead.path) === true ? lead.path : null
   const untrackedPaths = useMemo(
     () =>
@@ -249,6 +272,7 @@ export function WorkingCopy({ repo, onInvestigate }: { repo: RepoId; onInvestiga
     ],
     [unstagedDiff, stagedDiff, untrackedDiff, untrackedPaths.length, onDemandDiff, onDemandPaths.length],
   )
+  const shownItems = useMemo(() => filterItems(items, filter), [items, filter])
   const diffs = [
     unstagedDiff,
     stagedDiff,
@@ -312,8 +336,9 @@ export function WorkingCopy({ repo, onInvestigate }: { repo: RepoId; onInvestiga
       ),
     [unstaged, staged],
   )
-  const [selection, setSelection] = useState<CodeViewLineSelection | null>(null)
-  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
+  const [storedLineSelection, setSelection] = useState<CodeViewLineSelection | null>(null)
+  const itemsById = useMemo(() => new Map(shownItems.map((item) => [item.id, item])), [shownItems])
+  const selection = storedLineSelection !== null && itemsById.has(storedLineSelection.id) ? storedLineSelection : null
   const selected = useMemo(() => {
     const item = selection === null ? undefined : itemsById.get(selection.id)
     if (selection === null || item === undefined) return null
@@ -370,11 +395,11 @@ export function WorkingCopy({ repo, onInvestigate }: { repo: RepoId; onInvestiga
   const sectionIds = useMemo(() => {
     const unstagedIds: Array<string> = []
     const stagedIds: Array<string> = []
-    for (const item of items) {
+    for (const item of shownItems) {
       if (hasText(item)) (itemMeta(item.id).section === "staged" ? stagedIds : unstagedIds).push(item.id)
     }
     return { unstaged: unstagedIds, staged: stagedIds }
-  }, [items])
+  }, [shownItems])
 
   const viewRef = useRef<CodeViewHandle<undefined, undefined>>(null)
   const [revealing, setRevealing] = useState<{ readonly id: string } | null>(null)
@@ -457,9 +482,17 @@ export function WorkingCopy({ repo, onInvestigate }: { repo: RepoId; onInvestiga
             stagedCount={staged.length}
             selection={fileSelection?.paths ?? noPaths}
           />
+          <FileFilter
+            value={filter}
+            onChange={changeFilter}
+            shown={visibleLists.unstaged.length + visibleLists.staged.length}
+            total={unstaged.length + staged.length}
+          />
           <FileLists
             repo={repo}
-            lists={lists}
+            lists={visibleLists}
+            all={lists}
+            filtering={filtering}
             selection={fileSelection}
             onSelectionChange={setFileSelection}
             onReveal={reveal}
@@ -507,11 +540,13 @@ export function WorkingCopy({ repo, onInvestigate }: { repo: RepoId; onInvestiga
           <LargeDiff bytes={largeBytes} onShow={() => setAllowLarge(true)} />
         ) : items.length === 0 ? (
           <EmptyDiff files={unstaged.length + staged.length} />
+        ) : shownItems.length === 0 ? (
+          <NoMatchingFiles filter={filter} onClear={() => changeFilter("")} />
         ) : (
           <div className="relative h-full">
             <DiffStack
               repo={repo}
-              items={items}
+              items={shownItems}
               actions={actions}
               viewRef={viewRef}
               collapse={collapse}
@@ -730,6 +765,8 @@ function CommitBox({
 function FileLists({
   repo,
   lists,
+  all,
+  filtering,
   selection,
   onSelectionChange: setSelection,
   onReveal,
@@ -737,13 +774,14 @@ function FileLists({
   ...actions
 }: RowActions & {
   repo: RepoId
-  lists: Readonly<Record<Side, ReadonlyArray<FileRow>>>
+  lists: Lists
+  all: Lists
+  filtering: boolean
   selection: FileSelection | null
   onSelectionChange: (selection: FileSelection | null) => void
   onReveal: (row: FileRow) => void
   diffToggle: (side: Side) => ReactNode
 }) {
-  const { unstaged, staged } = lists
   const { onStage, onUnstage, onDiscard, onMarkResolved } = actions
   const selected = selectedRows(selection, lists)
   const unstagedViewport = useRef<HTMLDivElement>(null)
@@ -813,9 +851,9 @@ function FileLists({
       },
     }))
   }
-  const stageable = withoutConflicts(unstaged)
+  const stageable = withoutConflicts(all.unstaged)
   useCommand("files.stageAll", () => onStage(stageable), { enabled: stageable.length > 0 })
-  useCommand("files.unstageAll", () => onUnstage(staged), { enabled: staged.length > 0 })
+  useCommand("files.unstageAll", () => onUnstage(all.staged), { enabled: all.staged.length > 0 })
   const listKeys = { preventDefault: false, stopPropagation: false }
   useCommandKeys(fileKeys("unstaged"), { ...listKeys, target: unstagedViewport })
   useCommandKeys(fileKeys("staged"), { ...listKeys, target: stagedViewport })
@@ -828,6 +866,7 @@ function FileLists({
           key={side}
           side={side}
           rows={lists[side]}
+          total={filtering ? all[side].length : null}
           open={!closed.has(side)}
           onToggle={() => toggleSection(side)}
           selection={selection?.side === side ? selection : null}
@@ -864,6 +903,7 @@ function FileSection({
   repo,
   side,
   rows,
+  total,
   open,
   onToggle,
   selection,
@@ -877,6 +917,7 @@ function FileSection({
   repo: RepoId
   side: Side
   rows: ReadonlyArray<FileRow>
+  total: number | null
   open: boolean
   onToggle: () => void
   selection: FileSelection | null
@@ -909,6 +950,7 @@ function FileSection({
         side={side}
         label={label}
         rows={rows}
+        total={total}
         open={open}
         onToggle={onToggle}
         selected={selected}
@@ -959,6 +1001,7 @@ function SectionHeader({
   side,
   label,
   rows,
+  total,
   open,
   onToggle,
   selected,
@@ -973,6 +1016,7 @@ function SectionHeader({
   side: Side
   label: string
   rows: ReadonlyArray<FileRow>
+  total: number | null
   open: boolean
   onToggle: () => void
   selected: ReadonlyArray<FileRow>
@@ -980,7 +1024,14 @@ function SectionHeader({
 }) {
   const multi = selected.length > 1
   const targets = multi ? selected : rows
-  const count = (subset: ReadonlyArray<FileRow>) => (multi || subset.length < rows.length ? subset.length : "all")
+  const count = (subset: ReadonlyArray<FileRow>) =>
+    multi
+      ? subset.length
+      : total !== null
+        ? `${subset.length} matching`
+        : subset.length < rows.length
+          ? subset.length
+          : "all"
   const changes = withoutConflicts(targets)
   const conflicted = targets.filter((r) => r.area === "conflicted")
   const toolOpen = conflicted.some((r) => busy.has(r.path))
@@ -995,7 +1046,7 @@ function SectionHeader({
         {open ? <ChevronDownIcon className="mx-0.5 size-3" /> : <ChevronRightIcon className="mx-0.5 size-3" />}
         <span className="[text-box:trim-both_cap_alphabetic]">{label}</span>
         <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
-          {rows.length}
+          {total === null ? rows.length : `${rows.length} of ${total}`}
         </Badge>
       </button>
       {rows.length > 0 && (
@@ -1082,7 +1133,7 @@ function FileRowView({
               row.area === "conflicted" && "text-destructive",
             )}
           >
-            {row.area === "staged" ? `from ${row.label}` : row.label}
+            {row.label}
           </span>
         )}
       </button>

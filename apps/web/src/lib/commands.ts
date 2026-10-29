@@ -8,6 +8,7 @@ import {
   type HotkeyChord,
   PUNCTUATION_CODE_MAP,
   type UseHotkeyCommonOptions,
+  type UseHotkeyTarget,
   useAppHotkeys,
   useHotkey,
   useHotkeys,
@@ -79,17 +80,29 @@ export const appHotkeys = defineAppHotkeys({
     hotkey: "Shift+K",
     meta: { name: "Add the previous file to the selection", group: "Working copy", also: ["Shift+ArrowUp"] },
   },
-  "files.selectAll": { hotkey: "Mod+A", meta: { name: "Select every file in the section", group: "Working copy" } },
+  "files.selectAll": {
+    hotkey: "Mod+A",
+    meta: { name: "Select every shown file in the section", group: "Working copy" },
+  },
   "files.clear": { hotkey: "Escape", meta: { name: "Clear the selection", group: "Working copy" } },
   "files.stage": { hotkey: "Space", meta: { name: "Stage or unstage the selection", group: "Working copy" } },
   "files.discard": {
     hotkey: "Backspace",
     meta: { name: "Discard the selection", group: "Working copy", also: ["Delete"] },
   },
-  "files.stageAll": { hotkey: "Mod+Shift+S", meta: { name: "Stage all files", group: "Working copy" } },
-  "files.unstageAll": { hotkey: "Mod+Shift+U", meta: { name: "Unstage all files", group: "Working copy" } },
+  "files.stageAll": {
+    hotkey: "Mod+Shift+S",
+    meta: { name: "Stage all files, including ones the filter hides", group: "Working copy" },
+  },
+  "files.unstageAll": {
+    hotkey: "Mod+Shift+U",
+    meta: { name: "Unstage all files, including ones the filter hides", group: "Working copy" },
+  },
   "diff.nextFile": { hotkey: "]", meta: { name: "Next file in the diff", group: "Diff" } },
   "diff.previousFile": { hotkey: "[", meta: { name: "Previous file in the diff", group: "Diff" } },
+  "diff.nextHunk": { hotkey: "N", meta: { name: "Next hunk in the diff", group: "Diff" } },
+  "diff.previousHunk": { hotkey: "P", meta: { name: "Previous hunk in the diff", group: "Diff" } },
+  "diff.find": { hotkey: "Mod+F", meta: { name: "Find in the diff", group: "Diff" } },
   "diff.wrap": { hotkey: "Alt+Z", meta: { name: "Turn line wrapping on or off", group: "Diff" } },
   "diff.layout": { hotkey: null, meta: { name: "Switch between unified and split", group: "Diff" } },
 })
@@ -180,7 +193,11 @@ const isMenuCommand = Schema.is(MenuCommand)
 
 const whileOverlayOpen: ReadonlySet<CommandId> = new Set(["settings.open"])
 
-export const useCommand = (id: CommandId, run: () => void, options?: { readonly enabled?: boolean }) => {
+export const useCommand = (
+  id: CommandId,
+  run: () => void,
+  options?: { readonly enabled?: boolean; readonly target?: UseHotkeyTarget },
+) => {
   const overlayOpen = useOverlayOpen()
   const available = options?.enabled ?? true
   const active = available && (whileOverlayOpen.has(id) || !overlayOpen)
@@ -202,7 +219,8 @@ export const useCommand = (id: CommandId, run: () => void, options?: { readonly 
     }
   }, [id, available])
   const menuOwned = desktop !== undefined && isMenuCommand(id)
-  useHotkey(useAppHotkeys()[id], run, { enabled: active && !menuOwned })
+  const target = options?.target
+  useHotkey(useAppHotkeys()[id], run, { enabled: active && !menuOwned, ...(target === undefined ? {} : { target }) })
 }
 
 export interface KeyBinding {

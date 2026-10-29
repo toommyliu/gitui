@@ -56,6 +56,18 @@ export const reconcile = (selection: FileSelection | null, lists: Lists<Row>): F
   return make(selection.side, list, paths, selection.anchor, leadIndex === -1 ? fallback : leadIndex)
 }
 
+export const visibleSelection = (selection: FileSelection | null, lists: Lists<Row>): FileSelection | null => {
+  if (selection === null) return null
+  const list = lists[selection.side]
+  const paths = new Set(list.filter((row) => selection.paths.has(row.path)).map((row) => row.path))
+  if (paths.size === 0) return null
+  const lead = list.findIndex((row) => row.path === selection.lead)
+  if (paths.size === selection.paths.size && lead === selection.leadIndex) return selection
+  const index = lead === -1 ? list.findIndex((row) => paths.has(row.path)) : lead
+  const anchor = paths.has(selection.anchor) ? selection.anchor : list[index]!.path
+  return make(selection.side, list, paths, anchor, index)
+}
+
 export const click = (
   selection: FileSelection | null,
   lists: Lists<Row>,

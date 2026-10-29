@@ -125,19 +125,34 @@ export class GitRpcs extends RpcGroup.make(
   Rpc.make("GetCommit", { payload: { repo: RepoId, oid: Oid }, success: CommitDetail, error: GitError }),
   Rpc.make("GetTrackedFiles", { payload: repo, success: Schema.Array(RepoPath), error: GitError }),
   Rpc.make("GetFileHistory", {
-    payload: { ...repo, revision: Schema.String, path: RepoPath }, success: FileHistory, error: GitError,
+    payload: { ...repo, revision: Schema.String, path: RepoPath },
+    success: FileHistory,
+    error: GitError,
   }),
   Rpc.make("GetFileRevision", {
-    payload: { ...repo, revision: Schema.String, path: RepoPath }, success: FileRevision, error: GitError,
+    payload: { ...repo, revision: Schema.String, path: RepoPath },
+    success: FileRevision,
+    error: GitError,
   }),
   Rpc.make("GetFileBlame", {
-    payload: { ...repo, revision: Schema.String, path: RepoPath }, success: FileBlame, error: GitError,
+    payload: { ...repo, revision: Schema.String, path: RepoPath },
+    success: FileBlame,
+    error: GitError,
   }),
   Rpc.make("PreviewFileRestore", {
-    payload: { ...repo, source: FileIdentity, destination: RepoPath }, success: FileRestorePreview, error: GitError,
+    payload: { ...repo, source: FileIdentity, destination: RepoPath },
+    success: FileRestorePreview,
+    error: GitError,
   }),
   Rpc.make("RestoreFile", {
-    payload: { ...repo, source: FileIdentity, destination: RepoPath, expectedVersion: Schema.String, overwrite: Schema.Boolean }, error: GitError,
+    payload: {
+      ...repo,
+      source: FileIdentity,
+      destination: RepoPath,
+      expectedVersion: Schema.String,
+      overwrite: Schema.Boolean,
+    },
+    error: GitError,
   }),
   Rpc.make("GetComparison", {
     payload: { repo: RepoId, comparison: Comparison },

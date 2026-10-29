@@ -45,16 +45,18 @@ export type FileHistory = typeof FileHistory.Type
 export const FileBlame = Schema.Union([
   Schema.TaggedStruct("Unavailable", { reason: Schema.String }),
   Schema.TaggedStruct("Lines", {
-    lines: Schema.Array(Schema.Struct({
-      oid: Oid,
-      path: RepoPath,
-      originalLine: Schema.Int,
-      line: Schema.Int,
-      content: Schema.String,
-      author: Schema.String,
-      time: Schema.Int,
-      subject: Schema.String,
-    })),
+    lines: Schema.Array(
+      Schema.Struct({
+        oid: Oid,
+        path: RepoPath,
+        originalLine: Schema.Int,
+        line: Schema.Int,
+        content: Schema.String,
+        author: Schema.String,
+        time: Schema.Int,
+        subject: Schema.String,
+      }),
+    ),
   }),
 ])
 export type FileBlame = typeof FileBlame.Type

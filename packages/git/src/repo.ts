@@ -44,6 +44,7 @@ import * as Semaphore from "effect/Semaphore"
 import * as Stream from "effect/Stream"
 import { diffTreeArgs, parseCommit, parseFileChanges, showArgs } from "./commit.ts"
 import { makeComparison, resolveRevision } from "./comparison.ts"
+import { makeFileInvestigation } from "./file-investigation.ts"
 import { makeConflicts } from "./conflict.ts"
 import { Git, nulList } from "./git.ts"
 import {
@@ -204,7 +205,9 @@ const find = (session: LogSession, oid: Oid, from: number): Effect.Effect<number
     }
   })
 
-type RepoCommands = ReturnType<typeof makePublishing> & ReturnType<typeof makeRecovery>
+type RepoCommands = ReturnType<typeof makePublishing> &
+  ReturnType<typeof makeRecovery> &
+  ReturnType<typeof makeFileInvestigation>
 
 export class Repo extends Context.Service<
   Repo,
@@ -773,6 +776,7 @@ export class Repo extends Context.Service<
       const service: Repo["Service"] = {
         ...makePublishing(git),
         ...makeRecovery(git, status),
+        ...makeFileInvestigation(git),
         open,
         status,
         refs,
@@ -885,6 +889,7 @@ export class Repo extends Context.Service<
       }
       return Repo.of({
         ...service,
+        restoreFile: locked(service.restoreFile),
         recoverCommit: locked(service.recoverCommit),
         undoCommit: locked(service.undoCommit),
         stage: locked(service.stage),

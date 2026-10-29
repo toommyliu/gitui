@@ -123,13 +123,13 @@ layer(serverLayer({ host: "127.0.0.1", port: 0, webDist: null, trustedOrigins: [
       expect(
         yield* c.AnswerCredentialPrompt({ repo: otherRepo, id: prompt.id, answer: Redacted.make("wrong-repo") }),
       ).toBe(false)
-      const fakeAnswer = "fake-value-for-secrecy-test"
+      const fakeAnswer = "  fake-value-for-secrecy-test  "
       expect(yield* c.AnswerCredentialPrompt({ repo, id: prompt.id, answer: Redacted.make(fakeAnswer) })).toBe(true)
       const updates = yield* Fiber.join(committing)
-      expect(JSON.stringify(updates)).not.toContain(fakeAnswer)
+      expect(JSON.stringify(updates)).not.toContain(fakeAnswer.trim())
       expect(JSON.stringify(updates)).toContain("[redacted]")
       const logs = Option.getOrThrow(yield* Stream.runHead(c.CommandLog({ repo })))
-      expect(JSON.stringify(logs)).not.toContain(fakeAnswer)
+      expect(JSON.stringify(logs)).not.toContain(fakeAnswer.trim())
       expect(yield* c.AnswerCredentialPrompt({ repo, id: prompt.id, answer: null })).toBe(false)
       yield* Fiber.interrupt(listener)
       fixture.write("file.txt", "second\n")

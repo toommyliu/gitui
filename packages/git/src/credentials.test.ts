@@ -32,6 +32,14 @@ test("uses an existing askpass first and removes generated helper files on shutd
       code: 0,
       output: "fake-native-answer\n",
     })
+    expect(
+      await runHelper({
+        ...operation.env,
+        GIT_ASKPASS: operation.env.SSH_ASKPASS,
+        GITUI_NATIVE_ASKPASS: "/missing",
+        GITUI_NATIVE_SSH_ASKPASS: native,
+      }),
+    ).toEqual({ code: 0, output: "fake-native-answer\n" })
     expect(operation.sanitize("fake-native-answer")).toBe("[redacted]")
     expect(existsSync(helperDir)).toBe(true)
   } finally {

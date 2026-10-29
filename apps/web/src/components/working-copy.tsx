@@ -35,10 +35,13 @@ import {
 } from "@/lib/file-selection"
 import { useAppHotkeys } from "@tanstack/react-hotkeys"
 import { commitAtom, diffAtom, diffKey, latest, loadError, statusAtom, useGitAction } from "@/lib/git"
+import { commitRunAtom, useCommit } from "@/lib/commit-workflow"
 import { settingsAtom } from "@/lib/settings"
 import { hunkChanges, selectedChanges } from "@/lib/lines"
 import { type CommandId, type KeyBinding, useCommand, useCommandKeys } from "@/lib/commands"
 import { ChangeLetter } from "./change-letter"
+import { CommitFeedback } from "./commit-feedback"
+import { IdentityDialog, IdentityLine } from "./commit-identity"
 import { useConflictActions } from "./conflict-view"
 import { OperationBanner, openConflicts } from "./conflict-workspace"
 import { OpenInButton } from "./open-in"
@@ -485,8 +488,9 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
   const draft = useDraft(repo)
   const [amend, setAmend] = useState(false)
   const [amendEdit, setAmendEdit] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const git = useGitAction()
+  const [identityOpen, setIdentityOpen] = useState(false)
+  const running = useAtomValue(commitRunAtom(repo))?._tag === "Running"
+  const committer = useCommit(repo)
   const stash = useStashPrompt(repo)
 
   const amendOid =
@@ -505,13 +509,10 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
   }
 
   const canCommit =
-    !busy && message.trim() !== "" && (stagedCount > 0 || amending) && (status.operation !== "rebase" || editing)
+    !running && message.trim() !== "" && (stagedCount > 0 || amending) && (status.operation !== "rebase" || editing)
   const commit = async () => {
     if (!canCommit) return
-    setBusy(true)
-    const ok = await git(amending ? "Amend" : "Commit", repo, (c) => c("Commit", { repo, message, amend: amending }))
-    setBusy(false)
-    if (!ok) return
+    if (!(await committer.run({ message, amend: amending }))) return
     if (amending) toggleAmend(false)
     else draft.clear()
   }
@@ -530,6 +531,7 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
           onChange={(event) => setMessage(event.target.value)}
           onFocus={draft.onFocus}
           onBlur={draft.onBlur}
+          readOnly={running}
           placeholder={
             amending && head === undefined
               ? "Loading the previous commit message…"
@@ -551,12 +553,18 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
           </span>
         )}
       </div>
+      <IdentityLine
+        repo={repo}
+        amending={amending}
+        originalAuthor={head?.author}
+        onEdit={() => setIdentityOpen(true)}
+      />
       <div className="flex items-center gap-2">
-        <Field orientation="horizontal" className="w-auto" data-disabled={amendOid === null}>
+        <Field orientation="horizontal" className="w-auto" data-disabled={amendOid === null || running}>
           <Checkbox
             id={`amend-${repo}`}
             checked={amending}
-            disabled={amendOid === null}
+            disabled={amendOid === null || running}
             onCheckedChange={toggleAmend}
           />
           <FieldLabel
@@ -570,13 +578,13 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
           size="sm"
           variant="outline"
           className="ml-auto"
-          disabled={status.entries.length === 0 || status.operation !== null}
+          disabled={status.entries.length === 0 || status.operation !== null || running}
           onClick={stash}
         >
           Stash…
         </Button>
         <Button size="sm" disabled={!canCommit} onClick={() => void commit()}>
-          {busy && <Spinner data-icon="inline-start" />}
+          {running && <Spinner data-icon="inline-start" />}
           {amending
             ? "Amend"
             : stagedCount > 0
@@ -585,6 +593,8 @@ function CommitBox({ repo, status, stagedCount }: { repo: RepoId; status: Status
           {commitHotkey !== null && <Shortcut hotkey={commitHotkey} className="max-md:hidden" />}
         </Button>
       </div>
+      <CommitFeedback repo={repo} onEditIdentity={() => setIdentityOpen(true)} />
+      <IdentityDialog repo={repo} open={identityOpen} onOpenChange={setIdentityOpen} />
     </div>
   )
 }

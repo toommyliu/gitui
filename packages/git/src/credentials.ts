@@ -64,7 +64,11 @@ export const makeCredentialBridge = async () => {
       .map((item) => item.prompt)
   const notify = (cwd: string) => listeners.get(cwd)?.forEach((listener) => listener(snapshot(cwd)))
   const sanitize = (token: string, value: string) => {
-    for (const secret of operations.get(token)?.secrets ?? []) value = value.replaceAll(secret, "[redacted]")
+    for (const secret of operations.get(token)?.secrets ?? []) {
+      for (const part of [secret, ...secret.split(/\r?\n/).map((line) => line.trim())]) {
+        if (part !== "") value = value.replaceAll(part, "[redacted]")
+      }
+    }
     return value.replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/g, "$1[redacted]@")
   }
   const sockets = new Set<Socket>()

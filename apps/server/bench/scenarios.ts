@@ -150,7 +150,7 @@ export const scenarios: ReadonlyArray<Scenario> = [
       fx.git("add", "Makefile")
       const message = `bench commit ${n}`
       return {
-        run: (client) => client.Commit({ repo: fx.root, message, amend: false }),
+        run: (client) => Stream.runDrain(client.Commit({ repo: fx.root, message, amend: false })),
         verify: () => expect(fx.git("log", "-1", "--format=%s") === message, "commit was not created"),
       }
     },

@@ -258,4 +258,34 @@ layer(serverLayer({ host: "127.0.0.1", port: 0, webDist: null, trustedOrigins: [
       }).pipe(Effect.scoped),
     { timeout: 15000 },
   )
+  it.effect("streams noisy hook output while bounding failure diagnostics", () =>
+    Effect.gen(function* () {
+      const c = yield* clientEffect
+      const fixture = yield* fixtureEffect
+      const { id: repo } = yield* c.OpenRepo({ path: fixture.root })
+      fixture.write("file.txt", "staged\n")
+      fixture.git("add", "file.txt")
+      fixture.git("config", "commit.gpgsign", "false")
+      hook(
+        fixture.root,
+        `awk 'BEGIN { for (i = 0; i < 2000; i++) print "stdout hook " i }'
+awk 'BEGIN { for (i = 0; i < 2000; i++) print "stderr hook " i }' >&2
+echo 'fatal: Final hook failure' >&2
+exit 1`,
+      )
+      let stdoutLines = 0
+      const error = yield* Effect.flip(
+        Stream.runForEach(c.Commit({ repo, message: "Noisy hook", amend: false }), (update) =>
+          Effect.sync(() => {
+            if (update._tag === "Output" && update.text.startsWith("stdout hook ")) stdoutLines++
+          }),
+        ),
+      )
+      expect(stdoutLines).toBe(2000)
+      if (error._tag !== "GitError") return yield* Effect.die("Expected GitError")
+      expect(error.stderr.length).toBeLessThanOrEqual(8192)
+      expect(error.stderr).toContain("fatal: Final hook failure")
+      expect(error.stderr).not.toContain("stderr hook 0\n")
+    }).pipe(Effect.scoped),
+  )
 })

@@ -157,8 +157,8 @@ export class Git extends Context.Service<
             const handle = yield* spawner.spawn(
               command(cwd, args, { ...options, env: { ...operation.env, ...options?.env } }),
             )
-            const stderr = new ProgressSplitter()
-            const stdout = new ProgressSplitter()
+            const stderr = new ProgressSplitter(MAX_LOGGED_STDERR, operation.sanitize)
+            const stdout = new ProgressSplitter(0)
             const lines = (stream: Stream.Stream<Uint8Array, unknown>, splitter: ProgressSplitter) =>
               stream.pipe(
                 Stream.decodeText(),
@@ -170,7 +170,7 @@ export class Git extends Context.Service<
               )
             const exited = Effect.gen(function* () {
               const exitCode = yield* handle.exitCode
-              const message = operation.sanitize(stderr.transcript)
+              const message = stderr.transcript
               yield* finish(
                 { _tag: "Exited", code: exitCode, accepted: exitCode === 0 && !operation.cancelled },
                 message,
@@ -187,7 +187,7 @@ export class Git extends Context.Service<
               Stream.concat(Stream.drain(Stream.fromEffect(exited))),
               Stream.onExit((exit) =>
                 Exit.hasInterrupts(exit) || operation.cancelled
-                  ? finish({ _tag: "Cancelled" }, operation.sanitize(stderr.transcript))
+                  ? finish({ _tag: "Cancelled" }, stderr.transcript)
                   : Effect.void,
               ),
             )

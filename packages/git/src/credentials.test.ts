@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process"
+import { execFileSync, spawn } from "node:child_process"
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { createConnection } from "node:net"
 import { tmpdir } from "node:os"
@@ -6,11 +6,12 @@ import { dirname, join } from "node:path"
 import { expect, test } from "vite-plus/test"
 import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
+import { fixtureEnv, makeRepo } from "./testRepo.ts"
 import { makeCredentialBridge } from "./credentials.ts"
 
-const runHelper = (env: Record<string, string>) =>
+const runHelper = (env: Record<string, string>, cwd?: string) =>
   new Promise<{ code: number | null; output: string }>((resolve, reject) => {
-    const child = spawn(env.GIT_ASKPASS!, ["Password for fake helper:"], { env: { ...process.env, ...env } })
+    const child = spawn(env.GIT_ASKPASS!, ["Password for fake helper:"], { cwd, env: { ...process.env, ...env } })
     let output = ""
     child.stdout.on("data", (chunk) => {
       output += chunk
@@ -77,3 +78,45 @@ test("rejects forged operation tokens and unblocks helpers when their operation 
     bridge.close()
   }
 })
+
+test.each(["environment", "config"] as const)(
+  "matches native Git for literal %s askpass paths with shell characters",
+  async (source) => {
+    const fixture = makeRepo()
+    const native = join(fixture.root, "native helper $(false)")
+    writeFileSync(native, "#!/bin/sh\nprintf 'fake-literal-answer\\n'\n")
+    chmodSync(native, 0o700)
+    const env = {
+      ...fixtureEnv(),
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_ASKPASS: source === "environment" ? native : undefined,
+    }
+    if (source === "config") fixture.git("config", "core.askpass", native)
+    const bridge = await makeCredentialBridge()
+    const operation = bridge.register(fixture.root)
+    try {
+      const nativeResult = execFileSync("git", ["-c", "credential.helper=", "credential", "fill"], {
+        cwd: fixture.root,
+        env,
+        encoding: "utf8",
+        input: "protocol=https\nhost=fake.invalid\n\n",
+      })
+      expect(nativeResult).toContain("username=fake-literal-answer\npassword=fake-literal-answer")
+      expect(
+        await runHelper(
+          {
+            ...operation.env,
+            GIT_CONFIG_GLOBAL: "/dev/null",
+            GIT_CONFIG_NOSYSTEM: "1",
+            GITUI_NATIVE_ASKPASS: source === "environment" ? native : "",
+          },
+          fixture.root,
+        ),
+      ).toEqual({ code: 0, output: "fake-literal-answer\n" })
+    } finally {
+      operation.close()
+      bridge.close()
+      rmSync(fixture.root, { recursive: true, force: true })
+    }
+  },
+)

@@ -1,8 +1,9 @@
-import { useAtomSet } from "@effect/atom-react"
+import { useAtomValue } from "@effect/atom-react"
 import type { Comparison, ComparisonMode, RepoId } from "@gitui/contracts"
 import * as Atom from "effect/reactivity/Atom"
 import { shortOid } from "./format"
-import { GitClient, keys } from "./git"
+import { GitClient, keys, latest, refsAtom, statusAtom } from "./git"
+import { useSelect } from "./selection"
 
 export const comparisonModes: Record<ComparisonMode, { value: ComparisonMode; label: string; description: string }> = {
   "merge-base": {
@@ -24,9 +25,18 @@ export const comparisonModes: Record<ComparisonMode, { value: ComparisonMode; la
 
 export type ComparisonDraft = { readonly head: string; readonly base?: string; readonly mode: ComparisonMode }
 
-export const comparisonDialogAtom = Atom.family((_repo: RepoId) => Atom.make<ComparisonDraft | null>(null))
-
-export const useCompare = (repo: RepoId) => useAtomSet(comparisonDialogAtom(repo))
+export const useCompare = (repo: RepoId) => {
+  const select = useSelect(repo)
+  const refs = latest(useAtomValue(refsAtom(repo)))
+  const status = latest(useAtomValue(statusAtom(repo)))
+  return (draft: ComparisonDraft) => {
+    const current = status?.head._tag === "Branch" ? `refs/heads/${status.head.name}` : "HEAD"
+    const main = refs?.branches.find((branch) => branch.name === "main" || branch.name === "master")
+    const mainRef = main === undefined ? undefined : `refs/heads/${main.name}`
+    const base = draft.base ?? (mainRef !== undefined && mainRef !== draft.head ? mainRef : current)
+    select({ _tag: "Comparison", comparison: { base, head: draft.head, mode: draft.mode } })
+  }
+}
 
 export const comparisonKey = (repo: RepoId, comparison: Comparison) => JSON.stringify([repo, comparison])
 

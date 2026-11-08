@@ -14,17 +14,17 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "cn"
-import { CloudIcon, SearchIcon } from "lucide-react"
+import { CloudIcon, GitCompareArrowsIcon, HistoryIcon, SearchIcon, XIcon } from "lucide-react"
 import * as Effect from "effect/Effect"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Atom from "effect/reactivity/Atom"
 import * as AtomRegistry from "effect/reactivity/AtomRegistry"
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { memo, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useCompare } from "@/lib/comparison"
 import { copyWithToast } from "@/lib/clipboard"
 import { useCommandKeys } from "@/lib/commands"
 import { useHistoryDate } from "@/lib/dates"
-import { investigationAtom } from "@/lib/file-investigation"
+import { filePickerAtom } from "@/lib/file-investigation"
 import { shortOid } from "@/lib/format"
 import {
   LOG_PAGE_SIZE,
@@ -93,7 +93,7 @@ export function RefBadge({ label, className }: { label: RefLabel; className?: st
     <Badge
       variant={label.kind === "head" ? "default" : "secondary"}
       className={cn(
-        "h-4 rounded-sm px-1 text-[11px] [&>svg]:size-3!",
+        "h-4 rounded-sm px-1 text-2xs [&>svg]:size-3!",
         label.kind !== "head" && "bg-foreground/8",
         (label.kind === "remote" || label.kind === "stash") && "text-muted-foreground",
         label.kind === "tag" && "pr-0.5 italic",
@@ -114,7 +114,7 @@ function RefLabels({ labels }: { labels: ReadonlyArray<RefLabel> }) {
       <TooltipTrigger render={<span className="flex max-w-[40%] min-w-0 shrink-0 items-center gap-1" />}>
         <RefBadge label={first} className="min-w-0 shrink" />
         {rest.length > 0 && (
-          <Badge variant="secondary" className="h-4 rounded-sm bg-foreground/8 px-1 text-[11px] tabular-nums">
+          <Badge variant="secondary" className="h-4 rounded-sm bg-foreground/8 px-1 text-2xs tabular-nums">
             +{rest.length}
           </Badge>
         )}
@@ -174,7 +174,7 @@ export function CommitList({
   searchRef: React.RefObject<HTMLInputElement | null>
 }) {
   const openCompare = useCompare(repo)
-  const setInvestigation = useAtomSet(investigationAtom(repo))
+  const openFilePicker = useAtomSet(filePickerAtom(repo))
   const [range, setRange] = useState<{ anchor: Oid; cursor: Oid; comparison: Comparison } | null>(null)
   const selectionRequest = useRef(0)
   const search = useDebounced(query.trim(), 250)
@@ -350,33 +350,43 @@ export function CommitList({
 
   return (
     <div className="flex h-full flex-col">
-      <InputGroup className="h-8 shrink-0 rounded-none border-0 border-b border-border bg-transparent ring-inset has-[[data-slot=input-group-control]:focus-visible]:border-border has-[[data-slot=input-group-control]:focus-visible]:ring-ring dark:bg-transparent">
-        <InputGroupAddon>
-          <SearchIcon />
-        </InputGroupAddon>
-        <InputGroupInput
-          ref={searchRef}
-          aria-label="Search history"
-          placeholder="Search messages, author:name, path:file or a SHA"
-          autoComplete="off"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          enterKeyHint="search"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") onQueryChange("")
-            if (event.key === "Enter") {
-              list.element?.focus()
-              picking.current = !pickFirstMatch()
-            }
-          }}
-        />
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton
-            size="xs"
-            title="Compare refs, or Shift-select commits for a range"
+      <div className="flex h-8 shrink-0 items-center border-b">
+        <InputGroup className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent dark:bg-transparent">
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            ref={searchRef}
+            aria-label="Search history"
+            placeholder="Search messages, author:name, path:file or a SHA"
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            enterKeyHint="search"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") onQueryChange("")
+              if (event.key === "Enter") {
+                list.element?.focus()
+                picking.current = !pickFirstMatch()
+              }
+            }}
+          />
+          {summary !== null && (
+            <InputGroupAddon align="inline-end">
+              <InputGroupText className="tabular-nums">{summary}</InputGroupText>
+              <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={() => onQueryChange("")}>
+                <XIcon />
+              </InputGroupButton>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
+        <div className="flex h-full shrink-0 items-center gap-0.5 border-l px-1">
+          <ToolbarButton
+            label="Compare"
+            detail="Compare refs, or Shift-select commits for a range"
             onClick={() =>
               openCompare({
                 head: selection._tag === "Commit" ? selection.oid : "HEAD",
@@ -384,25 +394,17 @@ export function CommitList({
               })
             }
           >
-            Compare…
-          </InputGroupButton>
-          <InputGroupButton
-            size="xs"
-            title="Browse any tracked file's history, contents, and blame"
-            onClick={() => setInvestigation({ _tag: "Pick" })}
+            <GitCompareArrowsIcon />
+          </ToolbarButton>
+          <ToolbarButton
+            label="History"
+            detail="Pick a file to see its history, contents and blame"
+            onClick={() => openFilePicker(true)}
           >
-            File history…
-          </InputGroupButton>
-        </InputGroupAddon>
-        {summary !== null && (
-          <InputGroupAddon align="inline-end">
-            <InputGroupText className="tabular-nums">{summary}</InputGroupText>
-            <InputGroupButton size="xs" onClick={() => onQueryChange("")}>
-              Clear
-            </InputGroupButton>
-          </InputGroupAddon>
-        )}
-      </InputGroup>
+            <HistoryIcon />
+          </ToolbarButton>
+        </div>
+      </div>
       {failed ? (
         <Nothing
           title={filtering ? "Search failed" : "Couldn't load history"}
@@ -418,14 +420,12 @@ export function CommitList({
         <ScrollArea
           className="@container min-h-0 flex-1"
           viewportRef={list.ref}
-          scrollbarClassName="opacity-0 transition-opacity duration-500 hover:opacity-100 hover:duration-150 data-scrolling:opacity-100 data-scrolling:duration-150"
           viewportProps={{
             tabIndex: 0,
             role: "listbox",
             "aria-label": "Commits. Use Shift and arrow keys to compare a range.",
             "aria-multiselectable": true,
-            className:
-              "[contain:strict] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+            className: "[contain:strict] data-has-overflow-y:pr-2.5",
           }}
         >
           <div className="relative w-full" style={{ height: list.height }}>
@@ -558,7 +558,7 @@ const CommitRowView = memo(function CommitRowView({
           <span className="hidden w-24 shrink-0 truncate text-right text-muted-foreground @md:block">
             {date(row.time)}
           </span>
-          <span className="hidden w-14 shrink-0 font-mono text-[11px] text-muted-foreground @3xl:block">
+          <span className="hidden w-14 shrink-0 font-mono text-2xs text-muted-foreground @3xl:block">
             {shortOid(row.oid)}
           </span>
         </div>
@@ -569,3 +569,22 @@ const CommitRowView = memo(function CommitRowView({
     </ContextMenu>
   )
 })
+
+function ToolbarButton({
+  label,
+  detail,
+  onClick,
+  children,
+}: {
+  label: string
+  detail: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <Button size="sm" variant="ghost" className="text-muted-foreground" tooltip={detail} onClick={onClick}>
+      {children}
+      {label}
+    </Button>
+  )
+}

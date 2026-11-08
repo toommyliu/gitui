@@ -1,13 +1,15 @@
+import { Hint } from "@/components/ui/tooltip"
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { Comparison, ComparisonDetail as Detail, RepoId, RepoPath } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
+import { ArrowLeftRightIcon } from "lucide-react"
 import { useId, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "cn"
 import { filterFiles } from "@/lib/change-search"
-import { comparisonAtom, comparisonKey, comparisonLabel, comparisonModes, useCompare } from "@/lib/comparison"
+import { comparisonAtom, comparisonKey, comparisonModes } from "@/lib/comparison"
 import type { FileTarget } from "@/lib/file-investigation"
 import { isTestFile } from "@/lib/file-kind"
 import { shortOid } from "@/lib/format"
@@ -18,6 +20,7 @@ import { ChangeLetter } from "./change-letter"
 import { ChangeTotals, HistoryButton, NoMatchingFiles, SectionBar, TestsToggle } from "./commit-detail"
 import { DiffStack, filterItems, patchItems, useCollapse } from "./diff-view"
 import { LargeDiff, Loading, Nothing } from "./loading"
+import { RefPicker, useRefOptions } from "./ref-picker"
 import { FileFilter } from "./search-fields"
 
 export function ComparisonDetail({
@@ -35,23 +38,48 @@ export function ComparisonDetail({
   const result = useAtomValue(atom)
   const refresh = useAtomRefresh(atom)
   const detail = result._tag === "Failure" && !result.waiting ? undefined : latest(result)
-  const openCompare = useCompare(repo)
+  const id = useId()
+  const options = useRefOptions(repo)
+  const update = (next: Partial<Comparison>) => onSelect({ _tag: "Comparison", comparison: { ...comparison, ...next } })
   const error = result._tag === "Failure" && !result.waiting ? describeFailure(result.cause) : undefined
   const mode = comparisonModes[comparison.mode]
   return (
     <div className="flex h-full flex-col">
+      <div className="flex h-8 shrink-0 items-center gap-1.5 border-b pr-1.5 pl-2">
+        <RefPicker
+          key={comparison.base}
+          id={`${id}-base`}
+          label="Base"
+          repo={repo}
+          value={comparison.base}
+          options={options}
+          onCommit={(base) => update({ base })}
+          className="min-w-0 flex-1"
+        />
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className="text-muted-foreground"
+          tooltip="Swap base and compare"
+          onClick={() => update({ base: comparison.head, head: comparison.base })}
+        >
+          <ArrowLeftRightIcon />
+        </Button>
+        <RefPicker
+          key={comparison.head}
+          id={`${id}-head`}
+          label="Compare"
+          repo={repo}
+          value={comparison.head}
+          options={options}
+          onCommit={(head) => update({ head })}
+          className="min-w-0 flex-1"
+        />
+        <Button size="xs" variant="ghost" onClick={() => onSelect({ _tag: "WorkingCopy" })}>
+          Close
+        </Button>
+      </div>
       <div className="grid shrink-0 gap-2 border-b p-3">
-        <div className="flex items-start gap-2">
-          <h2 className="min-w-0 flex-1 font-medium break-all">
-            {comparisonLabel(comparison.base)} → {comparisonLabel(comparison.head)}
-          </h2>
-          <Button size="xs" variant="outline" onClick={() => openCompare(comparison)}>
-            Edit…
-          </Button>
-          <Button size="xs" variant="ghost" onClick={() => onSelect({ _tag: "WorkingCopy" })}>
-            Close
-          </Button>
-        </div>
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Comparison mode">
           {Object.values(comparisonModes).map((option) => (
             <Button
@@ -59,7 +87,7 @@ export function ComparisonDetail({
               size="xs"
               variant={comparison.mode === option.value ? "secondary" : "ghost"}
               aria-pressed={comparison.mode === option.value}
-              onClick={() => onSelect({ _tag: "Comparison", comparison: { ...comparison, mode: option.value } })}
+              onClick={() => update({ mode: option.value })}
             >
               {option.label}
             </Button>
@@ -67,9 +95,11 @@ export function ComparisonDetail({
         </div>
         <p className="text-muted-foreground">{mode.description}</p>
         {detail !== undefined && (
-          <p className="font-mono text-[11px] text-muted-foreground" title={`${detail.start} → ${detail.head}`}>
-            {shortOid(detail.start)} → {shortOid(detail.head)}
-          </p>
+          <Hint label={`${detail.start} → ${detail.head}`}>
+            <p className="w-fit font-mono text-2xs text-muted-foreground">
+              {shortOid(detail.start)} → {shortOid(detail.head)}
+            </p>
+          </Hint>
         )}
       </div>
       {detail === undefined ? (
@@ -161,11 +191,10 @@ function ComparisonFiles({
                     tabIndex: 0,
                     role: "listbox",
                     "aria-label": "Changed files",
+                    className: "data-has-overflow-y:pr-2.5",
                     "aria-activedescendant": rows.some((row) => row.index === selectedIndex)
                       ? `${listId}-${selectedIndex}`
                       : undefined,
-                    className:
-                      "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
                     onKeyDown: (event) => {
                       const next =
                         event.key === "ArrowDown"
@@ -189,45 +218,49 @@ function ComparisonFiles({
                     {rows.map((row) => {
                       const item = files[row.index - 1]
                       return (
-                        <div
+                        <Hint
                           key={row.key}
-                          id={`${listId}-${row.index}`}
-                          role="option"
-                          aria-selected={selectedIndex === row.index}
-                          aria-posinset={row.index + 1}
-                          aria-setsize={files.length + 1}
-                          title={
+                          label={
                             item === undefined
                               ? allLabel
                               : item.from === null
                                 ? item.path
                                 : `${item.from} → ${item.path}`
                           }
-                          className={cn(
-                            "absolute inset-x-0 top-0 flex h-6 items-center gap-2 px-3 text-start hover:bg-muted/60",
-                            selectedIndex === row.index && "bg-selection",
-                          )}
-                          style={{ transform: `translateY(${row.start}px)` }}
-                          onClick={() => {
-                            listElement?.focus({ preventScroll: true })
-                            selectFile(row.index)
-                          }}
+                          side="right"
                         >
-                          {item === undefined ? (
-                            allLabel
-                          ) : (
-                            <>
-                              <ChangeLetter change={item.change} />
-                              <span className="min-w-0 flex-1 truncate">{item.path}</span>
-                              {item.additions !== null && (
-                                <span className="shrink-0 text-change-added tabular-nums">+{item.additions}</span>
-                              )}
-                              {item.deletions !== null && (
-                                <span className="shrink-0 text-change-deleted tabular-nums">−{item.deletions}</span>
-                              )}
-                            </>
-                          )}
-                        </div>
+                          <div
+                            id={`${listId}-${row.index}`}
+                            role="option"
+                            aria-selected={selectedIndex === row.index}
+                            aria-posinset={row.index + 1}
+                            aria-setsize={files.length + 1}
+                            className={cn(
+                              "absolute inset-x-0 top-0 flex h-6 items-center gap-2 px-3 text-start hover:bg-muted/60",
+                              selectedIndex === row.index && "bg-selection",
+                            )}
+                            style={{ transform: `translateY(${row.start}px)` }}
+                            onClick={() => {
+                              listElement?.focus({ preventScroll: true })
+                              selectFile(row.index)
+                            }}
+                          >
+                            {item === undefined ? (
+                              allLabel
+                            ) : (
+                              <>
+                                <ChangeLetter change={item.change} />
+                                <span className="min-w-0 flex-1 truncate">{item.path}</span>
+                                {item.additions !== null && (
+                                  <span className="shrink-0 text-change-added tabular-nums">+{item.additions}</span>
+                                )}
+                                {item.deletions !== null && (
+                                  <span className="shrink-0 text-change-deleted tabular-nums">−{item.deletions}</span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </Hint>
                       )
                     })}
                   </div>
@@ -264,6 +297,7 @@ function ComparisonFiles({
                 repo={repo}
                 items={items}
                 collapse={collapse}
+                ignoresWhitespace
                 actions={(meta) => (
                   <HistoryButton onClick={() => onInvestigate({ revision: detail.head, path: meta.path })} />
                 )}

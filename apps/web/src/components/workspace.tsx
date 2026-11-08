@@ -1,4 +1,4 @@
-import { useAtom, useAtomMount, useAtomSet } from "@effect/atom-react"
+import { useAtom, useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { RepoId } from "@gitui/contracts"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -8,18 +8,17 @@ import { flushSync } from "react-dom"
 import { useCompare } from "@/lib/comparison"
 import { useCommand } from "@/lib/commands"
 import { useConflictSession } from "@/lib/conflict-session"
-import { type FileTarget, investigationAtom } from "@/lib/file-investigation"
+import { type FileTarget, filePickerAtom } from "@/lib/file-investigation"
 import { pathQuery, watchAtom } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
-import type { Selection } from "@/lib/selection"
+import { type Pane, paneAtom, selectionAtom, useSelect } from "@/lib/selection"
 import { visibilityAtom } from "@/lib/visibility"
 import { CommandLogDrawer } from "./command-log"
 import { ComparisonDetail } from "./comparison-detail"
-import { ComparisonDialog } from "./comparison-dialog"
 import { CommitDetail } from "./commit-detail"
 import { CommitList } from "./commit-list"
 import { ConflictWorkspace } from "./conflict-workspace"
-import { FileInvestigationDialog } from "./file-investigation"
+import { FileHistoryView, FilePickerDialog } from "./file-investigation"
 import { useNetworkCommands } from "./network"
 import { Sidebar } from "./sidebar"
 import { RemotesDialog } from "./remotes"
@@ -28,11 +27,8 @@ import { WorkingCopy } from "./working-copy"
 import { WorktreePreview } from "./worktree-preview"
 import { RewriteDialog } from "./rewrite-dialog"
 
-type Pane = "locations" | "history" | "detail"
 const paneLabels: Record<Pane, string> = { locations: "Locations", history: "History", detail: "Details" }
 
-const selectionAtom = Atom.family((_repo: RepoId) => Atom.make<Selection>({ _tag: "WorkingCopy" }).pipe(Atom.keepAlive))
-const paneAtom = Atom.family((_repo: RepoId) => Atom.make<Pane>("history").pipe(Atom.keepAlive))
 const queryAtom = Atom.family((_repo: RepoId) => Atom.make("").pipe(Atom.keepAlive))
 
 export function Workspace({
@@ -47,7 +43,7 @@ export function Workspace({
   useAtomMount(watchAtom(repo))
   useNetworkCommands(repo)
   const narrow = useNarrow()
-  const [selection, setSelection] = useAtom(selectionAtom(repo))
+  const selection = useAtomValue(selectionAtom(repo))
   const openCompare = useCompare(repo)
   useCommand("history.compare", () =>
     openCompare({
@@ -69,14 +65,11 @@ export function Workspace({
     setQuery(pathQuery(path))
     if (narrow) setPane("history")
   }
-  const setInvestigation = useAtomSet(investigationAtom(repo))
-  const investigate = (file: FileTarget) => setInvestigation({ _tag: "File", ...file })
-  useCommand("history.file", () => setInvestigation({ _tag: "Pick" }))
-
-  const select = (next: Selection) => {
-    setSelection(next)
-    if (narrow) setPane("detail")
-  }
+  const select = useSelect(repo)
+  const openFilePicker = useAtomSet(filePickerAtom(repo))
+  const investigate = (target: FileTarget) =>
+    select({ _tag: "FileHistory", target, back: selection._tag === "FileHistory" ? selection.back : selection })
+  useCommand("history.file", () => openFilePicker(true))
 
   const detail =
     selection._tag === "Comparison" ? (
@@ -89,6 +82,15 @@ export function Workspace({
       />
     ) : selection._tag === "Commit" ? (
       <CommitDetail key={selection.oid} repo={repo} oid={selection.oid} onSelect={select} onInvestigate={investigate} />
+    ) : selection._tag === "FileHistory" ? (
+      <FileHistoryView
+        key={JSON.stringify(selection.target)}
+        repo={repo}
+        target={selection.target}
+        onPick={() => openFilePicker(true)}
+        onOpenCommit={(oid) => select({ _tag: "Commit", oid })}
+        onClose={() => select(selection.back)}
+      />
     ) : selection._tag === "Worktree" ? (
       <WorktreePreview
         key={selection.path}
@@ -127,8 +129,7 @@ export function Workspace({
     <div className="flex min-h-0 flex-1 flex-col">
       <RecoveryDialog repo={repo} onInspect={(oid) => select({ _tag: "Commit", oid })} />
       <RemotesDialog repo={repo} />
-      <ComparisonDialog repo={repo} onSelect={select} />
-      <FileInvestigationDialog repo={repo} onSelect={select} />
+      <FilePickerDialog repo={repo} onPick={investigate} />
       <RewriteDialog repo={repo} onWorktree={() => select({ _tag: "WorkingCopy" })} />
       <CommandLogDrawer repo={repo}>
         {conflictSession.open ? (

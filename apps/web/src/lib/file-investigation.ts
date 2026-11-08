@@ -4,9 +4,7 @@ import { GitClient, keys } from "./git"
 
 export type FileTarget = { readonly revision: string; readonly path: RepoPath; readonly destination?: RepoPath }
 
-export type Investigation = { readonly _tag: "Pick" } | ({ readonly _tag: "File" } & FileTarget)
-
-export const investigationAtom = Atom.family((_repo: RepoId) => Atom.make<Investigation | null>(null))
+export const filePickerAtom = Atom.family((_repo: RepoId) => Atom.make(false))
 
 export const trackedFilesAtom = Atom.family((repo: RepoId) =>
   GitClient.query("GetTrackedFiles", { repo }, { reactivityKeys: [keys.status(repo)] }),

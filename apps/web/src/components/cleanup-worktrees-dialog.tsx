@@ -19,7 +19,7 @@ import { latest, refsAtom, useGitAction } from "@/lib/git"
 import {
   type Candidate,
   cleanupCandidates,
-  cleanupOpenAtom,
+  cleanupAtom,
   selectable,
   type Staleness,
   suggested,
@@ -49,17 +49,25 @@ const reason = (staleness: Staleness) => {
 }
 
 export function CleanupWorktreesDialog({ repo }: { repo: RepoId }) {
-  const [open, setOpen] = useAtom(cleanupOpenAtom(repo))
+  const [request, setRequest] = useAtom(cleanupAtom(repo))
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={request !== null} onOpenChange={(open) => open || setRequest(null)}>
       <DialogContent className="flex max-h-[min(40rem,calc(100dvh-2rem))] flex-col gap-3 sm:max-w-xl">
-        {open && <CleanupForm repo={repo} onClose={() => setOpen(false)} />}
+        {request !== null && <CleanupForm repo={repo} preset={request.preset} onClose={() => setRequest(null)} />}
       </DialogContent>
     </Dialog>
   )
 }
 
-function CleanupForm({ repo, onClose }: { repo: RepoId; onClose: () => void }) {
+function CleanupForm({
+  repo,
+  preset,
+  onClose,
+}: {
+  repo: RepoId
+  preset: ReadonlySet<string> | null
+  onClose: () => void
+}) {
   const git = useGitAction()
   const refs = latest(useAtomValue(refsAtom(repo)))
   const summaries = latest(useAtomValue(worktreeSummariesAtom(repo)))
@@ -68,7 +76,9 @@ function CleanupForm({ repo, onClose }: { repo: RepoId; onClose: () => void }) {
   const [deleteBranches, setDeleteBranches] = useState(true)
   const branchesId = useId()
   const checked = (candidate: Candidate) =>
-    selectable(candidate.staleness) && (overrides.get(candidate.worktree.path) ?? suggested(candidate.staleness))
+    selectable(candidate.staleness) &&
+    (overrides.get(candidate.worktree.path) ??
+      (preset === null ? suggested(candidate.staleness) : preset.has(candidate.worktree.path)))
   const picked = candidates.filter(checked)
   const lostCommits = deleteBranches
     ? picked.reduce(

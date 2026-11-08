@@ -44,7 +44,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "cn"
 import * as Exit from "effect/Exit"
 import { ChevronRightIcon, EyeIcon, EyeOffIcon, GitBranchIcon } from "lucide-react"
-import { type ComponentProps, type ReactNode, useMemo, useRef, useState } from "react"
+import { type ComponentProps, type MouseEvent, type ReactNode, useMemo, useRef, useState } from "react"
 import { useCompare } from "@/lib/comparison"
 import { useHistoryDate } from "@/lib/dates"
 import { basename, shortOid } from "@/lib/format"
@@ -62,7 +62,7 @@ import {
 import type { Selection } from "@/lib/selection"
 import { stashBlocked } from "@/lib/stash"
 import { type Location, type LocationState, focusLocation, locationState, toggleLocation } from "@/lib/visibility"
-import { cleanupOpenAtom } from "@/lib/worktree-cleanup"
+import { cleanupAtom, nothingPicked, type Picked, pickWorktree } from "@/lib/worktree-cleanup"
 import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
 import { useConfirm } from "./confirm"
 import { SyncButtons } from "./network"
@@ -245,6 +245,19 @@ export function Sidebar({
 
   const [deleting, setDeleting] = useState<{ branch: Branch; worktree: Worktree | undefined } | null>(null)
   const [removing, setRemoving] = useState<{ worktree: Worktree; force: boolean } | null>(null)
+  const [picked, setPicked] = useState<Picked>(nothingPicked)
+  const worktreeOrder = useMemo(
+    () => rows.flatMap((row) => (row.kind === "worktree" ? [row.worktree.path] : [])),
+    [rows],
+  )
+  const select = (next: Selection) => {
+    setPicked(nothingPicked)
+    onSelect(next)
+  }
+  const pick = (path: string, mode: "only" | "toggle" | "extend") =>
+    setPicked((current) =>
+      pickWorktree(current, worktreeOrder, path, mode, selection._tag === "Worktree" ? selection.path : null),
+    )
 
   return (
     <div className="flex h-full flex-col">
@@ -259,7 +272,10 @@ export function Sidebar({
             const row = rows[item.index]!
             const { state, location } = rowVisibility(row, visibility, head)
             const selected =
-              row.kind === "worktree" && selection._tag === "Worktree" && selection.path === row.worktree.path
+              row.kind === "worktree" &&
+              (picked.paths.size > 0
+                ? picked.paths.has(row.worktree.path)
+                : selection._tag === "Worktree" && selection.path === row.worktree.path)
             return (
               <div
                 key={item.key}
@@ -277,7 +293,9 @@ export function Sidebar({
                     head={head}
                     collapsed={collapsed}
                     toggle={toggle}
-                    onSelect={onSelect}
+                    onSelect={select}
+                    picked={picked.paths}
+                    onPick={pick}
                     onOpen={(path) => onOpen(path, refs?.worktrees.map((worktree) => worktree.path) ?? [])}
                     worktreeByBranch={worktreeByBranch}
                     onDelete={(branch) => setDeleting({ branch, worktree: worktreeByBranch.get(branch.name) })}
@@ -385,7 +403,7 @@ function Line({
   ...props
 }: {
   depth: number
-  onClick?: () => void
+  onClick?: (event: MouseEvent) => void
   active?: boolean
   children: ReactNode
   hint?: string
@@ -464,6 +482,8 @@ function SidebarRow({
   worktreeByBranch,
   onDelete,
   onRemove,
+  picked,
+  onPick,
 }: {
   row: Row
   repo: RepoId
@@ -476,9 +496,12 @@ function SidebarRow({
   worktreeByBranch: Map<string, Worktree>
   onDelete: (branch: Branch) => void
   onRemove: (worktree: Worktree, force: boolean) => void
+  picked: ReadonlySet<string>
+  onPick: (path: string, mode: "toggle" | "extend") => void
 }) {
   const git = useGitAction()
   const compare = useCompare(repo)
+  const openCleanup = useAtomSet(cleanupAtom(repo))
   const checkout = useCheckout()
   const date = useHistoryDate()
   const confirm = useConfirm()
@@ -832,7 +855,9 @@ function SidebarRow({
               depth={1}
               active={current}
               hint={worktree.path}
-              onClick={() => {
+              onClick={(event) => {
+                const mode = event.shiftKey ? "extend" : event.metaKey || event.ctrlKey ? "toggle" : "only"
+                if (mode !== "only") return onPick(worktree.path, mode)
                 if (current) onSelect({ _tag: "WorkingCopy" })
                 else if (openable) onSelect({ _tag: "Worktree", path: worktree.path })
               }}
@@ -862,23 +887,46 @@ function SidebarRow({
               </span>
             </Line>
           </ContextMenuTrigger>
-          <ContextMenuContent>
-            <ContextMenuItem disabled={!openable} onClick={() => onOpen(worktree.path)}>
-              Open in new tab
-            </ContextMenuItem>
-            <OpenInContextMenu repo={worktree.path} disabled={worktree.prunable !== null} />
-            <ContextMenuSeparator />
-            <ContextMenuItem disabled={worktree.isMain || current} onClick={() => onRemove(worktree, false)}>
-              Remove worktree…
-            </ContextMenuItem>
-            <ContextMenuItem
-              variant="destructive"
-              disabled={worktree.isMain || current}
-              onClick={() => onRemove(worktree, true)}
-            >
-              Force remove worktree…
-            </ContextMenuItem>
-          </ContextMenuContent>
+          {picked.size > 1 && picked.has(worktree.path) ? (
+            <ContextMenuContent>
+              <ContextMenuItem onClick={() => openCleanup({ preset: picked })}>
+                Remove {picked.size} worktrees…
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() =>
+                  refs?.worktrees
+                    .filter(
+                      (other) =>
+                        picked.has(other.path) &&
+                        other.path !== repo &&
+                        other.prunable === null &&
+                        other.head._tag !== "Bare",
+                    )
+                    .forEach((other) => onOpen(other.path))
+                }
+              >
+                Open {picked.size} in tabs
+              </ContextMenuItem>
+            </ContextMenuContent>
+          ) : (
+            <ContextMenuContent>
+              <ContextMenuItem disabled={!openable} onClick={() => onOpen(worktree.path)}>
+                Open in new tab
+              </ContextMenuItem>
+              <OpenInContextMenu repo={worktree.path} disabled={worktree.prunable !== null} />
+              <ContextMenuSeparator />
+              <ContextMenuItem disabled={worktree.isMain || current} onClick={() => onRemove(worktree, false)}>
+                Remove worktree…
+              </ContextMenuItem>
+              <ContextMenuItem
+                variant="destructive"
+                disabled={worktree.isMain || current}
+                onClick={() => onRemove(worktree, true)}
+              >
+                Force remove worktree…
+              </ContextMenuItem>
+            </ContextMenuContent>
+          )}
         </ContextMenu>
       )
     }
@@ -904,7 +952,7 @@ function SectionRow({
   const status = latest(useAtomValue(statusAtom(repo)))
   const publishing = usePublishing(repo)
   const networkBusy = useAtomValue(networkStateAtom(repo))?._tag === "Running"
-  const openCleanup = useAtomSet(cleanupOpenAtom(repo))
+  const openCleanup = useAtomSet(cleanupAtom(repo))
   const header = (
     <button
       type="button"
@@ -982,7 +1030,7 @@ function SectionRow({
           Add worktree…
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => openCleanup(true)}>Clean up worktrees…</ContextMenuItem>
+        <ContextMenuItem onClick={() => openCleanup({ preset: null })}>Clean up worktrees…</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )

@@ -1,6 +1,6 @@
 import type { Branch, Oid, Worktree, WorktreeSummary } from "@gitui/contracts"
 import { describe, expect, it } from "vite-plus/test"
-import { cleanupCandidates, selectable, suggested } from "./worktree-cleanup"
+import { cleanupCandidates, nothingPicked, pickWorktree, selectable, suggested } from "./worktree-cleanup"
 
 const oid = "a".repeat(40) as Oid
 
@@ -73,5 +73,28 @@ describe("worktree cleanup", () => {
   it("keeps locked worktrees and ones still being checked out of reach", () => {
     expect(selectable(classifyOne(worktree("/a", "feat", { locked: "" }), summary("/a", 0, 0)))).toBe(false)
     expect(selectable(classifyOne(worktree("/a", "feat"), undefined))).toBe(false)
+  })
+})
+
+describe("picking several worktrees", () => {
+  const order = ["/a", "/b", "/c", "/d"]
+
+  it("adds to the worktree already open when Cmd-clicking another", () => {
+    expect([...pickWorktree(nothingPicked, order, "/c", "toggle", "/a").paths]).toEqual(["/a", "/c"])
+  })
+
+  it("toggles a picked worktree back off", () => {
+    const picked = pickWorktree({ paths: new Set(["/a", "/c"]), anchor: "/c" }, order, "/c", "toggle", "/a")
+    expect([...picked.paths]).toEqual(["/a"])
+  })
+
+  it("picks the range from the last clicked worktree when Shift-clicking", () => {
+    const start = pickWorktree(nothingPicked, order, "/b", "only", null)
+    expect([...pickWorktree(start, order, "/d", "extend", "/b").paths]).toEqual(["/b", "/c", "/d"])
+  })
+
+  it("clears the picks on a plain click", () => {
+    const picked = pickWorktree({ paths: new Set(["/a", "/b"]), anchor: "/b" }, order, "/c", "only", "/a")
+    expect(picked.paths.size).toBe(0)
   })
 })

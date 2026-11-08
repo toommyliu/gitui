@@ -55,4 +55,31 @@ export const selectable = (staleness: Staleness) =>
 export const unmergedCommits = (staleness: Staleness) =>
   staleness._tag === "Gone" || staleness._tag === "Unmerged" ? staleness.commits : 0
 
-export const cleanupOpenAtom = Atom.family((_repo: RepoId) => Atom.make(false))
+export type CleanupRequest = { readonly preset: ReadonlySet<string> | null }
+
+export const cleanupAtom = Atom.family((_repo: RepoId) => Atom.make<CleanupRequest | null>(null))
+
+export type Picked = { readonly paths: ReadonlySet<string>; readonly anchor: string | null }
+
+export const nothingPicked: Picked = { paths: new Set(), anchor: null }
+
+export const pickWorktree = (
+  picked: Picked,
+  order: ReadonlyArray<string>,
+  path: string,
+  mode: "only" | "toggle" | "extend",
+  open: string | null,
+): Picked => {
+  if (mode === "only") return { paths: new Set(), anchor: path }
+  const start = picked.paths.size === 0 && open !== null ? new Set([open]) : new Set(picked.paths)
+  if (mode === "toggle") {
+    if (start.has(path)) start.delete(path)
+    else start.add(path)
+    return { paths: start, anchor: path }
+  }
+  const anchor = picked.anchor ?? open ?? path
+  const from = order.indexOf(anchor)
+  const to = order.indexOf(path)
+  if (from === -1 || to === -1) return { paths: new Set([path]), anchor: path }
+  return { paths: new Set(order.slice(Math.min(from, to), Math.max(from, to) + 1)), anchor }
+}

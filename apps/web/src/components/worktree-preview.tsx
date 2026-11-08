@@ -421,20 +421,20 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
 
   return (
     <div className="flex h-full flex-col">
+      <div className="flex h-8 shrink-0 items-center gap-1 border-b pr-1.5 pl-2">
+        <h2 className="min-w-0 flex-1 truncate font-medium">{title}</h2>
+        <Button size="xs" variant="ghost" onClick={open}>
+          Open in tab
+          <ArrowUpRightIcon data-icon="inline-end" />
+        </Button>
+        <OpenInButton repo={worktree} compact />
+      </div>
       <div className="max-h-[40%] shrink-0 overflow-auto p-3">
-        <div className="flex items-center gap-2">
-          <h2 className="min-w-0 truncate text-sm font-semibold">{title}</h2>
-          <Button size="sm" variant="outline" className="ml-auto" onClick={open}>
-            Open in new tab
-            <ArrowUpRightIcon data-icon="inline-end" />
-          </Button>
-          <OpenInButton repo={worktree} compact />
-        </div>
-        <p className="truncate text-muted-foreground">
-          <span className="font-mono text-xs select-text">{path}</span>
-          {detail.editedAt !== null && <> · edited {shortDate(detail.editedAt)}</>}
-        </p>
-        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+          <Field label="Path">
+            <span className="block truncate font-mono text-xs select-text">{path}</span>
+          </Field>
+          {detail.editedAt !== null && <Field label="Edited">{shortDate(detail.editedAt)}</Field>}
           <Facts worktree={worktree} detail={detail} onSelect={onSelect} onReveal={reveal} />
         </dl>
       </div>

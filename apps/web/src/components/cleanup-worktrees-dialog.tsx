@@ -16,13 +16,16 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { basename } from "@/lib/format"
 import { latest, refsAtom, useGitAction } from "@/lib/git"
+import { LIST_ROW } from "@/lib/rows"
 import {
+  bulkSelectable,
   type Candidate,
   cleanupCandidates,
   cleanupAtom,
   selectable,
   type Staleness,
   suggested,
+  uncommittedChanges,
   unmergedCommits,
 } from "@/lib/worktree-cleanup"
 import { worktreeLabel, worktreeSummariesAtom } from "@/lib/worktrees"
@@ -87,6 +90,17 @@ function CleanupForm({
         0,
       )
     : 0
+  const dirty = picked.filter((candidate) => uncommittedChanges(candidate.staleness) > 0)
+  const discarded = dirty.reduce((total, candidate) => total + uncommittedChanges(candidate.staleness), 0)
+  const bulk = candidates.filter((candidate) => bulkSelectable(candidate.staleness))
+  const allPicked = bulk.length > 0 && bulk.every(checked)
+  const somePicked = bulk.some(checked)
+  const pickAll = (next: boolean) =>
+    setOverrides((current) => {
+      const updated = new Map(current)
+      for (const candidate of bulk) updated.set(candidate.worktree.path, next)
+      return updated
+    })
 
   const remove = async () => {
     onClose()
@@ -99,7 +113,7 @@ function CleanupForm({
         c("RemoveWorktree", {
           repo,
           path: worktree.path,
-          force: deleteBranches && hasBranch && unmergedCommits(staleness) > 0,
+          force: uncommittedChanges(staleness) > 0 || (deleteBranches && hasBranch && unmergedCommits(staleness) > 0),
           deleteBranch: deleteBranches && hasBranch,
         }),
       )
@@ -125,54 +139,75 @@ function CleanupForm({
       <DialogHeader>
         <DialogTitle>Clean up worktrees</DialogTitle>
         <DialogDescription>
-          Worktrees that look finished are checked. Ones with uncommitted changes stay, so nothing unsaved is lost.
+          Worktrees that look finished are checked. Ones with uncommitted changes are left unchecked, and removing them
+          discards those changes.
         </DialogDescription>
       </DialogHeader>
       {candidates.length === 0 ? (
         <p className="text-muted-foreground">There are no other worktrees.</p>
       ) : (
-        <ScrollArea className="min-h-0 flex-1 rounded-md border" viewportProps={{ className: "max-h-96" }}>
-          <ul className="py-1">
-            {candidates.map((candidate) => {
-              const enabled = selectable(candidate.staleness)
-              const id = `${branchesId}-${candidate.worktree.path}`
-              return (
-                <li key={candidate.worktree.path}>
-                  <label
-                    htmlFor={id}
-                    className={cn(
-                      "flex h-7 items-center gap-2 px-3",
-                      enabled ? "hover:bg-muted/60" : "text-muted-foreground",
-                    )}
-                  >
-                    <Checkbox
-                      id={id}
-                      disabled={!enabled}
-                      checked={checked(candidate)}
-                      onCheckedChange={(next: boolean) =>
-                        setOverrides((current) => new Map(current).set(candidate.worktree.path, next))
-                      }
-                    />
-                    <span className="min-w-0 truncate">{worktreeLabel(candidate.worktree)}</span>
-                    <span className="min-w-0 shrink truncate text-2xs text-muted-foreground">
-                      {candidate.worktree.head._tag === "Branch" ? basename(candidate.worktree.path) : "detached"}
-                    </span>
-                    <span
+        <div className="flex min-h-0 flex-1 flex-col rounded-md border">
+          <label
+            htmlFor={`${branchesId}-all`}
+            className="flex shrink-0 items-center gap-2 border-b px-3"
+            style={{ height: LIST_ROW + 4 }}
+          >
+            <Checkbox
+              id={`${branchesId}-all`}
+              disabled={bulk.length === 0}
+              checked={allPicked}
+              indeterminate={somePicked && !allPicked}
+              onCheckedChange={() => pickAll(!allPicked)}
+            />
+            Select all
+            <span className="text-2xs text-muted-foreground">except ones with uncommitted changes</span>
+            <span className="ml-auto text-2xs text-muted-foreground tabular-nums">
+              {picked.length} of {candidates.length} selected
+            </span>
+          </label>
+          <ScrollArea className="min-h-0 flex-1" viewportProps={{ className: "max-h-96" }}>
+            <ul className="py-1">
+              {candidates.map((candidate) => {
+                const enabled = selectable(candidate.staleness)
+                const id = `${branchesId}-${candidate.worktree.path}`
+                return (
+                  <li key={candidate.worktree.path}>
+                    <label
+                      htmlFor={id}
                       className={cn(
-                        "ml-auto shrink-0 text-2xs",
-                        candidate.staleness._tag === "Unmerged" || candidate.staleness._tag === "Dirty"
-                          ? "text-change-modified"
-                          : "text-muted-foreground",
+                        "flex h-7 items-center gap-2 px-3",
+                        enabled ? "hover:bg-muted/60" : "text-muted-foreground",
                       )}
                     >
-                      {reason(candidate.staleness)}
-                    </span>
-                  </label>
-                </li>
-              )
-            })}
-          </ul>
-        </ScrollArea>
+                      <Checkbox
+                        id={id}
+                        disabled={!enabled}
+                        checked={checked(candidate)}
+                        onCheckedChange={(next: boolean) =>
+                          setOverrides((current) => new Map(current).set(candidate.worktree.path, next))
+                        }
+                      />
+                      <span className="min-w-0 truncate">{worktreeLabel(candidate.worktree)}</span>
+                      <span className="min-w-0 shrink truncate text-2xs text-muted-foreground">
+                        {candidate.worktree.head._tag === "Branch" ? basename(candidate.worktree.path) : "detached"}
+                      </span>
+                      <span
+                        className={cn(
+                          "ml-auto shrink-0 text-2xs",
+                          candidate.staleness._tag === "Unmerged" || candidate.staleness._tag === "Dirty"
+                            ? "text-change-modified"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {reason(candidate.staleness)}
+                      </span>
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+          </ScrollArea>
+        </div>
       )}
       <label htmlFor={`${branchesId}-branches`} className="flex items-center gap-2">
         <Checkbox
@@ -182,11 +217,20 @@ function CleanupForm({
         />
         Also delete their branches
       </label>
-      {lostCommits > 0 && (
-        <p className="text-destructive">
-          This deletes {plural(lostCommits, "commit")} not on the base branch. Squash-merged branches usually show up
-          this way.
-        </p>
+      {(lostCommits > 0 || discarded > 0) && (
+        <div className="space-y-1 text-destructive">
+          {discarded > 0 && (
+            <p>
+              Discards {plural(discarded, "uncommitted change")} in {plural(dirty.length, "worktree")}.
+            </p>
+          )}
+          {lostCommits > 0 && (
+            <p>
+              Deletes {plural(lostCommits, "commit")} not on the base branch. Squash-merged branches usually show up
+              this way.
+            </p>
+          )}
+        </div>
       )}
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>

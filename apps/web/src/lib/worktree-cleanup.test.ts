@@ -1,6 +1,13 @@
 import type { Branch, Oid, Worktree, WorktreeSummary } from "@gitui/contracts"
 import { describe, expect, it } from "vite-plus/test"
-import { cleanupCandidates, nothingPicked, pickWorktree, selectable, suggested } from "./worktree-cleanup"
+import {
+  bulkSelectable,
+  cleanupCandidates,
+  nothingPicked,
+  pickWorktree,
+  selectable,
+  suggested,
+} from "./worktree-cleanup"
 
 const oid = "a".repeat(40) as Oid
 
@@ -55,10 +62,12 @@ describe("worktree cleanup", () => {
     expect(selectable(staleness)).toBe(true)
   })
 
-  it("never offers a worktree with uncommitted changes, even when its branch is gone", () => {
+  it("offers a worktree with uncommitted changes but never suggests it or selects it in bulk", () => {
     const staleness = classifyOne(worktree("/a", "feat"), summary("/a", 4, 0), [gone("feat")])
-    expect(staleness).toEqual({ _tag: "Dirty", changes: 4 })
-    expect(selectable(staleness)).toBe(false)
+    expect(staleness).toEqual({ _tag: "Dirty", changes: 4, commits: 0 })
+    expect(selectable(staleness)).toBe(true)
+    expect(suggested(staleness)).toBe(false)
+    expect(bulkSelectable(staleness)).toBe(false)
   })
 
   it("suggests a worktree whose folder is missing before it has a summary", () => {

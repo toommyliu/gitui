@@ -6,7 +6,7 @@ export type Staleness =
   | { readonly _tag: "Landed" }
   | { readonly _tag: "Gone"; readonly commits: number }
   | { readonly _tag: "Unmerged"; readonly commits: number }
-  | { readonly _tag: "Dirty"; readonly changes: number }
+  | { readonly _tag: "Dirty"; readonly changes: number; readonly commits: number }
   | { readonly _tag: "Locked" }
   | { readonly _tag: "Checking" }
 
@@ -20,9 +20,9 @@ export const classify = (
   if (worktree.prunable !== null) return { _tag: "Missing" }
   if (worktree.locked !== null) return { _tag: "Locked" }
   if (summary === undefined) return { _tag: "Checking" }
-  if (summary.changes > 0) return { _tag: "Dirty", changes: summary.changes }
-  if (summary.commits === 0) return { _tag: "Landed" }
   const commits = summary.commits ?? 0
+  if (summary.changes > 0) return { _tag: "Dirty", changes: summary.changes, commits }
+  if (summary.commits === 0) return { _tag: "Landed" }
   return branch?.upstream?._tag === "Gone" ? { _tag: "Gone", commits } : { _tag: "Unmerged", commits }
 }
 
@@ -49,11 +49,14 @@ export const cleanupCandidates = (
 export const suggested = (staleness: Staleness) =>
   staleness._tag === "Missing" || staleness._tag === "Landed" || staleness._tag === "Gone"
 
-export const selectable = (staleness: Staleness) =>
-  staleness._tag !== "Dirty" && staleness._tag !== "Locked" && staleness._tag !== "Checking"
+export const selectable = (staleness: Staleness) => staleness._tag !== "Locked" && staleness._tag !== "Checking"
+
+export const bulkSelectable = (staleness: Staleness) => selectable(staleness) && staleness._tag !== "Dirty"
 
 export const unmergedCommits = (staleness: Staleness) =>
-  staleness._tag === "Gone" || staleness._tag === "Unmerged" ? staleness.commits : 0
+  staleness._tag === "Gone" || staleness._tag === "Unmerged" || staleness._tag === "Dirty" ? staleness.commits : 0
+
+export const uncommittedChanges = (staleness: Staleness) => (staleness._tag === "Dirty" ? staleness.changes : 0)
 
 export type CleanupRequest = { readonly preset: ReadonlySet<string> | null }
 

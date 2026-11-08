@@ -229,6 +229,20 @@ export const SEPARATOR_HEIGHT = 24
 const separator = ':is([data-separator="line-info"], [data-separator="line-info-basic"])'
 const quiet = "color-mix(in srgb, var(--diffs-fg) 50%, var(--diffs-bg))"
 
+// Each file overlaps the next by one header height, so a stuck header stays put until the next one covers it.
+// The spacer keeps every file's flow height equal to its item metrics. !important beats the page's margin reset.
+const STACKED_HEADERS_CSS = `
+:host {
+  display: block;
+  margin-bottom: -${HEADER_HEIGHT}px !important;
+}
+:host::after {
+  content: "";
+  display: block;
+  height: ${HEADER_HEIGHT}px;
+}
+`
+
 export const UNSAFE_CSS = `
 :host {
   --diffs-light: var(--foreground);
@@ -543,7 +557,7 @@ export function DiffStack({
     () => ({
       ...look,
       stickyHeaders: true,
-      unsafeCSS: UNSAFE_CSS,
+      unsafeCSS: UNSAFE_CSS + STACKED_HEADERS_CSS,
       itemMetrics: {
         lineHeight,
         diffHeaderHeight: HEADER_HEIGHT,

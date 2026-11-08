@@ -19,7 +19,6 @@ import { CredentialPrompts } from "@/components/credential-prompts"
 import { Loading, Nothing } from "@/components/loading"
 import { useBackgroundFetch } from "@/components/network"
 import { RepoPicker } from "@/components/repo-picker"
-import { OpenInButton } from "@/components/open-in"
 import { SettingsPage } from "@/components/settings-page"
 import { useTheme } from "@/components/theme-provider"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -178,7 +177,6 @@ export function App() {
           </TabsList>
         </Tabs>
         <div className="flex shrink-0 items-center gap-1 px-1">
-          {active !== null && <OpenInButton repo={active} />}
           {connection === "disconnected" && (
             <Badge variant="destructive">
               <Spinner data-icon="inline-start" />

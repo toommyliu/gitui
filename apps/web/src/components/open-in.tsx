@@ -1,7 +1,7 @@
 import { useAtom, useAtomValue } from "@effect/atom-react"
 import type { OpenApp, OpenInRequest } from "@gitui/contracts"
 import * as Atom from "effect/reactivity/Atom"
-import { ArrowUpRightIcon, ChevronDownIcon, FolderIcon } from "lucide-react"
+import { ChevronDownIcon, FolderIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -10,7 +10,16 @@ import {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { desktop } from "@/lib/desktop"
 import { settingsAtom } from "@/lib/settings"
 
@@ -69,8 +78,8 @@ export function OpenInButton({
         size={compact ? "icon-sm" : "sm"}
         variant="ghost"
         disabled={disabled}
+        tooltip={label}
         aria-label={label}
-        title={label}
         onClick={() => void open(preferred)}
       >
         <AppIcon app={preferred} />
@@ -84,7 +93,7 @@ export function OpenInButton({
               variant="ghost"
               disabled={disabled}
               aria-label={`Open ${subject} in…`}
-              title="Open in…"
+              tooltip="Open in…"
             />
           }
         >
@@ -108,10 +117,7 @@ export function OpenInContextMenu({ disabled = false, ...location }: Location & 
   if (desktop === undefined || apps.length === 0) return null
   return (
     <ContextMenuSub>
-      <ContextMenuSubTrigger disabled={disabled}>
-        <ArrowUpRightIcon />
-        Open in
-      </ContextMenuSubTrigger>
+      <ContextMenuSubTrigger disabled={disabled}>Open in</ContextMenuSubTrigger>
       <ContextMenuSubContent className="min-w-44">
         {apps.map((app) => (
           <ContextMenuItem key={app.id} onClick={() => void open(app)}>
@@ -121,5 +127,30 @@ export function OpenInContextMenu({ disabled = false, ...location }: Location & 
         ))}
       </ContextMenuSubContent>
     </ContextMenuSub>
+  )
+}
+
+export function OpenInMenuItems({ repo }: { repo: string }) {
+  const { apps, preferred, open } = useOpenIn({ repo })
+  if (desktop === undefined || preferred === undefined) return null
+  return (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={() => void open(preferred)}>
+        <AppIcon app={preferred} />
+        Open in {preferred.name}
+      </DropdownMenuItem>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>Open in</DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="min-w-44">
+          {apps.map((app) => (
+            <DropdownMenuItem key={app.id} onClick={() => void open(app)}>
+              <AppIcon app={app} />
+              {app.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    </>
   )
 }

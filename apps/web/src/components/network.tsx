@@ -14,11 +14,10 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { cn } from "cn"
 import * as AsyncResult from "effect/reactivity/AsyncResult"
 import * as Atom from "effect/reactivity/Atom"
-import { ArrowDownIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, CircleAlertIcon, RefreshCwIcon } from "lucide-react"
-import { type ComponentProps, type ReactNode, useContext, useEffect, useEffectEvent } from "react"
+import { ArrowDownIcon, ArrowUpIcon, CheckIcon, CircleAlertIcon, EllipsisIcon, RefreshCwIcon } from "lucide-react"
+import { type ComponentProps, useContext, useEffect, useEffectEvent } from "react"
 import { useCommand } from "@/lib/commands"
 import {
   latest,
@@ -32,6 +31,7 @@ import {
 import { savedPushDestination } from "@/lib/publishing-preferences"
 import { pushContextAtom, pushContextKey, syncPreferencesAtom } from "@/lib/publishing-state"
 import { settingsAtom } from "@/lib/settings"
+import { OpenInMenuItems } from "./open-in"
 import { pullChoices, pushUrls, usePublishing } from "./publishing"
 
 const clock = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" })
@@ -97,9 +97,9 @@ export function SyncButtons({
   ]
 
   return (
-    <div className="flex w-full min-w-0 items-center justify-end">
+    <div className="flex shrink-0 items-center">
       <SyncButton label="Fetch" disabled={running !== null} onClick={() => void network.run({ action: "Fetch" })}>
-        {running === "Fetch" ? <Spinner className="size-3" /> : <RefreshCwIcon />}
+        {running === "Fetch" ? <Spinner /> : <RefreshCwIcon />}
       </SyncButton>
       <SyncButton
         label={`Pull${behind > 0 ? ` ${commits(behind)}` : ""}${upstream === null ? "" : ` from ${upstream.name}`}`}
@@ -107,42 +107,61 @@ export function SyncButtons({
         disabled={running !== null}
         onClick={publishing.pull}
       >
-        {running === "Pull" ? <Spinner className="size-3" /> : <ArrowDownIcon />}
-        {behind > 0 && <span className="text-foreground tabular-nums">{behind}</span>}
+        {running === "Pull" ? <Spinner /> : <ArrowDownIcon />}
+        {behind > 0 && <span className="tabular-nums">{behind}</span>}
       </SyncButton>
-      <SyncMenu label="Pull options" disabled={running !== null}>
-        <DropdownMenuRadioGroup
-          value={preferences.pullStrategy}
-          onValueChange={(next: unknown) => {
-            const choice = pullChoices.find((choice) => choice.value === next)
-            if (choice !== undefined) setPreferences((stored) => ({ ...stored, pullStrategy: choice.value }))
-          }}
-        >
-          <DropdownMenuLabel>Pull strategy</DropdownMenuLabel>
-          {pullChoices.map((choice) => (
-            <DropdownMenuRadioItem key={choice.value} value={choice.value}>
-              {choice.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={publishing.pullWith}>Pull with strategy…</DropdownMenuItem>
-      </SyncMenu>
       <SyncButton
         label={target === null ? "Push to…" : `Push to ${target}`}
         detail={pushDetail.length > 0 ? pushDetail.join("\n") : undefined}
         disabled={running !== null}
-        className="min-w-0 shrink"
         onClick={() => void publishing.push(destination)}
       >
-        {running === "Push" ? <Spinner className="size-3" /> : <ArrowUpIcon />}
-        {ahead > 0 && <span className="text-foreground tabular-nums">{ahead}</span>}
-        {target !== null && <span className="min-w-0 truncate">{target}</span>}
+        {running === "Push" ? <Spinner /> : <ArrowUpIcon />}
+        {ahead > 0 && <span className="tabular-nums">{ahead}</span>}
       </SyncButton>
-      <SyncMenu label="Push options" disabled={running !== null}>
-        <DropdownMenuItem onClick={() => void publishing.pushTo()}>Push to…</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => publishing.pushTags()}>Push tags…</DropdownMenuItem>
-      </SyncMenu>
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    className="text-muted-foreground"
+                    aria-label="More options"
+                    disabled={running !== null}
+                  />
+                }
+              />
+            }
+          >
+            <EllipsisIcon className="size-3" />
+          </TooltipTrigger>
+          <TooltipContent side="bottom">More options</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end" className="w-auto">
+          <DropdownMenuRadioGroup
+            value={preferences.pullStrategy}
+            onValueChange={(next: unknown) => {
+              const choice = pullChoices.find((choice) => choice.value === next)
+              if (choice !== undefined) setPreferences((stored) => ({ ...stored, pullStrategy: choice.value }))
+            }}
+          >
+            <DropdownMenuLabel>Pull strategy</DropdownMenuLabel>
+            {pullChoices.map((choice) => (
+              <DropdownMenuRadioItem key={choice.value} value={choice.value}>
+                {choice.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={publishing.pullWith}>Pull with strategy…</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void publishing.pushTo()}>Push to…</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => publishing.pushTags()}>Push tags…</DropdownMenuItem>
+          <OpenInMenuItems repo={repo} />
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
@@ -150,7 +169,6 @@ export function SyncButtons({
 function SyncButton({
   label,
   detail,
-  className,
   children,
   ...props
 }: ComponentProps<typeof Button> & { label: string; detail?: string | undefined }) {
@@ -161,7 +179,7 @@ function SyncButton({
           <Button
             size="sm"
             variant="ghost"
-            className={cn("px-1.5 text-muted-foreground", className)}
+            className="min-w-6 gap-0.5 px-1 text-muted-foreground"
             aria-label={detail === undefined ? label : `${label}. ${detail}`}
             {...props}
           />
@@ -174,29 +192,6 @@ function SyncButton({
         {detail !== undefined && <span className="break-all whitespace-pre-line opacity-70">{detail}</span>}
       </TooltipContent>
     </Tooltip>
-  )
-}
-
-function SyncMenu({ label, disabled, children }: { label: string; disabled: boolean; children: ReactNode }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            size="sm"
-            variant="ghost"
-            className="w-6 shrink-0 px-0 text-muted-foreground"
-            aria-label={label}
-            disabled={disabled}
-          />
-        }
-      >
-        <ChevronDownIcon />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-auto">
-        {children}
-      </DropdownMenuContent>
-    </DropdownMenu>
   )
 }
 
@@ -241,7 +236,7 @@ export function NetworkStatus({ repo }: { repo: RepoId }) {
         value={state.progress?.percent ?? null}
         className="w-20 shrink-0"
       />
-      <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
+      <span className="min-w-0 flex-1 truncate font-mono text-2xs text-muted-foreground">
         {state.progress?.line ?? "Connecting…"}
       </span>
       <Button size="xs" variant="ghost" onClick={network.cancel}>

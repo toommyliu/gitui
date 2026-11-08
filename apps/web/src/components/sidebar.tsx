@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip"
 import { useAtomValue } from "@effect/atom-react"
 import type {
   Branch,
@@ -254,13 +255,18 @@ export function Sidebar({
           {virtualizer.getVirtualItems().map((item) => {
             const row = rows[item.index]!
             const { state, location } = rowVisibility(row, visibility, head)
+            const selected =
+              row.kind === "worktree" && selection._tag === "Worktree" && selection.path === row.worktree.path
             return (
               <div
                 key={item.key}
-                className="group/row absolute top-0 left-0 w-full"
+                className={cn(
+                  "group/row absolute top-0 left-0 flex w-full has-[[data-row]:focus-visible]:outline-2 has-[[data-row]:focus-visible]:-outline-offset-2",
+                  selected ? "bg-selection" : row.kind !== "section" && "hover:bg-muted/60",
+                )}
                 style={{ height: ROW, transform: `translateY(${item.start}px)` }}
               >
-                <div className={cn("h-full", state !== "shown" && "opacity-50")}>
+                <div className={cn("h-full min-w-0 flex-1", state !== "shown" && "opacity-50")}>
                   <SidebarRow
                     row={row}
                     repo={repo}
@@ -270,7 +276,6 @@ export function Sidebar({
                     toggle={toggle}
                     onSelect={onSelect}
                     onOpen={(path) => onOpen(path, refs?.worktrees.map((worktree) => worktree.path) ?? [])}
-                    selectedWorktree={selection._tag === "Worktree" ? selection.path : null}
                     worktreeByBranch={worktreeByBranch}
                     onDelete={(branch) => setDeleting({ branch, worktree: worktreeByBranch.get(branch.name) })}
                     onRemove={(worktree, force) => setRemoving({ worktree, force })}
@@ -280,7 +285,6 @@ export function Sidebar({
                   <VisibilityToggle
                     hidden={state === "hidden"}
                     label={location.name ?? location.section}
-                    header={row.kind === "section"}
                     onToggle={(focus) =>
                       onVisibilityChange(
                         focus && refs !== undefined
@@ -319,27 +323,38 @@ function CurrentBranch({ repo, status }: { repo: RepoId; status: Status | undefi
   const { head, upstream, operation } = status
   const name = head._tag === "Detached" ? `HEAD at ${shortOid(head.oid)}` : head.name
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-1.5 border-b px-2 py-1 whitespace-nowrap">
-      <GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-      <Tooltip>
-        <TooltipTrigger render={<span className="min-w-0 truncate font-semibold" />}>{name}</TooltipTrigger>
-        <TooltipContent side="bottom">{name}</TooltipContent>
-      </Tooltip>
-      {head._tag === "Unborn" && <span className="min-w-0 truncate text-muted-foreground">no commits yet</span>}
+    <div className="shrink-0">
+      <div className="flex h-8 items-center gap-1.5 border-b pr-1 pl-2 whitespace-nowrap">
+        <GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        <Tooltip>
+          <TooltipTrigger render={<span className="min-w-0 truncate font-semibold" />}>{name}</TooltipTrigger>
+          <TooltipContent side="bottom" className="flex-col items-start gap-0.5">
+            {name}
+            <span className="opacity-70">
+              {head._tag === "Unborn"
+                ? "No commits yet"
+                : upstream === null
+                  ? "No upstream"
+                  : `Tracking ${upstream.name}`}
+            </span>
+          </TooltipContent>
+        </Tooltip>
+        <span className="flex-1" />
+        <SyncButtons repo={repo} branch={head._tag === "Branch" ? head.name : null} upstream={upstream} />
+      </div>
       {operation !== null && (
-        <Badge variant="destructive" className="shrink-0">
-          {operation} in progress
-        </Badge>
+        <div className="border-b p-2">
+          <Badge variant="destructive" className="w-full">
+            {operation} in progress
+          </Badge>
+        </div>
       )}
-      <SyncButtons repo={repo} branch={head._tag === "Branch" ? head.name : null} upstream={upstream} />
     </div>
   )
 }
 
 function SmallBadge({ className, ...props }: ComponentProps<typeof Badge>) {
-  return (
-    <Badge variant="secondary" className={cn("h-4 rounded-sm px-1 text-[10px] tabular-nums", className)} {...props} />
-  )
+  return <Badge variant="secondary" className={cn("h-4 rounded-sm px-1 text-2xs tabular-nums", className)} {...props} />
 }
 
 function WorktreeChips({ repo, worktree }: { repo: RepoId; worktree: Worktree }) {
@@ -347,13 +362,13 @@ function WorktreeChips({ repo, worktree }: { repo: RepoId; worktree: Worktree })
   if (summary === undefined) return null
   const commits = summary.commits ?? 0
   return (
-    <span className="ml-auto flex shrink-0 gap-1">
+    <>
       {commits > 0 && <SmallBadge>{commits === 1 ? "1 commit" : `${commits} commits`}</SmallBadge>}
       {summary.changes > 0 && <SmallBadge>{summary.changes === 1 ? "1 file" : `${summary.changes} files`}</SmallBadge>}
       {!worktree.isMain && summary.commits === 0 && summary.changes === 0 && (
         <SmallBadge variant="outline">empty</SmallBadge>
       )}
-    </span>
+    </>
   )
 }
 
@@ -361,54 +376,58 @@ function Line({
   depth,
   onClick,
   active,
-  selected,
+  hint,
   children,
   ...props
 }: {
   depth: number
   onClick?: () => void
   active?: boolean
-  selected?: boolean
   children: ReactNode
-} & Pick<ComponentProps<"button">, "title" | "onDoubleClick" | "onKeyDown">) {
+  hint?: string
+} & Pick<ComponentProps<"button">, "onDoubleClick" | "onKeyDown">) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      {...props}
-      className={cn(
-        "flex h-full w-full items-center gap-1.5 pr-2 text-left whitespace-nowrap",
-        selected ? "bg-selection" : "hover:bg-muted/60",
-        active && "font-semibold",
-      )}
-      style={{ paddingLeft: 12 + depth * 12 }}
-    >
-      {children}
-    </button>
+    <Hint label={hint} side="right">
+      <button
+        type="button"
+        data-row
+        onClick={onClick}
+        {...props}
+        className={cn(
+          "flex h-full w-full items-center gap-1.5 pr-2 text-left whitespace-nowrap focus-visible:outline-none",
+          active && "font-semibold",
+        )}
+        style={{ paddingLeft: 12 + depth * 12 }}
+      >
+        {children}
+      </button>
+    </Hint>
   )
 }
 
 function VisibilityToggle({
   hidden,
   label,
-  header,
   onToggle,
 }: {
   hidden: boolean
   label: string
-  header: boolean
   onToggle: (focus: boolean) => void
 }) {
   const action = `${hidden ? "Show" : "Hide"} ${label} in history`
   const shortcut = "Alt-click or Alt+Enter to focus"
   return (
-    <span className="absolute inset-y-0 right-0 hidden bg-background group-focus-within/row:flex group-hover/row:flex">
-      <span className={cn("flex items-center px-1", !header && "group-hover/row:bg-muted/60")}>
+    <span
+      className={cn(
+        "shrink-0 items-center pr-2",
+        hidden ? "flex" : "hidden group-focus-within/row:flex group-hover/row:flex",
+      )}
+    >
+      <Hint label={`${action}\n${shortcut}`}>
         <button
           type="button"
           aria-label={action}
           aria-description={shortcut}
-          title={`${action}\n${shortcut}`}
           onClick={(event) => onToggle(event.altKey)}
           onKeyDown={(event) => {
             if (event.altKey && (event.key === "Enter" || event.key === " ")) {
@@ -416,11 +435,11 @@ function VisibilityToggle({
               onToggle(true)
             }
           }}
-          className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
+          className="flex size-5 items-center justify-center rounded-sm text-muted-foreground outline-offset-0 hover:text-foreground"
         >
           {hidden ? <EyeOffIcon className="size-3.5" /> : <EyeIcon className="size-3.5" />}
         </button>
-      </span>
+      </Hint>
     </span>
   )
 }
@@ -438,7 +457,6 @@ function SidebarRow({
   toggle,
   onSelect,
   onOpen,
-  selectedWorktree,
   worktreeByBranch,
   onDelete,
   onRemove,
@@ -451,7 +469,6 @@ function SidebarRow({
   toggle: (id: string) => void
   onSelect: (selection: Selection) => void
   onOpen: (path: string) => void
-  selectedWorktree: string | null
   worktreeByBranch: Map<string, Worktree>
   onDelete: (branch: Branch) => void
   onRemove: (worktree: Worktree, force: boolean) => void
@@ -545,7 +562,7 @@ function SidebarRow({
               <span className="w-3 shrink-0" />
               <span className="truncate">{row.label}</span>
               {worktree !== undefined && (
-                <span className="truncate text-[11px] text-muted-foreground">in {basename(worktree.path)}</span>
+                <span className="truncate text-2xs text-muted-foreground">in {basename(worktree.path)}</span>
               )}
               <span className="ml-auto flex shrink-0 gap-1 tabular-nums">
                 {upstream?._tag === "Gone" && <SmallBadge variant="outline">gone</SmallBadge>}
@@ -767,7 +784,7 @@ function SidebarRow({
             <Line depth={1} onClick={() => select(stash.oid)}>
               <span className="w-3 shrink-0" />
               <span className="truncate">{stash.message}</span>
-              <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{date(stash.time)}</span>
+              <span className="ml-auto shrink-0 text-2xs text-muted-foreground">{date(stash.time)}</span>
             </Line>
           </ContextMenuTrigger>
           <ContextMenuContent>
@@ -810,8 +827,7 @@ function SidebarRow({
             <Line
               depth={1}
               active={current}
-              selected={selectedWorktree === worktree.path}
-              title={worktree.path}
+              hint={worktree.path}
               onClick={() => {
                 if (current) onSelect({ _tag: "WorkingCopy" })
                 else if (openable) onSelect({ _tag: "Worktree", path: worktree.path })
@@ -826,24 +842,20 @@ function SidebarRow({
               <span className="w-3 shrink-0" />
               <span className="truncate">{worktreeLabel(worktree)}</span>
               {worktree.head._tag !== "Branch" && (
-                <span className="truncate text-[11px] text-muted-foreground">
+                <span className="truncate text-2xs text-muted-foreground">
                   {worktree.head._tag === "Detached" ? "detached" : "bare"}
                 </span>
               )}
-              {worktree.locked !== null && (
-                <SmallBadge variant="outline" className="ml-auto">
-                  locked
-                </SmallBadge>
-              )}
-              {worktree.prunable !== null ? (
-                <SmallBadge variant="destructive" className="ml-auto">
-                  missing
-                </SmallBadge>
-              ) : current ? (
-                <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">this tab</span>
-              ) : (
-                openable && <WorktreeChips repo={repo} worktree={worktree} />
-              )}
+              <span className="ml-auto flex shrink-0 items-center gap-1">
+                {worktree.locked !== null && <SmallBadge variant="outline">locked</SmallBadge>}
+                {worktree.prunable !== null ? (
+                  <SmallBadge variant="destructive">missing</SmallBadge>
+                ) : current ? (
+                  <span className="text-2xs text-muted-foreground">this tab</span>
+                ) : (
+                  openable && <WorktreeChips repo={repo} worktree={worktree} />
+                )}
+              </span>
             </Line>
           </ContextMenuTrigger>
           <ContextMenuContent>
@@ -891,8 +903,9 @@ function SectionRow({
   const header = (
     <button
       type="button"
+      data-row
       onClick={() => toggle(row.id)}
-      className="flex h-full w-full items-center gap-1.5 px-2 text-left text-[11px] font-semibold tracking-wide text-muted-foreground uppercase hover:text-foreground"
+      className="flex h-full w-full items-center gap-1.5 px-2 text-left text-2xs font-semibold tracking-wide text-muted-foreground uppercase hover:text-foreground focus-visible:outline-none"
     >
       <Disclosure open={open} />
       {row.label}

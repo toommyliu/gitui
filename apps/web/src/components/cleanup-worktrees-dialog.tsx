@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { basename } from "@/lib/format"
 import { latest, refsAtom, useGitAction } from "@/lib/git"
 import { LIST_ROW } from "@/lib/rows"
@@ -146,7 +145,7 @@ function CleanupForm({
       {candidates.length === 0 ? (
         <p className="text-muted-foreground">There are no other worktrees.</p>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col rounded-md border">
+        <div className="flex max-h-96 min-h-0 flex-1 flex-col overflow-hidden rounded-md border">
           <label
             htmlFor={`${branchesId}-all`}
             className="flex shrink-0 items-center gap-2 border-b px-3"
@@ -165,48 +164,46 @@ function CleanupForm({
               {picked.length} of {candidates.length} selected
             </span>
           </label>
-          <ScrollArea className="min-h-0 flex-1" viewportProps={{ className: "max-h-96" }}>
-            <ul className="py-1">
-              {candidates.map((candidate) => {
-                const enabled = selectable(candidate.staleness)
-                const id = `${branchesId}-${candidate.worktree.path}`
-                return (
-                  <li key={candidate.worktree.path}>
-                    <label
-                      htmlFor={id}
+          <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1">
+            {candidates.map((candidate) => {
+              const enabled = selectable(candidate.staleness)
+              const id = `${branchesId}-${candidate.worktree.path}`
+              return (
+                <li key={candidate.worktree.path}>
+                  <label
+                    htmlFor={id}
+                    className={cn(
+                      "flex h-7 items-center gap-2 px-3",
+                      enabled ? "hover:bg-muted/60" : "text-muted-foreground",
+                    )}
+                  >
+                    <Checkbox
+                      id={id}
+                      disabled={!enabled}
+                      checked={checked(candidate)}
+                      onCheckedChange={(next: boolean) =>
+                        setOverrides((current) => new Map(current).set(candidate.worktree.path, next))
+                      }
+                    />
+                    <span className="min-w-0 truncate">{worktreeLabel(candidate.worktree)}</span>
+                    <span className="min-w-0 shrink truncate text-2xs text-muted-foreground">
+                      {candidate.worktree.head._tag === "Branch" ? basename(candidate.worktree.path) : "detached"}
+                    </span>
+                    <span
                       className={cn(
-                        "flex h-7 items-center gap-2 px-3",
-                        enabled ? "hover:bg-muted/60" : "text-muted-foreground",
+                        "ml-auto shrink-0 text-2xs",
+                        candidate.staleness._tag === "Unmerged" || candidate.staleness._tag === "Dirty"
+                          ? "text-change-modified"
+                          : "text-muted-foreground",
                       )}
                     >
-                      <Checkbox
-                        id={id}
-                        disabled={!enabled}
-                        checked={checked(candidate)}
-                        onCheckedChange={(next: boolean) =>
-                          setOverrides((current) => new Map(current).set(candidate.worktree.path, next))
-                        }
-                      />
-                      <span className="min-w-0 truncate">{worktreeLabel(candidate.worktree)}</span>
-                      <span className="min-w-0 shrink truncate text-2xs text-muted-foreground">
-                        {candidate.worktree.head._tag === "Branch" ? basename(candidate.worktree.path) : "detached"}
-                      </span>
-                      <span
-                        className={cn(
-                          "ml-auto shrink-0 text-2xs",
-                          candidate.staleness._tag === "Unmerged" || candidate.staleness._tag === "Dirty"
-                            ? "text-change-modified"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        {reason(candidate.staleness)}
-                      </span>
-                    </label>
-                  </li>
-                )
-              })}
-            </ul>
-          </ScrollArea>
+                      {reason(candidate.staleness)}
+                    </span>
+                  </label>
+                </li>
+              )
+            })}
+          </ul>
         </div>
       )}
       <label htmlFor={`${branchesId}-branches`} className="flex items-center gap-2">

@@ -573,11 +573,32 @@ export class Repo extends Context.Service<
         return yield* Effect.scoped(Effect.andThen(want(session), find(session, oid, 0)))
       })
 
+      const stashUntracked = Effect.fn("Repo.stashUntracked")(function* (repo: RepoId, oid: Oid) {
+        const [own = "", , index, untracked] = (yield* git.text(repo, [
+          "show",
+          "-s",
+          "-z",
+          "--format=%P",
+          oid,
+          `${oid}^@`,
+        ])).split("\0")
+        const parents = own.split(" ")
+        return parents.length === 3 && index === parents[0] && untracked === "" ? (parents[2] as Oid) : undefined
+      })
+
       const commit = Effect.fn("Repo.commit")(function* (repo: RepoId, oid: Oid) {
-        const show = yield* git.run(repo, showArgs(oid))
+        const [show, untracked] = yield* Effect.all([git.run(repo, showArgs(oid)), stashUntracked(repo, oid)], {
+          concurrency: "unbounded",
+        })
         const detail = parseCommit(show, [])
-        const files = parseFileChanges(yield* git.run(repo, diffTreeArgs(oid, detail.parents[0])))
-        return { ...detail, files }
+        const diffs = [
+          diffTreeArgs(oid, detail.parents[0]),
+          ...(untracked === undefined ? [] : [diffTreeArgs(untracked, undefined)]),
+        ]
+        const files = yield* Effect.forEach(diffs, (args) => Effect.map(git.run(repo, args), parseFileChanges), {
+          concurrency: "unbounded",
+        })
+        return { ...detail, files: files.flat() }
       })
 
       const patchArgs = (
@@ -611,6 +632,23 @@ export class Repo extends Context.Service<
         }
       }
 
+      const commitPatch = Effect.fn("Repo.commitPatch")(function* (
+        repo: RepoId,
+        oid: Oid,
+        paths: ReadonlyArray<RepoPath>,
+        ignoreWhitespace: boolean,
+      ) {
+        const [patch, untracked] = yield* Effect.all(
+          [git.run(repo, patchArgs({ _tag: "Commit", oid }, paths, ignoreWhitespace)), stashUntracked(repo, oid)],
+          { concurrency: "unbounded" },
+        )
+        if (untracked === undefined) return patch
+        return Buffer.concat([
+          patch,
+          yield* git.run(repo, patchArgs({ _tag: "Commit", oid: untracked }, paths, ignoreWhitespace)),
+        ])
+      })
+
       const diff = Effect.fn("Repo.diff")(function* (
         repo: RepoId,
         target: DiffTarget,
@@ -632,7 +670,9 @@ export class Repo extends Context.Service<
                   git.run(repo, patchArgs(target, [path], ignoreWhitespace), { okExitCodes: [1] }),
                 ),
               )
-            : yield* git.run(repo, patchArgs(target, paths, ignoreWhitespace))
+            : target._tag === "Commit"
+              ? yield* commitPatch(repo, target.oid, paths, ignoreWhitespace)
+              : yield* git.run(repo, patchArgs(target, paths, ignoreWhitespace))
         if (!allowLarge && bytes.length > MAX_PATCH_BYTES)
           return { _tag: "TooLarge", bytes: bytes.length } satisfies FileDiff
         const text = decoder.decode(bytes)

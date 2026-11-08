@@ -506,6 +506,33 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
     }),
   )
 
+  it.effect("lists a stash's untracked files alongside its tracked changes", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      repo.write("tracked", "one\n")
+      repo.git("add", ".")
+      repo.commit("base")
+      repo.write("tracked", "two\n")
+      repo.write("staged", "staged\n")
+      repo.git("add", "staged")
+      repo.write("untracked", "new\n")
+      repo.git("stash", "push", "--include-untracked")
+      const oid = repo.git("rev-parse", "refs/stash") as Oid
+      const r = yield* Repo
+
+      const detail = yield* r.commit(id(repo.root), oid)
+      expect(detail.files.map((file) => [file.path, file.change])).toEqual([
+        ["staged", "added"],
+        ["tracked", "modified"],
+        ["untracked", "added"],
+      ])
+      const diff = yield* r.diff(id(repo.root), { _tag: "Commit", oid }, [p("untracked")])
+      expect(diff._tag === "Patch" && diff.patch.includes("+new")).toBe(true)
+      const whole = yield* r.diff(id(repo.root), { _tag: "Commit", oid }, [])
+      expect(whole._tag === "Patch" && whole.patch.match(/^diff --git/gm)?.length).toBe(3)
+    }),
+  )
+
   it.effect("walks only the refs left visible", () =>
     Effect.gen(function* () {
       const repo = makeRepo()

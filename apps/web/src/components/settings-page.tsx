@@ -525,7 +525,7 @@ export function SettingsPage() {
                     <h2 className="font-semibold">{sections[section].label}</h2>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto">
-                    <div className="mx-auto max-w-2xl px-8 py-4">
+                    <div className="max-w-2xl px-3 py-2">
                       <SectionBody section={section} />
                     </div>
                   </div>

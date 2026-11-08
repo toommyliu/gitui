@@ -80,7 +80,9 @@ function CleanupForm({
   const checked = (candidate: Candidate) =>
     selectable(candidate.staleness) &&
     (overrides.get(candidate.worktree.path) ??
-      (preset === null ? suggested(candidate.staleness) : preset.has(candidate.worktree.path)))
+      (preset === null
+        ? suggested(candidate.staleness)
+        : bulkSelectable(candidate.staleness) && preset.has(candidate.worktree.path)))
   const picked = candidates.filter(checked)
   const lostCommits = deleteBranches
     ? picked.reduce(
@@ -107,16 +109,20 @@ function CleanupForm({
     const missing = picked.filter((candidate) => candidate.staleness._tag === "Missing")
     for (const { worktree, staleness } of picked) {
       if (staleness._tag === "Missing") continue
-      const hasBranch = worktree.head._tag === "Branch"
       const ok = await git(`Remove ${worktreeLabel(worktree)}`, repo, (c) =>
         c("RemoveWorktree", {
           repo,
           path: worktree.path,
-          force: uncommittedChanges(staleness) > 0 || (deleteBranches && hasBranch && unmergedCommits(staleness) > 0),
-          deleteBranch: deleteBranches && hasBranch,
+          force: uncommittedChanges(staleness) > 0,
+          deleteBranch: false,
         }),
       )
-      if (ok) removed++
+      if (!ok) continue
+      removed++
+      if (deleteBranches && worktree.head._tag === "Branch") {
+        const name = worktree.head.name
+        await git(`Delete ${name}`, repo, (c) => c("DeleteBranch", { repo, name, force: true, removeWorktree: false }))
+      }
     }
     if (missing.length > 0 && (await git("Prune worktrees", repo, (c) => c("PruneWorktrees", { repo })))) {
       removed += missing.length

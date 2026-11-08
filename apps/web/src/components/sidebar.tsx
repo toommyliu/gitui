@@ -251,7 +251,7 @@ export function Sidebar({
     [rows],
   )
   const select = (next: Selection) => {
-    setPicked(nothingPicked)
+    setPicked((current) => (current.paths.size === 0 ? current : { paths: new Set(), anchor: current.anchor }))
     onSelect(next)
   }
   const pick = (path: string, mode: "only" | "toggle" | "extend") =>
@@ -497,7 +497,7 @@ function SidebarRow({
   onDelete: (branch: Branch) => void
   onRemove: (worktree: Worktree, force: boolean) => void
   picked: ReadonlySet<string>
-  onPick: (path: string, mode: "toggle" | "extend") => void
+  onPick: (path: string, mode: "only" | "toggle" | "extend") => void
 }) {
   const git = useGitAction()
   const compare = useCompare(repo)
@@ -857,7 +857,8 @@ function SidebarRow({
               hint={worktree.path}
               onClick={(event) => {
                 const mode = event.shiftKey ? "extend" : event.metaKey || event.ctrlKey ? "toggle" : "only"
-                if (mode !== "only") return onPick(worktree.path, mode)
+                onPick(worktree.path, mode)
+                if (mode !== "only") return
                 if (current) onSelect({ _tag: "WorkingCopy" })
                 else if (openable) onSelect({ _tag: "Worktree", path: worktree.path })
               }}

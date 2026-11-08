@@ -67,7 +67,7 @@ const createWindow = () => {
     minWidth: 720,
     minHeight: 480,
     show: false,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#181818" : "#fcfcfc",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#141619" : "#fbfcfd",
     icon,
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),

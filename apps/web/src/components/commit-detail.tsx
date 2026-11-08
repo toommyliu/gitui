@@ -1,13 +1,7 @@
 import { useAtom, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { CommitDetail as Detail, FileChange, Oid, RepoId } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import {
-  ChevronsDownUpIcon,
-  ChevronsUpDownIcon,
-  FlaskConicalIcon,
-  FlaskConicalOffIcon,
-  HistoryIcon,
-} from "lucide-react"
+import { FlaskConicalIcon, FlaskConicalOffIcon, HistoryIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
@@ -24,7 +18,7 @@ import { commitAtom, diffAtom, diffKey, latest, loadError } from "@/lib/git"
 import { useNarrow } from "@/lib/narrow"
 import type { Selection } from "@/lib/selection"
 import { settingsAtom } from "@/lib/settings"
-import { DiffStack, expandableIds, filterItems, patchItems, useCollapse } from "./diff-view"
+import { DiffStack, filterItems, patchItems } from "./diff-view"
 import { ChangeLetter } from "./change-letter"
 import { OpenInButton } from "./open-in"
 import { LargeDiff, Loading, Nothing } from "./loading"
@@ -54,7 +48,7 @@ export function ChangeTotals({ count, files }: { count: number; files: ReadonlyA
   const shown = codeOnly ? breakdown.code : total
   return (
     <>
-      <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
+      <Badge variant="secondary" className="h-4 rounded-sm px-1 text-2xs tabular-nums">
         {count.toLocaleString()}
       </Badge>
       <Tooltip disabled={total.additions === 0 && total.deletions === 0}>
@@ -134,7 +128,7 @@ function Summary({ detail, onSelect }: { detail: Detail; onSelect: (selection: S
           </Field>
         )}
       </dl>
-      <pre className="mt-3 font-mono text-[12px] leading-5 whitespace-pre-wrap select-text">{detail.message}</pre>
+      <pre className="mt-3 font-mono text-xs leading-5 whitespace-pre-wrap select-text">{detail.message}</pre>
     </div>
   )
 }
@@ -167,9 +161,6 @@ export function CommitDetail({
   }, [diff, oid, hideTests])
   const [filter, setFilter] = useState("")
   const shown = useMemo(() => filterItems(items, filter), [items, filter])
-  const collapse = useCollapse()
-  const expandable = useMemo(() => expandableIds(shown), [shown])
-  const allCollapsed = expandable.every((id) => collapse.ids.has(id))
 
   if (detail === undefined || detail.oid !== oid) {
     const error = loadError(commitResult)
@@ -194,20 +185,7 @@ export function CommitDetail({
   }
   return (
     <div className="flex h-full flex-col">
-      <SectionBar
-        label="Files"
-        actions={
-          <>
-            <TestsToggle paths={detail.files.map((file) => file.path)} />
-            {expandable.length > 1 && (
-              <BarButton onClick={() => collapse.set(expandable, !allCollapsed)}>
-                {allCollapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-                {allCollapsed ? "Expand all" : "Collapse all"}
-              </BarButton>
-            )}
-          </>
-        }
-      >
+      <SectionBar label="Files" actions={<TestsToggle paths={detail.files.map((file) => file.path)} />}>
         <ChangeTotals count={detail.files.length} files={detail.files} />
       </SectionBar>
       {diff === undefined && diffError === undefined ? (
@@ -228,7 +206,7 @@ export function CommitDetail({
                 key={oid}
                 repo={repo}
                 items={shown}
-                collapse={collapse}
+                ignoresWhitespace
                 header={() => <Summary detail={detail} onSelect={onSelect} />}
                 actions={(meta) =>
                   onInvestigate !== undefined && (
@@ -259,14 +237,7 @@ export function NoMatchingFiles({ filter, onClear }: { filter: string; onClear: 
 
 export function HistoryButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button
-      size="icon-sm"
-      variant="ghost"
-      className="text-muted-foreground"
-      aria-label="File history"
-      title="File history"
-      onClick={onClick}
-    >
+    <Button size="icon-sm" variant="ghost" className="text-muted-foreground" tooltip="File history" onClick={onClick}>
       <HistoryIcon />
     </Button>
   )
@@ -275,7 +246,7 @@ export function HistoryButton({ onClick }: { onClick: () => void }) {
 export function SectionBar({ label, actions, children }: { label: string; actions: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex h-8 shrink-0 items-center gap-2 border-b bg-muted/40 px-2">
-      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</span>
+      <span className="text-2xs font-semibold tracking-wide text-muted-foreground uppercase">{label}</span>
       <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-muted-foreground">{children}</span>
       <span className="flex shrink-0 gap-1">{actions}</span>
     </div>
@@ -292,7 +263,7 @@ export function TestsToggle({ paths }: { paths: ReadonlyArray<string> }) {
       size="sm"
       variant="ghost"
       aria-pressed={settings.hideTests}
-      title={settings.hideTests ? `${files} hidden` : `Hide ${files}, including fixtures, mocks, and snapshots`}
+      tooltip={settings.hideTests ? `${files} hidden` : `Hide ${files}, including fixtures, mocks, and snapshots`}
       onClick={() => setSettings({ ...settings, hideTests: !settings.hideTests })}
     >
       {settings.hideTests ? <FlaskConicalIcon /> : <FlaskConicalOffIcon />}
@@ -502,6 +473,7 @@ function SingleFileDiff({
     <DiffStack
       repo={repo}
       items={items}
+      ignoresWhitespace
       actions={(meta) =>
         onInvestigate !== undefined && (
           <HistoryButton onClick={() => onInvestigate({ revision: oid, path: meta.path })} />

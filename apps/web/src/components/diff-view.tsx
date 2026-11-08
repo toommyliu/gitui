@@ -1,4 +1,5 @@
-import { useAtomValue } from "@effect/atom-react"
+import { Hint } from "@/components/ui/tooltip"
+import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type { FileChange, RepoId, RepoPath } from "@gitui/contracts"
 import {
   type ChangeTypes,
@@ -13,7 +14,16 @@ import {
 import { CodeView, type CodeViewHandle, useWorkerPool, WorkerPoolContextProvider } from "@pierre/diffs/react"
 import DiffsWorker from "@pierre/diffs/worker/worker.js?worker"
 import { formatForDisplay, useAppHotkeys } from "@tanstack/react-hotkeys"
-import { ArrowDownIcon, ArrowUpIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon } from "lucide-react"
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
+  CopyIcon,
+} from "lucide-react"
 import {
   type CSSProperties,
   type ReactNode,
@@ -34,6 +44,18 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "cn"
 import { copyText, copyWithToast } from "@/lib/clipboard"
 import {
@@ -50,7 +72,7 @@ import { desktop } from "@/lib/desktop"
 import { editorLine } from "@/lib/lines"
 import { hiddenLocationTop, locationBeyond, nearestBeyond, READING_SLOP, sideRuns } from "@/lib/diff-nav"
 import { fileStepTarget } from "@/lib/file-step"
-import { type Settings, settingsAtom } from "@/lib/settings"
+import { type Settings, settingsAtom, settingsViewAtom } from "@/lib/settings"
 import { ChangeLetter } from "./change-letter"
 import { CURRENT_FIND_HIGHLIGHT, FIND_HIGHLIGHT, useMatchHighlights } from "./diff-find"
 import { OpenInContextMenu } from "./open-in"
@@ -179,15 +201,16 @@ export function GutterButton({
     }
   }, [])
   return (
-    <button
-      ref={attach}
-      type="button"
-      aria-label={label}
-      title={label}
-      className="relative z-10 flex size-4 items-center justify-center rounded-sm bg-secondary font-medium text-secondary-foreground hover:bg-primary hover:text-primary-foreground"
-    >
-      {children}
-    </button>
+    <Hint label={label}>
+      <button
+        ref={attach}
+        type="button"
+        aria-label={label}
+        className="relative z-10 flex size-4 items-center justify-center rounded-sm bg-secondary font-medium text-secondary-foreground hover:bg-primary hover:text-primary-foreground"
+      >
+        {children}
+      </button>
+    </Hint>
   )
 }
 
@@ -211,6 +234,8 @@ export const UNSAFE_CSS = `
   --diffs-dark: var(--foreground);
   --diffs-light-bg: var(--background);
   --diffs-dark-bg: var(--background);
+  --diffs-font-family: var(--font-mono);
+  font-variant-ligatures: none;
   --diffs-addition-color-override: var(--diff-addition);
   --diffs-deletion-color-override: var(--diff-deletion);
   --diffs-bg-addition-emphasis-override: var(--diff-addition-emphasis);
@@ -229,7 +254,7 @@ ${separator} {
 ${separator} [data-separator-content] {
   color: ${quiet} !important;
   font-family: var(--font-sans) !important;
-  font-size: 11px !important;
+  font-size: var(--text-2xs) !important;
   text-decoration: none !important;
 }
 ${separator} [data-expand-button] {
@@ -278,7 +303,7 @@ function CopyPathButton({ path }: { path: string }) {
       variant="ghost"
       className="text-muted-foreground"
       aria-label={copied ? "Path copied" : "Copy path"}
-      title="Copy path"
+      tooltip="Copy path"
       onClick={() =>
         copyText(path).then(
           () => setCopied(true),
@@ -338,9 +363,8 @@ function FileHeader({
             size="icon-sm"
             variant="ghost"
             className="-mr-1 text-muted-foreground"
-            aria-label={collapsed ? "Expand diff" : "Collapse diff"}
+            tooltip={collapsed ? "Expand diff" : "Collapse diff"}
             aria-expanded={!collapsed}
-            title={collapsed ? "Expand diff" : "Collapse diff"}
             onClick={onToggle}
           >
             {collapsed ? <ChevronRightIcon /> : <ChevronDownIcon />}
@@ -362,7 +386,7 @@ function FileHeader({
             {additions > 0 && <span className="text-change-added">+{additions}</span>}
           </span>
         ) : (
-          <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{note}</span>
+          <span className="ml-auto shrink-0 text-2xs text-muted-foreground">{note}</span>
         )}
         {actions}
       </ContextMenuTrigger>
@@ -483,6 +507,7 @@ export function DiffStack({
   viewRef,
   lines,
   collapse,
+  ignoresWhitespace = false,
 }: {
   repo: RepoId
   items: ReadonlyArray<DiffItem>
@@ -491,6 +516,7 @@ export function DiffStack({
   viewRef?: RefObject<CodeViewHandle<undefined, undefined> | null>
   lines?: LineSelectionProps
   collapse?: Collapse
+  ignoresWhitespace?: boolean
 }) {
   const ownCollapse = useCollapse()
   const { ids: collapsedIds, set: setCollapsed } = collapse ?? ownCollapse
@@ -503,6 +529,7 @@ export function DiffStack({
     [items, collapsedIds],
   )
   const expandable = useMemo(() => expandableIds(items), [items])
+  const allCollapsed = expandable.every((id) => collapsedIds.has(id))
   const notes = useMemo(() => new Map(items.map((item) => [item.id, hasText(item) ? null : noTextNote(item)])), [items])
   const { options: look, style, lineHeight } = useDiffAppearance()
   const [ownSelection, setOwnSelection] = useState<CodeViewLineSelection | null>(null)
@@ -684,7 +711,7 @@ export function DiffStack({
           variant="ghost"
           className="text-muted-foreground"
           aria-label="Previous hunk"
-          title={described("Previous hunk", "diff.previousHunk")}
+          tooltip={described("Previous hunk", "diff.previousHunk")}
           disabled={hunks.length === 0}
           onClick={hunkStep(-1)}
         >
@@ -695,12 +722,24 @@ export function DiffStack({
           variant="ghost"
           className="text-muted-foreground"
           aria-label="Next hunk"
-          title={described("Next hunk", "diff.nextHunk")}
+          tooltip={described("Next hunk", "diff.nextHunk")}
           disabled={hunks.length === 0}
           onClick={hunkStep(1)}
         >
           <ArrowDownIcon />
         </Button>
+        {expandable.length > 1 && (
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            className="text-muted-foreground"
+            tooltip={allCollapsed ? "Expand all files" : "Collapse all files"}
+            onClick={() => setCollapsed(expandable, !allCollapsed)}
+          >
+            {allCollapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
+          </Button>
+        )}
+        <DiffViewMenu ignoresWhitespace={ignoresWhitespace} />
       </div>
       <CodeView
         ref={attachView}
@@ -740,5 +779,80 @@ export function DiffStack({
             })}
       />
     </div>
+  )
+}
+
+const diffTextSizes = ["small", "medium", "large"] as const satisfies ReadonlyArray<Settings["diffTextSize"]>
+
+const textSizeLabels = { small: "Small", medium: "Medium", large: "Large" } as const satisfies Record<
+  Settings["diffTextSize"],
+  string
+>
+
+function DiffViewMenu({ ignoresWhitespace }: { ignoresWhitespace: boolean }) {
+  const [settings, setSettings] = useAtom(settingsAtom)
+  const openSettings = useAtomSet(settingsViewAtom)
+  const wrapHotkey = useAppHotkeys()["diff.wrap"].hotkey
+  const update = (patch: Partial<Settings>) => setSettings({ ...settings, ...patch })
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button size="sm" variant="ghost" className="gap-0.5 pr-1 text-muted-foreground" />}>
+        View
+        <ChevronDownIcon />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuRadioGroup
+          value={settings.diffStyle}
+          onValueChange={(value: unknown) => update({ diffStyle: value === "split" ? "split" : "unified" })}
+        >
+          <DropdownMenuLabel>Layout</DropdownMenuLabel>
+          <DropdownMenuRadioItem value="unified">Unified</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="split">Split</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem
+          checked={settings.wrapLines}
+          onCheckedChange={(wrapLines: boolean) => update({ wrapLines })}
+        >
+          Wrap lines
+          {wrapHotkey !== null && <DropdownMenuShortcut>{formatForDisplay(wrapHotkey)}</DropdownMenuShortcut>}
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuCheckboxItem
+          checked={settings.lineNumbers}
+          onCheckedChange={(lineNumbers: boolean) => update({ lineNumbers })}
+        >
+          Line numbers
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuCheckboxItem
+          checked={ignoresWhitespace && settings.ignoreWhitespace}
+          disabled={!ignoresWhitespace}
+          onCheckedChange={(ignoreWhitespace: boolean) => update({ ignoreWhitespace })}
+        >
+          <span className="flex flex-col">
+            Ignore whitespace
+            {!ignoresWhitespace && (
+              <span className="text-2xs text-muted-foreground">Off here so staged lines match the file</span>
+            )}
+          </span>
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup
+          value={settings.diffTextSize}
+          onValueChange={(value: unknown) => {
+            const size = diffTextSizes.find((key) => key === value)
+            if (size !== undefined) update({ diffTextSize: size })
+          }}
+        >
+          <DropdownMenuLabel>Text size</DropdownMenuLabel>
+          {diffTextSizes.map((size) => (
+            <DropdownMenuRadioItem key={size} value={size}>
+              {textSizeLabels[size]}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => openSettings("diffs")}>More diff settings…</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

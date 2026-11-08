@@ -37,7 +37,7 @@ type View =
   | { kind: "restore"; conflict: DiscardConflict }
 type Tab = "discards" | "commits"
 
-const panel = "grid gap-4 rounded-md focus-visible:ring-[3px] focus-visible:ring-ring/50"
+const panel = "grid gap-4 rounded-md"
 
 export function RecoveryDialog({ repo, onInspect }: { repo: RepoId; onInspect: (oid: Oid) => void }) {
   const [view, setView] = useAtom(recoveryViewAtom(repo))
@@ -208,14 +208,14 @@ function RecoveryContent({
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <span className="font-medium break-words">{entry.action}</span>
                     <time
-                      className="text-[11px] text-muted-foreground"
+                      className="text-2xs text-muted-foreground"
                       dateTime={new Date(entry.time * 1000).toISOString()}
                     >
                       {longDate(entry.time)}
                     </time>
                   </div>
                   <p className="break-words">{entry.subject}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 text-2xs text-muted-foreground">
                     <code>{shortOid(entry.oid)}</code>
                     <span>{entry.actor}</span>
                     <span className="min-w-0 break-all">{entry.selector}</span>
@@ -235,7 +235,7 @@ function RecoveryContent({
         </TabsContent>
       </Tabs>
       <DialogFooter>
-        <span className="me-auto self-center text-[11px] text-muted-foreground">
+        <span className="me-auto self-center text-2xs text-muted-foreground">
           {tab === "discards"
             ? "Keeps the newest 100 discard backups, up to 128 MiB, in this worktree's Git folder."
             : "Up to 500 reflog entries and 100 app backups. Git may expire reflog entries."}

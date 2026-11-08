@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip"
 import { useAtomMount, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import {
   type BaseRef,
@@ -197,13 +198,15 @@ function MergeStatus({
       <p className="flex flex-wrap gap-x-2 text-muted-foreground">
         {check.paths.map((file) =>
           changed.has(file) ? (
-            <button key={file} type="button" title={file} className="hover:underline" onClick={() => onReveal(file)}>
-              {basename(file)}
-            </button>
+            <Hint key={file} label={file}>
+              <button type="button" className="hover:underline" onClick={() => onReveal(file)}>
+                {basename(file)}
+              </button>
+            </Hint>
           ) : (
-            <span key={file} title={file}>
-              {basename(file)}
-            </span>
+            <Hint key={file} label={file}>
+              <span>{basename(file)}</span>
+            </Hint>
           ),
         )}
       </p>
@@ -384,16 +387,17 @@ function Preview({ repo, path, onSelect, onOpen, onHistory }: PreviewProps) {
                   {basename(row.path)}
                 </span>
                 {others.length > 0 && (
-                  <Badge
-                    variant="outline"
-                    title={`Also changed in ${others.join(", ")}`}
-                    className="h-4 max-w-40 min-w-0 shrink rounded-sm border-change-modified/60 px-1 text-[10px] text-change-modified"
-                  >
-                    <span className="truncate">
-                      also {others[0]}
-                      {others.length > 1 && ` +${others.length - 1}`}
-                    </span>
-                  </Badge>
+                  <Hint label={`Also changed in ${others.join(", ")}`}>
+                    <Badge
+                      variant="outline"
+                      className="h-4 max-w-40 min-w-0 shrink rounded-sm border-change-modified/60 px-1 text-2xs text-change-modified"
+                    >
+                      <span className="truncate">
+                        also {others[0]}
+                        {others.length > 1 && ` +${others.length - 1}`}
+                      </span>
+                    </Badge>
+                  </Hint>
                 )}
                 <span className="ml-auto shrink-0 tabular-nums">
                   {count !== undefined && count.deletions > 0 && (

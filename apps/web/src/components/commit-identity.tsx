@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { identityAtom, identityKey, saveIdentityAtom } from "@/lib/commit-workflow"
 import { describeFailure, latest, loadError } from "@/lib/git"
@@ -91,7 +92,7 @@ export function IdentityLine({
     <button
       type="button"
       onClick={onEdit}
-      className="group/identity -mx-1 flex h-5 max-w-[calc(100%+0.5rem)] min-w-0 items-center gap-1.5 rounded-sm px-1 text-[11px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+      className="group/identity -mx-1 flex h-5 max-w-[calc(100%+0.5rem)] min-w-0 items-center gap-1.5 rounded-sm px-1 text-2xs text-muted-foreground hover:text-foreground"
     >
       {content}
       <PencilIcon className="size-3 shrink-0 opacity-0 group-hover/identity:opacity-100 group-focus-visible/identity:opacity-100" />
@@ -147,9 +148,6 @@ function IdentityContent({ repo, onClose }: { repo: RepoId; onClose: () => void 
     </>
   )
 }
-
-const selectClassName =
-  "h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
 
 const inherited = (local: unknown, effective: string) =>
   local === null ? `Use inherited setting (${effective})` : "Use inherited setting"
@@ -261,34 +259,46 @@ function IdentityForm({ repo, identity, onClose }: { repo: RepoId; identity: Com
         </Field>
         <Field>
           <FieldLabel htmlFor={`${id}-signing`}>Signing</FieldLabel>
-          <select
-            id={`${id}-signing`}
+          <Select
+            items={{
+              inherit: inherited(local.signing, identity.signing ? "on" : "off"),
+              on: "Sign commits",
+              off: "Don't sign commits",
+            }}
             value={signing}
-            onChange={(event) =>
-              setSigning(signingChoices.find((choice) => choice === event.target.value) ?? "inherit")
-            }
-            className={selectClassName}
+            onValueChange={(next) => setSigning(signingChoices.find((choice) => choice === next) ?? "inherit")}
           >
-            <option value="inherit">{inherited(local.signing, identity.signing ? "on" : "off")}</option>
-            <option value="on">Sign commits</option>
-            <option value="off">Don't sign commits</option>
-          </select>
+            <SelectTrigger id={`${id}-signing`} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="inherit">{inherited(local.signing, identity.signing ? "on" : "off")}</SelectItem>
+              <SelectItem value="on">Sign commits</SelectItem>
+              <SelectItem value="off">Don't sign commits</SelectItem>
+            </SelectContent>
+          </Select>
         </Field>
         <Field>
           <FieldLabel htmlFor={`${id}-format`}>Signature format</FieldLabel>
-          <select
-            id={`${id}-format`}
+          <Select
+            items={{ inherit: inherited(local.signingFormat, formatLabels[identity.signingFormat]), ...formatLabels }}
             value={format}
-            onChange={(event) => setFormat(formats.find((value) => value === event.target.value) ?? "inherit")}
-            className={selectClassName}
+            onValueChange={(next) => setFormat(formats.find((value) => value === next) ?? "inherit")}
           >
-            <option value="inherit">{inherited(local.signingFormat, formatLabels[identity.signingFormat])}</option>
-            {formats.map((value) => (
-              <option key={value} value={value}>
-                {formatLabels[value]}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id={`${id}-format`} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="inherit">
+                {inherited(local.signingFormat, formatLabels[identity.signingFormat])}
+              </SelectItem>
+              {formats.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {formatLabels[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field>
           <FieldLabel htmlFor={`${id}-key`}>Signing key</FieldLabel>

@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { describeFailure, latest, loadError, statusAtom } from "@/lib/git"
@@ -166,7 +167,7 @@ function PlanEditor({
           Squash combines both messages. Fixup keeps the previous message. Edit / split pauses so you can amend or
           create replacement commits.
         </p>
-        <p className="font-mono text-[11px]">
+        <p className="font-mono text-2xs">
           {plan.base === null ? "Root" : shortOid(plan.base)} → {shortOid(plan.head)} · {steps.length}{" "}
           {steps.length === 1 ? "commit" : "commits"}
         </p>
@@ -179,25 +180,24 @@ function PlanEditor({
         {steps.map((step, index) => (
           <div key={step.oid} className="rounded-md border p-2">
             <div className="flex flex-wrap items-center gap-2">
-              <label className="sr-only" htmlFor={`rewrite-action-${step.oid}`}>
-                Action for {shortOid(step.oid)}
-              </label>
-              <select
-                id={`rewrite-action-${step.oid}`}
-                className="min-h-8 rounded-md border bg-background px-2 text-xs"
+              <Select
+                items={labels}
                 value={step.action}
-                onChange={(event) => update(index, { action: parseAction(event.target.value) })}
+                onValueChange={(next) => update(index, { action: parseAction(next) })}
               >
-                {Object.entries(labels).map(([action, label]) => (
-                  <option key={action} value={action}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger aria-label={`Action for ${shortOid(step.oid)}`} className="h-8 w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(labels).map(([action, label]) => (
+                    <SelectItem key={action} value={action}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <code className="text-muted-foreground">{shortOid(step.oid)}</code>
-              {commitById.get(step.oid)?.published && (
-                <span className="rounded border px-1 text-[11px]">Published</span>
-              )}
+              {commitById.get(step.oid)?.published && <span className="rounded border px-1 text-2xs">Published</span>}
               <span className="ms-auto flex gap-1">
                 <Button
                   type="button"

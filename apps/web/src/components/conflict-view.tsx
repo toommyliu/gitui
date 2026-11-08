@@ -1,3 +1,5 @@
+import { Hint } from "@/components/ui/tooltip"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { RegistryContext, useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react"
 import type {
   ConflictCode,
@@ -536,7 +538,7 @@ function TextResolver({
             Discard edits
           </Button>
           <ButtonGroup>
-            <Button size="sm" disabled={locked} onClick={() => submit("next")} title="Save and stage (⌘↩)">
+            <Button size="sm" disabled={locked} onClick={() => submit("next")} tooltip="Save and stage (⌘↩)">
               {saving && <Spinner data-icon="inline-start" />}
               Save and stage
             </Button>
@@ -562,7 +564,7 @@ function TextResolver({
               size="icon-sm"
               variant="ghost"
               aria-label="Previous conflict"
-              title="Previous conflict (⌥↑)"
+              tooltip="Previous conflict (⌥↑)"
               onClick={() => step(-1)}
             >
               <ChevronLeftIcon />
@@ -572,7 +574,7 @@ function TextResolver({
               size="icon-sm"
               variant="ghost"
               aria-label="Next conflict"
-              title="Next conflict (⌥↓)"
+              tooltip="Next conflict (⌥↓)"
               onClick={() => step(1)}
             >
               <ChevronRightIcon />
@@ -634,9 +636,11 @@ function TextResolver({
             />
             <div className="sticky top-0 z-10 flex h-8 min-w-0 items-center gap-2 border-x border-b bg-background px-2 font-sans text-xs">
               <span className="shrink-0 font-medium">Result</span>
-              <span className="min-w-0 truncate text-xs text-muted-foreground" title={`Editable · saved to ${path}`}>
-                editable · saved to {basename(path)}
-              </span>
+              <Hint label={`Editable · saved to ${path}`}>
+                <span className="min-w-0 truncate text-xs text-muted-foreground">
+                  editable · saved to {basename(path)}
+                </span>
+              </Hint>
             </div>
             <ColumnHeading
               repo={repo}
@@ -705,15 +709,16 @@ function TextResolver({
                       </Button>
                     </span>
                     <span className="flex min-h-8 items-center gap-1 border-x px-2 py-1">
-                      <span
-                        title={`Conflict ${number} · ${stateLabel(state, names)}`}
-                        className={cn(
-                          "mr-auto truncate text-xs font-medium",
-                          state === "unresolved" ? "text-destructive" : "text-muted-foreground",
-                        )}
-                      >
-                        Conflict {number} · {stateLabel(state, names)}
-                      </span>
+                      <Hint label={`Conflict ${number} · ${stateLabel(state, names)}`}>
+                        <span
+                          className={cn(
+                            "mr-auto truncate text-xs font-medium",
+                            state === "unresolved" ? "text-destructive" : "text-muted-foreground",
+                          )}
+                        >
+                          Conflict {number} · {stateLabel(state, names)}
+                        </span>
+                      </Hint>
                       <Button size="sm" variant="ghost" disabled={locked} onClick={() => choose(index, "both")}>
                         Both
                       </Button>
@@ -721,7 +726,7 @@ function TextResolver({
                         size="sm"
                         variant="ghost"
                         disabled={locked || segment.base === null}
-                        title={
+                        tooltip={
                           segment.base === null
                             ? "The markers don't include the base. Set merge.conflictStyle to diff3 to get it."
                             : undefined
@@ -1043,17 +1048,20 @@ function Decision({
             </p>
           )}
           {(["ours", "theirs"] as const).some((side) => detail[side]._tag === "Text") && (
-            <details className="rounded-md border">
-              <summary className="cursor-pointer px-3 py-1.5 font-medium">Compare each side with the base</summary>
-              <div className="grid h-80 grid-cols-2 divide-x border-t">
+            <Collapsible className="rounded-md border">
+              <CollapsibleTrigger className="group/compare flex w-full items-center gap-1.5 rounded-md px-3 py-1.5 text-left font-medium hover:bg-muted/60">
+                <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-panel-open/compare:rotate-90" />
+                Compare each side with the base
+              </CollapsibleTrigger>
+              <CollapsibleContent className="grid h-80 grid-cols-2 divide-x border-t">
                 <Column title={names.ours}>
                   <SideBody path={detail.path} base={detail.base} side={detail.ours} />
                 </Column>
                 <Column title={names.theirs}>
                   <SideBody path={detail.path} base={detail.base} side={detail.theirs} />
                 </Column>
-              </div>
-            </details>
+              </CollapsibleContent>
+            </Collapsible>
           )}
         </div>
       </div>

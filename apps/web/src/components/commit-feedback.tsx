@@ -124,7 +124,7 @@ function Output({ id, text, trimmed }: { id: string; text: string; trimmed: bool
         const element = event.currentTarget
         pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 8
       }}
-      className="max-h-40 overflow-auto rounded-sm bg-background/60 p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      className="max-h-40 overflow-auto rounded-sm bg-background/60 p-2 font-mono text-2xs leading-relaxed break-words whitespace-pre-wrap"
     >
       {trimmed && <span className="block text-muted-foreground">Earlier output was trimmed.</span>}
       {text}

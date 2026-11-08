@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip"
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { FileBlame as Blame, FileIdentity, Oid, RepoId, RepoPath } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -65,17 +66,17 @@ function BlameLines({
     estimateSize: () => ROW,
     overscan: 30,
   })
-  const gutter = narrow ? "7rem" : "18rem"
+  const gutter = narrow ? "7rem" : "12rem"
   return (
     <div
       ref={scrollRef}
       tabIndex={0}
       role="region"
       aria-label={`Blame for ${path}`}
-      className="h-full overflow-auto overscroll-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+      className="h-full overflow-auto overscroll-contain bg-background"
     >
       <div
-        className="relative min-w-full font-mono text-[12px] leading-5"
+        className="relative min-w-full font-mono text-xs leading-5"
         style={{
           height: virtualizer.getTotalSize(),
           width: `calc(${gutter} + 4rem + ${columns}ch)`,
@@ -96,25 +97,28 @@ function BlameLines({
               style={{ height: ROW, transform: `translateY(${item.start}px)` }}
             >
               <div
-                className="sticky left-0 z-10 flex shrink-0 items-center gap-2 bg-background px-2 font-sans text-[11px] text-muted-foreground"
+                className="sticky left-0 z-10 flex shrink-0 items-center gap-2 bg-background px-2 font-sans text-2xs text-muted-foreground"
                 style={{ width: gutter }}
               >
                 {start ? (
                   <>
-                    <button
-                      type="button"
-                      className="shrink-0 rounded-sm font-mono text-foreground underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-                      title={[
+                    <Hint
+                      label={[
                         line.oid,
                         line.subject,
                         `${line.author}, ${longDate(line.time)}`,
                         `Line ${line.originalLine} of ${line.path}`,
                       ].join("\n")}
-                      aria-label={`Show commit ${shortOid(line.oid)}: ${line.subject}`}
-                      onClick={() => onOpenCommit(line.oid)}
                     >
-                      {shortOid(line.oid)}
-                    </button>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-sm font-mono text-foreground underline-offset-2 hover:underline"
+                        aria-label={`Show commit ${shortOid(line.oid)}: ${line.subject}`}
+                        onClick={() => onOpenCommit(line.oid)}
+                      >
+                        {shortOid(line.oid)}
+                      </button>
+                    </Hint>
                     {!narrow && <span className="min-w-0 flex-1 truncate">{line.author}</span>}
                     <span className="ml-auto shrink-0 tabular-nums">{date(line.time)}</span>
                   </>

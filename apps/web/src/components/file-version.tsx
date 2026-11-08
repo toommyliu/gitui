@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip"
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { FileRevision, Oid, RepoId, RepoPath } from "@gitui/contracts"
 import { CopyIcon, RotateCcwIcon } from "lucide-react"
@@ -52,17 +53,16 @@ export function FileVersionPane({
               Blame
             </TabsTrigger>
           </TabsList>
-          <span
-            className="ml-auto min-w-0 truncate text-[11px] text-muted-foreground tabular-nums"
-            title={revision?.blob ?? undefined}
-          >
-            {revision !== undefined && !missing && revisionFacts(revision)}
-          </span>
+          <Hint label={revision?.blob}>
+            <span className="ml-auto min-w-0 truncate text-2xs text-muted-foreground tabular-nums">
+              {revision !== undefined && !missing && revisionFacts(revision)}
+            </span>
+          </Hint>
           <Button
             size="sm"
             variant="outline"
             disabled={revision === undefined || missing}
-            title={missing ? "There's no file to restore at this version." : undefined}
+            tooltip={missing ? "There's no file to restore at this version." : undefined}
             onClick={() => setRestoring(true)}
           >
             <RotateCcwIcon data-icon="inline-start" />
@@ -270,7 +270,7 @@ function Sha({ oid, onOpen }: { oid: Oid; onOpen: (oid: Oid) => void }) {
           variant="ghost"
           className="text-muted-foreground"
           aria-label={`Copy SHA ${shortOid(oid)}`}
-          title="Copy SHA"
+          tooltip="Copy SHA"
           onClick={() => void copyWithToast(oid, "SHA copied")}
         >
           <CopyIcon />

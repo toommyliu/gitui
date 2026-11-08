@@ -13,6 +13,13 @@ import type { CodeViewDiffItem, CodeViewLineSelection } from "@pierre/diffs"
 import type { CodeViewHandle } from "@pierre/diffs/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { Button } from "@/components/ui/button"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 import { Badge } from "@/components/ui/badge"
 import { ButtonGroup } from "@/components/ui/button-group"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -56,7 +63,7 @@ import { CommitFeedback } from "./commit-feedback"
 import { IdentityDialog, IdentityLine } from "./commit-identity"
 import { useConflictActions } from "./conflict-view"
 import { OperationBanner, openConflicts } from "./conflict-workspace"
-import { OpenInButton } from "./open-in"
+import { OpenInContextMenu } from "./open-in"
 import { HistoryButton, NoMatchingFiles } from "./commit-detail"
 import { useConfirm } from "./confirm"
 import { FileFilter } from "./search-fields"
@@ -183,7 +190,7 @@ function DiffToggle({ side, ids, collapse }: { side: Side; ids: ReadonlyArray<st
   const expanded = ids.some((id) => !collapse.ids.has(id))
   const label = `${expanded ? "Collapse" : "Expand"} ${side} diffs`
   return (
-    <Button size="icon-sm" variant="ghost" aria-label={label} title={label} onClick={() => collapse.set(ids, expanded)}>
+    <Button size="icon-sm" variant="ghost" tooltip={label} onClick={() => collapse.set(ids, expanded)}>
       {expanded ? <ChevronsDownUpIcon /> : <ChevronsUpDownIcon />}
     </Button>
   )
@@ -672,7 +679,7 @@ function CommitBox({
         {guide !== "off" && subjectLength > 0 && (
           <span
             className={cn(
-              "pointer-events-none absolute right-2 bottom-1.5 text-[11px] tabular-nums",
+              "pointer-events-none absolute right-2 bottom-1.5 text-2xs tabular-nums",
               subjectLength > Number(guide) ? "text-destructive" : "text-muted-foreground",
             )}
           >
@@ -712,15 +719,7 @@ function CommitBox({
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={
-                <Button
-                  size="icon-sm"
-                  variant="outline"
-                  disabled={stashDisabled}
-                  aria-label="More ways to stash"
-                  title="More ways to stash"
-                />
-              }
+              render={<Button size="icon-sm" variant="outline" disabled={stashDisabled} tooltip="More ways to stash" />}
             >
               <ChevronDownIcon />
             </DropdownMenuTrigger>
@@ -960,7 +959,6 @@ function FileSection({
       <ScrollArea
         className={cn("min-h-0 flex-1", !open && "hidden")}
         viewportRef={viewportRef}
-        scrollbarClassName="opacity-0 transition-opacity duration-500 hover:opacity-100 hover:duration-150 data-scrolling:opacity-100 data-scrolling:duration-150"
         viewportProps={{
           tabIndex: open && rows.length > 0 ? 0 : -1,
           role: "listbox",
@@ -969,7 +967,7 @@ function FileSection({
           onKeyDown: (event) => {
             if (event.key === "Enter" && event.target === event.currentTarget && onEnter()) event.preventDefault()
           },
-          className: "[contain:strict] focus-visible:ring-0 focus-visible:outline-none",
+          className: "[contain:strict] data-has-overflow-y:pr-2.5",
         }}
       >
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
@@ -1041,11 +1039,11 @@ function SectionHeader({
         type="button"
         aria-expanded={open}
         onClick={onToggle}
-        className="-ml-1 flex h-6 items-center gap-2 rounded-sm px-1 text-[11px] font-semibold tracking-wide uppercase hover:text-foreground"
+        className="-ml-1 flex h-6 items-center gap-2 rounded-sm px-1 text-2xs font-semibold tracking-wide uppercase hover:text-foreground"
       >
         {open ? <ChevronDownIcon className="mx-0.5 size-3" /> : <ChevronRightIcon className="mx-0.5 size-3" />}
         <span className="[text-box:trim-both_cap_alphabetic]">{label}</span>
-        <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
+        <Badge variant="secondary" className="h-4 rounded-sm px-1 text-2xs tabular-nums">
           {total === null ? rows.length : `${rows.length} of ${total}`}
         </Badge>
       </button>
@@ -1108,45 +1106,45 @@ function FileRowView({
 }) {
   const toolOpen = busy.has(row.path)
   return (
-    <div className={cn("group flex h-full items-center gap-2 px-2", selected ? "bg-selection" : "hover:bg-muted/60")}>
-      <button
-        type="button"
-        role="option"
-        tabIndex={-1}
-        aria-selected={selected}
-        onMouseDown={(event) => event.shiftKey && event.preventDefault()}
-        onClick={(event) =>
-          onClick(row, event.shiftKey ? "extend" : event.metaKey || event.ctrlKey ? "toggle" : "only")
-        }
-        onDoubleClick={() => row.area === "conflicted" && onOpenConflict(row)}
-        className="flex min-w-0 flex-1 items-center gap-3 text-left"
-      >
-        <ChangeLetter change={row.change} />
-        <span className="truncate">
-          <span className="text-muted-foreground">{dirname(row.path)}</span>
-          {basename(row.path)}
-        </span>
-        {row.label !== "" && (
-          <span
-            className={cn(
-              "shrink-0 text-[11px] text-muted-foreground",
-              row.area === "conflicted" && "text-destructive",
-            )}
+    <ContextMenu>
+      <ContextMenuTrigger className="block h-full">
+        <div
+          className={cn("group flex h-full items-center gap-2 px-2", selected ? "bg-selection" : "hover:bg-muted/60")}
+        >
+          <button
+            type="button"
+            role="option"
+            tabIndex={-1}
+            aria-selected={selected}
+            onMouseDown={(event) => event.shiftKey && event.preventDefault()}
+            onClick={(event) =>
+              onClick(row, event.shiftKey ? "extend" : event.metaKey || event.ctrlKey ? "toggle" : "only")
+            }
+            onDoubleClick={() => row.area === "conflicted" && onOpenConflict(row)}
+            className="flex min-w-0 flex-1 items-center gap-3 text-left"
           >
-            {row.label}
-          </span>
-        )}
-      </button>
-      <span className="flex shrink-0 gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
-        {row.area !== "untracked" && <HistoryButton onClick={() => onHistory(row)} />}
-        <OpenInButton repo={repo} file={{ path: row.path }} compact disabled={row.change === "deleted"} />
-        {row.area === "staged" ? (
-          <Button size="sm" variant="ghost" onClick={() => onUnstage([row])}>
-            Unstage
-          </Button>
-        ) : (
-          <>
-            {row.area === "conflicted" ? (
+            <ChangeLetter change={row.change} />
+            <span className="truncate">
+              <span className="text-muted-foreground">{dirname(row.path)}</span>
+              {basename(row.path)}
+            </span>
+            {row.label !== "" && (
+              <span
+                className={cn(
+                  "shrink-0 text-2xs text-muted-foreground",
+                  row.area === "conflicted" && "text-destructive",
+                )}
+              >
+                {row.label}
+              </span>
+            )}
+          </button>
+          <span className="flex shrink-0 gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 max-md:opacity-100">
+            {row.area === "staged" ? (
+              <Button size="sm" variant="ghost" onClick={() => onUnstage([row])}>
+                Unstage
+              </Button>
+            ) : row.area === "conflicted" ? (
               <>
                 <Button size="sm" variant="ghost" disabled={toolOpen} onClick={() => onResolve([row], "ours")}>
                   {sides.ours}
@@ -1168,9 +1166,38 @@ function FileRowView({
                 </Button>
               </>
             )}
+          </span>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        {row.area === "staged" ? (
+          <ContextMenuItem onClick={() => onUnstage([row])}>Unstage</ContextMenuItem>
+        ) : row.area === "conflicted" ? (
+          <>
+            <ContextMenuItem disabled={toolOpen} onClick={() => onResolve([row], "ours")}>
+              Use {sides.ours}
+            </ContextMenuItem>
+            <ContextMenuItem disabled={toolOpen} onClick={() => onResolve([row], "theirs")}>
+              Use {sides.theirs}
+            </ContextMenuItem>
+            <ContextMenuItem disabled={toolOpen} onClick={() => onMarkResolved(row)}>
+              Mark resolved
+            </ContextMenuItem>
+          </>
+        ) : (
+          <>
+            <ContextMenuItem onClick={() => onStage([row])}>Stage</ContextMenuItem>
+            <ContextMenuItem variant="destructive" onClick={() => onDiscard([row])}>
+              Discard
+            </ContextMenuItem>
           </>
         )}
-      </span>
-    </div>
+        <ContextMenuSeparator />
+        <ContextMenuItem disabled={row.area === "untracked"} onClick={() => onHistory(row)}>
+          File history
+        </ContextMenuItem>
+        <OpenInContextMenu repo={repo} file={{ path: row.path }} disabled={row.change === "deleted"} />
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }

@@ -12,7 +12,7 @@ import { cn } from "cn"
 import { Shortcut } from "./shortcut"
 
 const barField =
-  "h-8 shrink-0 rounded-none border-0 bg-transparent ring-inset has-[[data-slot=input-group-control]:focus-visible]:border-border has-[[data-slot=input-group-control]:focus-visible]:ring-ring dark:bg-transparent"
+  "h-8 shrink-0 rounded-none border-0 bg-transparent has-[[data-slot=input-group-control]:focus-visible]:border-border dark:bg-transparent"
 
 const plainText = { autoComplete: "off", autoCapitalize: "off", autoCorrect: "off", spellCheck: false } as const
 
@@ -145,7 +145,7 @@ export function FindField({
           <InputGroupButton
             size="icon-xs"
             aria-label="Previous match"
-            title="Previous match (Shift+Enter)"
+            tooltip="Previous match (Shift+Enter)"
             disabled={!found}
             onClick={() => onStep(-1)}
           >
@@ -154,13 +154,13 @@ export function FindField({
           <InputGroupButton
             size="icon-xs"
             aria-label="Next match"
-            title="Next match (Enter)"
+            tooltip="Next match (Enter)"
             disabled={!found}
             onClick={() => onStep(1)}
           >
             <ChevronDownIcon />
           </InputGroupButton>
-          <InputGroupButton size="icon-xs" aria-label="Clear find" title="Clear find (Escape)" onClick={onClose}>
+          <InputGroupButton size="icon-xs" aria-label="Clear find" tooltip="Clear find (Escape)" onClick={onClose}>
             <XIcon />
           </InputGroupButton>
         </InputGroupAddon>

@@ -150,7 +150,7 @@ export function DiscardBackups({
                 <li key={backup.id} className="grid gap-2 border-b p-3 last:border-0">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <span className="font-medium">{title(backup)}</span>
-                    <time className="text-[11px] text-muted-foreground" dateTime={new Date(backup.time).toISOString()}>
+                    <time className="text-2xs text-muted-foreground" dateTime={new Date(backup.time).toISOString()}>
                       {longDate(backup.time / 1000)}
                     </time>
                   </div>

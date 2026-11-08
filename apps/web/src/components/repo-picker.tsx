@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip"
 import { useAtom, useAtomValue } from "@effect/atom-react"
 import type { DirectoryEntry, DirectoryListing } from "@gitui/contracts"
 import { Badge } from "@/components/ui/badge"
@@ -235,7 +236,7 @@ export function RepoPicker({
             variant="ghost"
             size="icon-xs"
             aria-label={isPinned ? `Unpin ${here}` : `Pin ${here}`}
-            title={isPinned ? "Unpin from the sidebar" : "Pin to the sidebar"}
+            tooltip={isPinned ? "Unpin from the sidebar" : "Pin to the sidebar"}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => togglePin(here)}
           >
@@ -256,7 +257,7 @@ export function RepoPicker({
       </span>
     </Heading>
   ) : (
-    <Heading className="text-[11px] font-semibold tracking-wide uppercase">
+    <Heading className="text-2xs font-semibold tracking-wide uppercase">
       Recent
       <Count>{repos.length}</Count>
     </Heading>
@@ -299,9 +300,9 @@ export function RepoPicker({
                 <>
                   <FolderOpenIcon />
                   <span className="truncate">Open {label}</span>
-                  <Hint>
+                  <RowHint>
                     <Kbd className="hidden group-data-selected/row:inline-flex">↵</Kbd>
-                  </Hint>
+                  </RowHint>
                 </>
               ) : item.kind === "recent" ? (
                 <>
@@ -329,9 +330,9 @@ export function RepoPicker({
                   {item.entry.isRepo ? (
                     <OpenHint open={openPaths.includes(item.path)} />
                   ) : (
-                    <Hint>
+                    <RowHint>
                       <ChevronRightIcon />
-                    </Hint>
+                    </RowHint>
                   )}
                 </>
               )}
@@ -351,7 +352,7 @@ export function RepoPicker({
               {places.map((place, at) => (
                 <div key={place.query}>
                   {place.section !== places[at - 1]?.section && place.section !== "top" && (
-                    <div className="mt-3 mb-1 px-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                    <div className="mt-3 mb-1 px-2 text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
                       {place.section === "pinned" ? "Pinned" : "Folders"}
                     </div>
                   )}
@@ -458,18 +459,18 @@ function Heading({ className, children }: { className?: string; children: ReactN
   )
 }
 
-function Hint({ children }: { children: ReactNode }) {
+function RowHint({ children }: { children: ReactNode }) {
   return <span className="ml-auto flex shrink-0 items-center gap-1.5 text-muted-foreground">{children}</span>
 }
 
 function OpenHint({ open }: { open: boolean }) {
   return (
-    <Hint>
+    <RowHint>
       {open && <span className="group-data-selected/row:hidden">in a tab</span>}
       <span className="hidden items-center gap-1.5 group-data-selected/row:flex">
         Open <Kbd>↵</Kbd>
       </span>
-    </Hint>
+    </RowHint>
   )
 }
 
@@ -479,7 +480,7 @@ function Empty({ children }: { children: ReactNode }) {
 
 function Count({ children }: { children: ReactNode }) {
   return (
-    <Badge variant="secondary" className="h-4 rounded-sm px-1 text-[10px] tabular-nums">
+    <Badge variant="secondary" className="h-4 rounded-sm px-1 text-2xs tabular-nums">
       {children}
     </Badge>
   )
@@ -512,25 +513,26 @@ function PlaceRow({
         selected ? "bg-selection font-medium" : "hover:bg-muted",
       )}
     >
-      <button
-        type="button"
-        title={place.label}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={onSelect}
-        className="flex h-full min-w-0 flex-1 items-center gap-2 pl-2 text-left whitespace-nowrap [&_svg]:text-muted-foreground"
-      >
-        {place.query === "" ? (
-          <ClockIcon />
-        ) : place.query === HOME ? (
-          <HouseIcon />
-        ) : place.section === "pinned" ? (
-          <PinIcon />
-        ) : (
-          <FolderIcon />
-        )}
-        <span className="truncate">{place.label}</span>
-        {place.count !== undefined && <Count>{place.count}</Count>}
-      </button>
+      <Hint label={place.label} side="right">
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onSelect}
+          className="flex h-full min-w-0 flex-1 items-center gap-2 pl-2 text-left whitespace-nowrap [&_svg]:text-muted-foreground"
+        >
+          {place.query === "" ? (
+            <ClockIcon />
+          ) : place.query === HOME ? (
+            <HouseIcon />
+          ) : place.section === "pinned" ? (
+            <PinIcon />
+          ) : (
+            <FolderIcon />
+          )}
+          <span className="truncate">{place.label}</span>
+          {place.count !== undefined && <Count>{place.count}</Count>}
+        </button>
+      </Hint>
       {onUnpin !== undefined && (
         <Button
           variant="ghost"

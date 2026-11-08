@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip"
 import { useAtom, useAtomValue } from "@effect/atom-react"
 import type { CommandEntry, RepoId } from "@gitui/contracts"
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual"
@@ -113,7 +114,7 @@ export function CommandLogDrawer({ repo, children }: { repo: RepoId; children: R
         type="button"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className="group/log flex h-6 shrink-0 items-center gap-1.5 rounded-sm px-1.5 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="group/log flex h-6 shrink-0 items-center gap-1.5 rounded-sm px-1.5 font-medium"
       >
         <ChevronUpIcon
           className={cn(
@@ -206,35 +207,35 @@ function LogRows({
     <ScrollArea
       className="min-h-0 flex-1"
       viewportRef={setScrollElement}
-      viewportProps={{ className: "data-has-overflow-y:pr-3" }}
+      viewportProps={{ className: "data-has-overflow-y:pr-2.5" }}
       markers={rows.flatMap((entry, index) => {
         const item = virtualizer.measurementsCache[index]
         const failed = isFailure(entry)
         if (item === undefined || (!failed && entry.kind !== "write")) return []
         return (
-          <button
-            key={entry.id}
-            type="button"
-            tabIndex={-1}
-            title={shortCommand(entry)}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => jump(index, entry.id)}
-            className={cn(
-              "group/marker absolute inset-x-0 flex min-h-2 -translate-y-1/2 items-center px-px",
-              failed && "z-10",
-            )}
-            style={{
-              top: `${((item.start + item.size / 2) / total) * 100}%`,
-              height: `${(item.size / total) * 100}%`,
-            }}
-          >
-            <span
+          <Hint key={entry.id} label={shortCommand(entry)} side="left">
+            <button
+              type="button"
+              tabIndex={-1}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => jump(index, entry.id)}
               className={cn(
-                "h-0.5 w-full rounded-full group-hover/marker:h-1",
-                failed ? "bg-destructive" : "bg-muted-foreground/60",
+                "group/marker absolute inset-x-0 flex min-h-2 -translate-y-1/2 items-center px-px",
+                failed && "z-10",
               )}
-            />
-          </button>
+              style={{
+                top: `${((item.start + item.size / 2) / total) * 100}%`,
+                height: `${(item.size / total) * 100}%`,
+              }}
+            >
+              <span
+                className={cn(
+                  "h-0.5 w-full rounded-full group-hover/marker:h-1",
+                  failed ? "bg-destructive" : "bg-muted-foreground/60",
+                )}
+              />
+            </button>
+          </Hint>
         )
       })}
     >
@@ -264,21 +265,21 @@ function LogRows({
                     write
                   </Badge>
                 )}
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{shortCommand(entry)}</span>
+                <span className="min-w-0 flex-1 truncate font-mono text-2xs">{shortCommand(entry)}</span>
                 <span className="shrink-0 text-muted-foreground tabular-nums">{duration(entry.durationMs)}</span>
               </button>
               {open && (
                 <div className="space-y-2 px-3 pt-1 pb-3">
-                  <pre className="font-mono text-[11px] break-all whitespace-pre-wrap">{fullCommand(entry)}</pre>
+                  <pre className="font-mono text-2xs break-all whitespace-pre-wrap">{fullCommand(entry)}</pre>
                   {entry.outcome._tag === "SpawnFailed" && (
-                    <pre className="font-mono text-[11px] whitespace-pre-wrap text-destructive">
+                    <pre className="font-mono text-2xs whitespace-pre-wrap text-destructive">
                       {entry.outcome.message}
                     </pre>
                   )}
                   {entry.stderr !== "" && (
                     <pre
                       className={cn(
-                        "max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap",
+                        "max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-2xs whitespace-pre-wrap",
                         isFailure(entry) && "text-destructive",
                       )}
                     >

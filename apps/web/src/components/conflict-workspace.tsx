@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip"
 import { RegistryContext, useAtom, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { ConflictCode, Operation, RepoId, RepoPath, Status } from "@gitui/contracts"
 import { cn } from "cn"
@@ -135,7 +136,7 @@ export function OperationBanner({ repo, status, conflicts }: { repo: RepoId; sta
         {unsaved.length > 0 &&
           ` ${unsaved.length} ${unsaved.length === 1 ? "file has" : "files have"} unsaved edits in the resolver.`}
         {operation === "rebase" && rebase?._tag === "Rebase" && rebase.backupRef !== null && (
-          <p className="mt-1 font-mono text-[11px] break-all">Original history: {rebase.backupRef}</p>
+          <p className="mt-1 font-mono text-2xs break-all">Original history: {rebase.backupRef}</p>
         )}
       </AlertDescription>
       <div className="col-span-full mt-1 flex flex-wrap gap-1">
@@ -404,7 +405,7 @@ function OperationBar({
             size="sm"
             variant={ready ? "default" : "outline"}
             disabled={actions.busy || !ready}
-            title={ready ? undefined : "Resolve and stage every file, and review any unsaved drafts first"}
+            tooltip={ready ? undefined : "Resolve and stage every file, and review any unsaved drafts first"}
             onClick={actions.continueOperation}
           >
             Continue {name?.toLowerCase()}
@@ -452,14 +453,7 @@ function Rail({
   if (!open) {
     return (
       <div className="flex w-9 shrink-0 flex-col items-center gap-2 border-r py-1">
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label="Show conflicted files"
-          aria-expanded={false}
-          title="Show conflicted files"
-          onClick={onToggle}
-        >
+        <Button size="icon-sm" variant="ghost" tooltip="Show conflicted files" aria-expanded={false} onClick={onToggle}>
           <PanelLeftOpenIcon />
         </Button>
         <span className="text-xs text-muted-foreground tabular-nums [writing-mode:vertical-rl]">
@@ -493,7 +487,7 @@ function Rail({
   return (
     <nav aria-label="Conflicted files" className="flex w-60 shrink-0 flex-col border-r max-md:w-48">
       <div className="flex h-8 shrink-0 items-center gap-2 pr-1 pl-2 text-muted-foreground">
-        <span className="text-xs font-semibold tracking-wide uppercase">Conflicted files</span>
+        <span className="text-2xs font-semibold tracking-wide uppercase">Conflicted files</span>
         <span className="text-xs tabular-nums">
           {resolvedCount}/{files.length}
         </span>
@@ -501,9 +495,8 @@ function Rail({
           size="icon-sm"
           variant="ghost"
           className="ml-auto"
-          aria-label="Hide conflicted files"
+          tooltip="Hide conflicted files"
           aria-expanded
-          title="Hide conflicted files"
           onClick={onToggle}
         >
           <PanelLeftCloseIcon />
@@ -516,7 +509,7 @@ function Rail({
         aria-label="Conflicted files"
         aria-activedescendant={selected === null ? undefined : optionId(selected)}
         onKeyDown={onKeyDown}
-        className="min-h-0 flex-1 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
+        className="min-h-0 flex-1 overflow-y-auto"
       >
         {files.map((path) => {
           const state = row(path)
@@ -541,10 +534,12 @@ function Rail({
                 <CircleCheckIcon aria-label="Resolved" className="mt-0.5 size-3.5 shrink-0 text-[var(--lane-1)]" />
               )}
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate" title={path}>
-                  <span className="text-muted-foreground">{dirname(path)}</span>
-                  {basename(path)}
-                </span>
+                <Hint label={path}>
+                  <span className="truncate">
+                    <span className="text-muted-foreground">{dirname(path)}</span>
+                    {basename(path)}
+                  </span>
+                </Hint>
                 <span className="truncate text-xs text-muted-foreground">
                   {state.description}
                   {state.saved && state.unresolved && " · saved, not staged"}
@@ -554,12 +549,13 @@ function Rail({
                 <Spinner aria-label="Open in merge tool" className="mt-0.5 size-3.5 shrink-0" />
               ) : (
                 state.dirty && (
-                  <span
-                    role="img"
-                    aria-label="Unsaved edits"
-                    title="Unsaved edits"
-                    className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-500"
-                  />
+                  <Hint label="Unsaved edits">
+                    <span
+                      role="img"
+                      aria-label="Unsaved edits"
+                      className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-500"
+                    />
+                  </Hint>
                 )
               )}
             </div>

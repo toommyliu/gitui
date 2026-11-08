@@ -475,7 +475,7 @@ export function SettingsPage() {
                       key={id}
                       type="button"
                       onClick={() => navigate(id)}
-                      className="flex h-10 items-center justify-between rounded-md px-3 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none"
+                      className="flex h-10 items-center justify-between rounded-md px-3 text-left hover:bg-muted"
                     >
                       {sections[id].label}
                       <ChevronRightIcon className="size-3.5 text-muted-foreground" />

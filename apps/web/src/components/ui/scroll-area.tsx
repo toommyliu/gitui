@@ -8,13 +8,11 @@ function ScrollArea({
   viewportRef,
   viewportProps,
   markers,
-  scrollbarClassName,
   ...props
 }: ScrollAreaPrimitive.Root.Props & {
   viewportRef?: React.Ref<HTMLDivElement>
   viewportProps?: Omit<ScrollAreaPrimitive.Viewport.Props, "ref">
   markers?: React.ReactNode
-  scrollbarClassName?: string
 }) {
   return (
     <ScrollAreaPrimitive.Root data-slot="scroll-area" className={cn("relative", className)} {...props}>
@@ -22,14 +20,11 @@ function ScrollArea({
         ref={viewportRef}
         data-slot="scroll-area-viewport"
         {...viewportProps}
-        className={cn(
-          "size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:ring-inset",
-          viewportProps?.className,
-        )}
+        className={cn("size-full rounded-[inherit] transition-[color,box-shadow]", viewportProps?.className)}
       >
-        {children}
+        <ScrollAreaPrimitive.Content>{children}</ScrollAreaPrimitive.Content>
       </ScrollAreaPrimitive.Viewport>
-      <ScrollBar className={scrollbarClassName}>{markers}</ScrollBar>
+      <ScrollBar>{markers}</ScrollBar>
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )
@@ -47,7 +42,10 @@ function ScrollBar({ className, orientation = "vertical", children, ...props }: 
       )}
       {...props}
     >
-      <ScrollAreaPrimitive.Thumb data-slot="scroll-area-thumb" className="relative flex-1 rounded-full bg-border" />
+      <ScrollAreaPrimitive.Thumb
+        data-slot="scroll-area-thumb"
+        className="relative flex-1 rounded-full bg-scrollbar hover:bg-scrollbar-hover"
+      />
       {children}
     </ScrollAreaPrimitive.Scrollbar>
   )

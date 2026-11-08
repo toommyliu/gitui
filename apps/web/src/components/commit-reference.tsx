@@ -17,7 +17,7 @@ export function CommitReference({ repo, reference }: { repo: RepoId; reference: 
             variant="ghost"
             size="sm"
             className="max-w-full min-w-0 justify-start gap-1.5 text-xs font-normal text-inherit transition-colors hover:bg-current/10 hover:text-inherit dark:hover:bg-current/10"
-            title={`View commit details: ${label} ${reference.subject}`}
+            tooltip={`${label} ${reference.subject}`}
             aria-label={`View commit details for ${label}: ${reference.subject}`}
           />
         }

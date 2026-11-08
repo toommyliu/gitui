@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { createContext, type ReactNode, useCallback, useContext, useId, useState } from "react"
@@ -125,23 +126,30 @@ function PromptForm({ request, onDone }: { request: AnyRequest; onDone: () => vo
                 {field.optional && <span className="font-normal text-muted-foreground">optional</span>}
               </FieldLabel>
               {field.choices !== undefined ? (
-                <select
-                  id={fieldId}
+                <Select
                   name={field.key}
-                  autoFocus={index === 0}
                   required={!field.optional}
-                  aria-invalid={invalid}
-                  aria-describedby={errorId}
+                  items={field.choices}
                   value={values[field.key]}
-                  onChange={(event) => set(event.target.value)}
-                  className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20"
+                  onValueChange={(next) => typeof next === "string" && set(next)}
                 >
-                  {field.choices.map((choice) => (
-                    <option key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger
+                    id={fieldId}
+                    autoFocus={index === 0}
+                    aria-invalid={invalid}
+                    aria-describedby={errorId}
+                    className="h-8 w-full"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {field.choices.map((choice) => (
+                      <SelectItem key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : field.multiline ? (
                 <Textarea
                   id={fieldId}

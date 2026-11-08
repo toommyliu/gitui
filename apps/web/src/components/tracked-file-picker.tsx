@@ -1,3 +1,4 @@
+import { Hint } from "@/components/ui/tooltip"
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { RepoId, RepoPath } from "@gitui/contracts"
 import { cn } from "cn"
@@ -101,35 +102,35 @@ export function TrackedFilePicker({ repo, onPick }: { repo: RepoId; onPick: (tar
         ) : (
           <ul id={listId} role="listbox" aria-label="Tracked files" className="py-1">
             {matches.map((path, index) => (
-              <li
-                key={path}
-                id={`${listId}-${index}`}
-                role="option"
-                aria-selected={index === current}
-                title={literalPath(path)}
-                className={cn(
-                  "flex h-7 cursor-default items-center px-3",
-                  index === current ? "bg-selection" : "hover:bg-muted/60",
-                )}
-                onMouseMove={() => setActive(index)}
-                onClick={() => pick(path)}
-              >
-                <span className="truncate">
-                  {literalPath(path) !== path ? (
-                    literalPath(path)
-                  ) : (
-                    <>
-                      <span className="text-muted-foreground">{dirname(path)}</span>
-                      {basename(path)}
-                    </>
+              <Hint key={path} label={literalPath(path)} side="right">
+                <li
+                  id={`${listId}-${index}`}
+                  role="option"
+                  aria-selected={index === current}
+                  className={cn(
+                    "flex h-7 cursor-default items-center px-3",
+                    index === current ? "bg-selection" : "hover:bg-muted/60",
                   )}
-                </span>
-              </li>
+                  onMouseMove={() => setActive(index)}
+                  onClick={() => pick(path)}
+                >
+                  <span className="truncate">
+                    {literalPath(path) !== path ? (
+                      literalPath(path)
+                    ) : (
+                      <>
+                        <span className="text-muted-foreground">{dirname(path)}</span>
+                        {basename(path)}
+                      </>
+                    )}
+                  </span>
+                </li>
+              </Hint>
             ))}
           </ul>
         )}
       </div>
-      <p role="status" className="shrink-0 border-t px-3 py-2 text-[11px] text-muted-foreground tabular-nums">
+      <p role="status" className="shrink-0 border-t px-3 py-2 text-2xs text-muted-foreground tabular-nums">
         {files === undefined
           ? ""
           : total > matches.length

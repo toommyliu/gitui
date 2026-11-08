@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Spinner } from "@/components/ui/spinner"
 import { restorePreviewAtom, restorePreviewKey } from "@/lib/file-investigation"
 import { literalPath } from "@/lib/literal-path"
@@ -112,30 +113,35 @@ function RestoreForm({ repo, source, deletedIn, defaultDestination, onClose }: R
         )}
       </dl>
       {destinations.length > 1 && (
-        <fieldset className="grid gap-2" disabled={busy}>
-          <legend className="mb-2 text-xs font-medium">Destination in the working tree</legend>
-          {destinations.map((path, index) => (
-            <label key={path} className="flex items-start gap-2 text-xs">
-              <input
-                type="radio"
-                name={`${id}-destination`}
-                value={path}
-                checked={destination === path}
-                onChange={() => {
-                  setDestination(path)
-                  setFailure(null)
-                }}
-                className="mt-1 accent-primary"
-              />
-              <span className="min-w-0">
-                <span className="block break-all">{literalPath(path)}</span>
-                <span className="block text-muted-foreground">
-                  {index === 0 ? "The path you're investigating" : "The file's path in this commit"}
+        <div className="grid gap-2">
+          <span id={`${id}-destination`} className="text-xs font-medium">
+            Destination in the working tree
+          </span>
+          <RadioGroup
+            aria-labelledby={`${id}-destination`}
+            disabled={busy}
+            value={destination}
+            onValueChange={(next) => {
+              const path = destinations.find((path) => path === next)
+              if (path === undefined) return
+              setDestination(path)
+              setFailure(null)
+            }}
+            className="gap-2"
+          >
+            {destinations.map((path, index) => (
+              <label key={path} className="flex items-start gap-2 text-xs">
+                <RadioGroupItem value={path} className="mt-0.5" />
+                <span className="min-w-0">
+                  <span className="block break-all">{literalPath(path)}</span>
+                  <span className="block text-muted-foreground">
+                    {index === 0 ? "The path you're investigating" : "The file's path in this commit"}
+                  </span>
                 </span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
+              </label>
+            ))}
+          </RadioGroup>
+        </div>
       )}
       {preview === undefined ? (
         previewError === undefined ? (

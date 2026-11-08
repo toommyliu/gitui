@@ -1,6 +1,6 @@
 import { LIST_ROW } from "@/lib/rows"
 import { Hint } from "@/components/ui/tooltip"
-import { useAtomValue } from "@effect/atom-react"
+import { useAtomSet, useAtomValue } from "@effect/atom-react"
 import type {
   Branch,
   Head,
@@ -62,11 +62,13 @@ import {
 import type { Selection } from "@/lib/selection"
 import { stashBlocked } from "@/lib/stash"
 import { type Location, type LocationState, focusLocation, locationState, toggleLocation } from "@/lib/visibility"
+import { cleanupOpenAtom } from "@/lib/worktree-cleanup"
 import { useRefreshOnFocus, worktreeLabel, worktreeSummariesAtom, worktreesKey } from "@/lib/worktrees"
 import { useConfirm } from "./confirm"
 import { SyncButtons } from "./network"
 import { usePublishing } from "./publishing"
 import { usePrompt } from "./prompt"
+import { CleanupWorktreesDialog } from "./cleanup-worktrees-dialog"
 import { RemoveWorktreeDialog } from "./remove-worktree-dialog"
 import { useStashPrompt } from "./stash-prompt"
 
@@ -309,6 +311,7 @@ export function Sidebar({
         />
       )}
       {removing !== null && <RemoveWorktreeDialog repo={repo} {...removing} onClose={() => setRemoving(null)} />}
+      <CleanupWorktreesDialog repo={repo} />
     </div>
   )
 }
@@ -901,6 +904,7 @@ function SectionRow({
   const status = latest(useAtomValue(statusAtom(repo)))
   const publishing = usePublishing(repo)
   const networkBusy = useAtomValue(networkStateAtom(repo))?._tag === "Running"
+  const openCleanup = useAtomSet(cleanupOpenAtom(repo))
   const header = (
     <button
       type="button"
@@ -978,9 +982,7 @@ function SectionRow({
           Add worktree…
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem onClick={() => git("Prune worktrees", repo, (c) => c("PruneWorktrees", { repo }))}>
-          Prune missing worktrees
-        </ContextMenuItem>
+        <ContextMenuItem onClick={() => openCleanup(true)}>Clean up worktrees…</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )

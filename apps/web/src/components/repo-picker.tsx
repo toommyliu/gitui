@@ -344,7 +344,7 @@ export function RepoPicker({
     )
 
   return (
-    <div className="flex min-h-0 flex-1 justify-center bg-muted/30 px-6 pt-[10svh] pb-6">
+    <div className="flex min-h-0 flex-1 justify-center px-6 pt-[10svh] pb-6">
       <div className="flex max-h-full w-full max-w-4xl items-start gap-6">
         {!narrow && (
           <aside className="flex max-h-full w-56 shrink-0 flex-col">
@@ -419,8 +419,8 @@ export function RepoPicker({
             {rows}
           </div>
           <div className="flex h-8 shrink-0 items-center gap-4 overflow-hidden border-t px-3 whitespace-nowrap text-muted-foreground">
-            {active !== undefined && (
-              <KeyHint keys={<Shortcut hotkey="Enter" />}>{isFolder(active) ? "go into folder" : "open"}</KeyHint>
+            {active !== undefined && isFolder(active) && (
+              <KeyHint keys={<Shortcut hotkey="Enter" />}>go into folder</KeyHint>
             )}
             {browsing && active !== undefined && active.kind === "entry" && (
               <KeyHint keys={<Shortcut hotkey="Tab" />}>complete</KeyHint>

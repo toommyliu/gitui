@@ -301,7 +301,9 @@ function RepoTabHandle({
         className={cn("group/close", !dirty && shortcut === undefined && "opacity-50 group-hover/repo-tab:opacity-100")}
       >
         {shortcut !== undefined ? (
-          <Kbd>{shortcut}</Kbd>
+          <Kbd className="size-full min-w-0 rounded-[inherit] in-data-[slot=button]:bg-muted in-data-[slot=button]:text-muted-foreground">
+            {shortcut}
+          </Kbd>
         ) : (
           <>
             {dirty && (

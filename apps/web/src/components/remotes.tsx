@@ -116,7 +116,7 @@ function RemotesContent({ repo, onClose }: { repo: RepoId; onClose: () => void }
                   Edit
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="destructive"
                   size="sm"
                   aria-label={`Remove ${remote.name}`}
                   onClick={() => show({ kind: "remove", remote })}

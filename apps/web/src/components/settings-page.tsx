@@ -1,3 +1,4 @@
+import { LIST_ROW } from "@/lib/rows"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react"
 import { Button } from "@/components/ui/button"
@@ -493,35 +494,40 @@ export function SettingsPage() {
             )
           ) : (
             <div className="flex min-h-0 flex-1">
-              <nav
-                aria-label="Settings sections"
-                className="flex w-56 shrink-0 flex-col gap-1 border-r bg-muted/40 p-3"
-              >
-                <Button variant="ghost" size="lg" className="mb-2 justify-start text-muted-foreground" onClick={back}>
-                  <ChevronLeftIcon data-icon="inline-start" />
-                  Back
-                </Button>
-                {settingsSections.map((id) => (
-                  <Button
-                    key={id}
-                    variant="ghost"
-                    size="lg"
-                    aria-current={id === section ? "page" : undefined}
-                    className={cn(
-                      "justify-start",
-                      id === section ? "bg-muted text-foreground" : "text-muted-foreground",
-                    )}
-                    onClick={() => navigate(id)}
-                  >
-                    {sections[id].label}
+              <nav aria-label="Settings sections" className="flex w-56 shrink-0 flex-col border-r">
+                <div className="flex h-8 shrink-0 items-center border-b px-1">
+                  <Button variant="ghost" size="xs" className="text-muted-foreground" onClick={back}>
+                    <ChevronLeftIcon data-icon="inline-start" />
+                    Back
                   </Button>
-                ))}
+                </div>
+                <div className="flex flex-col py-1">
+                  {settingsSections.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-current={id === section ? "page" : undefined}
+                      className={cn(
+                        "flex items-center px-3 text-left",
+                        id === section ? "bg-selection font-medium" : "hover:bg-muted/60",
+                      )}
+                      style={{ height: LIST_ROW }}
+                      onClick={() => navigate(id)}
+                    >
+                      {sections[id].label}
+                    </button>
+                  ))}
+                </div>
               </nav>
               {section !== null && (
-                <div className="min-w-0 flex-1 overflow-y-auto">
-                  <div className="mx-auto max-w-2xl px-8 py-6">
-                    <h2 className="text-sm font-semibold">{sections[section].label}</h2>
-                    <SectionBody section={section} />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex h-8 shrink-0 items-center border-b px-3">
+                    <h2 className="font-semibold">{sections[section].label}</h2>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    <div className="mx-auto max-w-2xl px-8 py-4">
+                      <SectionBody section={section} />
+                    </div>
                   </div>
                 </div>
               )}

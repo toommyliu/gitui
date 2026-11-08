@@ -30,6 +30,10 @@ function ScrollArea({
   )
 }
 
+const yieldToPanelResize = (event: React.PointerEvent & { preventBaseUIHandler: () => void }) => {
+  if (event.defaultPrevented) event.preventBaseUIHandler()
+}
+
 function ScrollBar({ className, orientation = "vertical", children, ...props }: ScrollAreaPrimitive.Scrollbar.Props) {
   return (
     <ScrollAreaPrimitive.Scrollbar
@@ -40,11 +44,13 @@ function ScrollBar({ className, orientation = "vertical", children, ...props }: 
         "z-10 flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
         className,
       )}
+      onPointerDown={yieldToPanelResize}
       {...props}
     >
       <ScrollAreaPrimitive.Thumb
         data-slot="scroll-area-thumb"
         className="relative flex-1 rounded-full bg-scrollbar hover:bg-scrollbar-hover"
+        onPointerDown={yieldToPanelResize}
       />
       {children}
     </ScrollAreaPrimitive.Scrollbar>

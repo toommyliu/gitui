@@ -350,7 +350,7 @@ export function CommitList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-8 shrink-0 items-center border-b">
+      <div className="@container/search flex h-8 shrink-0 items-center border-b">
         <InputGroup className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent dark:bg-transparent">
           <InputGroupAddon>
             <SearchIcon />
@@ -358,7 +358,7 @@ export function CommitList({
           <InputGroupInput
             ref={searchRef}
             aria-label="Search history"
-            placeholder="Search messages, author:name, path:file or a SHA"
+            placeholder="Search, author:name, path:file or SHA"
             autoComplete="off"
             autoCapitalize="off"
             autoCorrect="off"
@@ -397,7 +397,7 @@ export function CommitList({
             <GitCompareArrowsIcon />
           </ToolbarButton>
           <ToolbarButton
-            label="History"
+            label="File history"
             detail="Pick a file to see its history, contents and blame"
             onClick={() => openFilePicker(true)}
           >
@@ -582,9 +582,16 @@ function ToolbarButton({
   children: ReactNode
 }) {
   return (
-    <Button size="sm" variant="ghost" className="text-muted-foreground" tooltip={detail} onClick={onClick}>
+    <Button
+      size="sm"
+      variant="ghost"
+      className="text-muted-foreground"
+      aria-label={label}
+      tooltip={detail}
+      onClick={onClick}
+    >
       {children}
-      {label}
+      <span className="hidden @[28rem]/search:inline">{label}</span>
     </Button>
   )
 }

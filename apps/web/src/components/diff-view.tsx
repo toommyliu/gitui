@@ -69,6 +69,7 @@ import {
 import { type CommandId, useCommand, useCommandKeys, useOverlayOpen } from "@/lib/commands"
 import { diffThemes } from "@/lib/diff-themes"
 import { desktop } from "@/lib/desktop"
+import { basename, dirname } from "@/lib/format"
 import { editorLine } from "@/lib/lines"
 import { hiddenLocationTop, locationBeyond, nearestBeyond, READING_SLOP, sideRuns } from "@/lib/diff-nav"
 import { fileStepTarget } from "@/lib/file-step"
@@ -286,10 +287,6 @@ ${separator}[data-expand-index] :is([data-separator-content], [data-expand-butto
 }
 `
 
-const scrollToEnd = (node: HTMLDivElement | null) => {
-  if (node !== null) node.scrollLeft = node.scrollWidth
-}
-
 function CopyPathButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
   useEffect(() => {
@@ -373,12 +370,21 @@ function FileHeader({
           <span className="-mr-1 size-6 shrink-0" />
         )}
         <ChangeLetter change={changeOf[fileDiff.type]} />
-        <div ref={scrollToEnd} className="min-w-0 [scrollbar-width:none] overflow-x-auto font-medium whitespace-nowrap">
-          {fileDiff.prevName !== undefined && fileDiff.prevName !== fileDiff.name && (
-            <span className="text-muted-foreground">{fileDiff.prevName} → </span>
-          )}
-          {fileDiff.name}
-        </div>
+        <Hint
+          label={
+            fileDiff.prevName !== undefined && fileDiff.prevName !== fileDiff.name
+              ? `${fileDiff.prevName} → ${fileDiff.name}`
+              : fileDiff.name
+          }
+        >
+          <div className="flex min-w-0 overflow-hidden font-medium whitespace-nowrap">
+            {fileDiff.prevName !== undefined && fileDiff.prevName !== fileDiff.name && (
+              <span className="min-w-0 truncate font-normal text-muted-foreground">{fileDiff.prevName} →&nbsp;</span>
+            )}
+            <span className="min-w-0 truncate font-normal text-muted-foreground">{dirname(fileDiff.name)}</span>
+            <span className="max-w-full shrink-0 truncate">{basename(fileDiff.name)}</span>
+          </div>
+        </Hint>
         <CopyPathButton path={fileDiff.name} />
         {note === null ? (
           <span className="ml-auto shrink-0 tabular-nums">

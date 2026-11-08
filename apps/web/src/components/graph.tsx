@@ -1,7 +1,8 @@
+import { LIST_ROW } from "@/lib/rows"
 import type { GraphRow } from "@gitui/contracts"
 import { memo } from "react"
 
-export const ROW_HEIGHT = 26
+export const ROW_HEIGHT = LIST_ROW
 export const LANE_WIDTH = 14
 export const VISIBLE_LANES = 10
 

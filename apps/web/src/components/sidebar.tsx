@@ -1,3 +1,4 @@
+import { LIST_ROW } from "@/lib/rows"
 import { Hint } from "@/components/ui/tooltip"
 import { useAtomValue } from "@effect/atom-react"
 import type {
@@ -80,7 +81,7 @@ type Row =
   | { readonly kind: "stash"; readonly index: number; readonly stash: Stash }
   | { readonly kind: "worktree"; readonly worktree: Worktree }
 
-const ROW = 22
+const ROW = LIST_ROW
 
 interface Tree<T> {
   readonly folders: Map<string, Tree<T>>
@@ -905,7 +906,7 @@ function SectionRow({
       type="button"
       data-row
       onClick={() => toggle(row.id)}
-      className="flex h-full w-full items-center gap-1.5 px-2 text-left text-2xs font-semibold tracking-wide text-muted-foreground uppercase hover:text-foreground focus-visible:outline-none"
+      className="flex h-full w-full items-center gap-1.5 px-2 text-left section-label hover:text-foreground focus-visible:outline-none"
     >
       <Disclosure open={open} />
       {row.label}

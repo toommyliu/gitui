@@ -487,7 +487,7 @@ function Rail({
   return (
     <nav aria-label="Conflicted files" className="flex w-60 shrink-0 flex-col border-r max-md:w-48">
       <div className="flex h-8 shrink-0 items-center gap-2 pr-1 pl-2 text-muted-foreground">
-        <span className="text-2xs font-semibold tracking-wide uppercase">Conflicted files</span>
+        <span className="section-label">Conflicted files</span>
         <span className="text-xs tabular-nums">
           {resolvedCount}/{files.length}
         </span>

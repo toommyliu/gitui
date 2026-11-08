@@ -127,6 +127,10 @@
   --diff-deletion-emphasis: oklch(0.34 0.09 22);
 }
 
+@utility section-label {
+  @apply text-2xs font-semibold tracking-wide text-muted-foreground uppercase;
+}
+
 @layer base {
   * {
     @apply border-border -outline-offset-2 outline-ring;

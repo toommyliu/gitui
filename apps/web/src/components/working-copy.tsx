@@ -1,3 +1,4 @@
+import { LIST_ROW } from "@/lib/rows"
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type {
   Change,
@@ -118,7 +119,7 @@ const wholeFileNote = (kind: WholeFile, section: string) =>
 const noPaths: ReadonlySet<RepoPath> = new Set()
 
 const MAX_UNTRACKED_PREVIEWS = 50
-const ROW = 28
+const ROW = LIST_ROW
 
 const classify = (entries: ReadonlyArray<StatusEntry>) => {
   const unstaged: Array<FileRow> = []
@@ -441,7 +442,7 @@ export function WorkingCopy({ repo, onInvestigate }: { repo: RepoId; onInvestiga
     return row.area === "staged" ? (
       <span className="flex gap-1">
         {history}
-        <Button size="sm" variant="outline" onClick={() => unstage(row.paths)}>
+        <Button size="sm" variant="ghost" onClick={() => unstage(row.paths)}>
           Unstage
         </Button>
       </span>
@@ -451,7 +452,7 @@ export function WorkingCopy({ repo, onInvestigate }: { repo: RepoId; onInvestiga
         <Button size="sm" variant="ghost" onClick={() => discard([row])}>
           Discard
         </Button>
-        <Button size="sm" variant="outline" onClick={() => stage(row.paths)}>
+        <Button size="sm" variant="ghost" onClick={() => stage(row.paths)}>
           Stage
         </Button>
       </span>
@@ -1039,7 +1040,7 @@ function SectionHeader({
         type="button"
         aria-expanded={open}
         onClick={onToggle}
-        className="-ml-1 flex h-6 items-center gap-2 rounded-sm px-1 text-2xs font-semibold tracking-wide uppercase hover:text-foreground"
+        className="-ml-1 flex h-6 items-center gap-2 rounded-sm px-1 section-label hover:text-foreground"
       >
         {open ? <ChevronDownIcon className="mx-0.5 size-3" /> : <ChevronRightIcon className="mx-0.5 size-3" />}
         <span className="[text-box:trim-both_cap_alphabetic]">{label}</span>

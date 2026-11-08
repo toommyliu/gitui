@@ -1,3 +1,4 @@
+import { LIST_ROW } from "@/lib/rows"
 import { useAtom, useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { CommitDetail as Detail, FileChange, Oid, RepoId } from "@gitui/contracts"
 import { useVirtualizer } from "@tanstack/react-virtual"
@@ -229,7 +230,7 @@ export function CommitDetail({
   )
 }
 
-const FILE_ROW = 24
+const FILE_ROW = LIST_ROW
 
 export function NoMatchingFiles({ filter, onClear }: { filter: string; onClear: () => void }) {
   return <Nothing title={`No files match "${filter.trim()}"`} action={{ label: "Clear filter", onClick: onClear }} />
@@ -246,7 +247,7 @@ export function HistoryButton({ onClick }: { onClick: () => void }) {
 export function SectionBar({ label, actions, children }: { label: string; actions: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex h-8 shrink-0 items-center gap-2 border-b bg-muted/40 px-2">
-      <span className="text-2xs font-semibold tracking-wide text-muted-foreground uppercase">{label}</span>
+      <span className="section-label">{label}</span>
       <span className="flex min-w-0 flex-1 items-center gap-2 truncate text-muted-foreground">{children}</span>
       <span className="flex shrink-0 gap-1">{actions}</span>
     </div>

@@ -1,3 +1,4 @@
+import { LIST_ROW } from "@/lib/rows"
 import { Hint } from "@/components/ui/tooltip"
 import { useAtom, useAtomValue } from "@effect/atom-react"
 import type { CommandEntry, RepoId } from "@gitui/contracts"
@@ -24,7 +25,7 @@ import { commandLogAtom, isFailure, latest, logOpenAtom, logSeenAtom } from "@/l
 import { Nothing } from "./loading"
 import { NetworkStatus } from "./network"
 
-const ROW = 26
+const ROW = LIST_ROW
 
 type ScrollPosition = { offset: number; measurements: Array<VirtualItem> }
 

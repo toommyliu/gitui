@@ -1,3 +1,4 @@
+import { LIST_ROW } from "@/lib/rows"
 import { Hint } from "@/components/ui/tooltip"
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react"
 import type { Comparison, ComparisonDetail as Detail, RepoId, RepoPath } from "@gitui/contracts"
@@ -158,7 +159,7 @@ function ComparisonFiles({
   const virtualizer = useVirtualizer({
     count: files.length + 1,
     getScrollElement: () => listElement,
-    estimateSize: () => 24,
+    estimateSize: () => LIST_ROW,
     overscan: 10,
   })
   const rows = virtualizer.getVirtualItems()

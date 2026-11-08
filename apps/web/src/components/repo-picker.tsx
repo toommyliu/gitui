@@ -1,3 +1,4 @@
+import { PICKER_ROW } from "@/lib/rows"
 import { Hint } from "@/components/ui/tooltip"
 import { useAtom, useAtomValue } from "@effect/atom-react"
 import type { DirectoryEntry, DirectoryListing } from "@gitui/contracts"
@@ -31,7 +32,7 @@ import { pinnedAtom, recentAtom } from "@/lib/places"
 import { useTallList } from "@/lib/tall-list"
 
 const HOME = "~/"
-const ROW = 26
+const ROW = PICKER_ROW
 
 const keys = {
   open: "Mod+ArrowDown",
@@ -257,7 +258,7 @@ export function RepoPicker({
       </span>
     </Heading>
   ) : (
-    <Heading className="text-2xs font-semibold tracking-wide uppercase">
+    <Heading className="section-label">
       Recent
       <Count>{repos.length}</Count>
     </Heading>
@@ -352,7 +353,7 @@ export function RepoPicker({
               {places.map((place, at) => (
                 <div key={place.query}>
                   {place.section !== places[at - 1]?.section && place.section !== "top" && (
-                    <div className="mt-3 mb-1 px-2 text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <div className="mt-3 mb-1 px-2 section-label">
                       {place.section === "pinned" ? "Pinned" : "Folders"}
                     </div>
                   )}

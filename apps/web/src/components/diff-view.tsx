@@ -265,19 +265,6 @@ ${separator}[data-expand-index] :is([data-separator-content], [data-expand-butto
   color: var(--diffs-fg) !important;
   background-color: color-mix(in srgb, var(--diffs-bg) 92%, var(--diffs-fg)) !important;
 }
-[data-diff] {
-  transition: opacity 200ms ease-out;
-}
-@starting-style {
-  [data-diff] {
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  [data-diff] {
-    transition: none;
-  }
-}
 ::highlight(${FIND_HIGHLIGHT}) {
   background-color: color-mix(in oklch, var(--change-modified) 35%, transparent);
 }

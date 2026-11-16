@@ -46,7 +46,10 @@ function PickerBody(props: { onPick: (path: RepoPath) => void }) {
         />
       </div>
       <div class="relative min-h-24">
-        <CommandList aria-label="Tracked files" class="max-h-[min(24rem,50svh)] overflow-y-auto overscroll-none p-1">
+        <CommandList
+          aria-label="Tracked files"
+          class="max-h-[min(24rem,50svh)] scroll-py-1 overflow-y-auto overscroll-none p-1"
+        >
           <For each={found().matches}>
             {(path) => (
               <CommandItem

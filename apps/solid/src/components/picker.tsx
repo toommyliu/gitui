@@ -327,7 +327,7 @@ export function Picker() {
           </div>
           <CommandList
             aria-label={browsing() ? label() : "Recent repositories"}
-            class="min-h-0 flex-auto overflow-y-auto py-1"
+            class="min-h-0 flex-auto scroll-py-1 overflow-y-auto py-1"
           >
             <For each={items()} keyed={(item) => item.path}>
               {(item) => (

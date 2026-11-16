@@ -139,7 +139,7 @@ export function BranchPicker(props: { repo: Repo }) {
               class="h-full min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
             />
           </div>
-          <CommandList class="max-h-80 overflow-y-auto overscroll-none p-1">
+          <CommandList class="max-h-80 scroll-py-1 overflow-y-auto overscroll-none p-1">
             <CommandEmpty class="hidden px-2 py-1.5 text-xs text-muted-foreground data-empty:block">
               No branches match.
             </CommandEmpty>

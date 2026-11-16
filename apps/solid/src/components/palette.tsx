@@ -143,7 +143,7 @@ export function Palette() {
           <CommandEmpty class="hidden px-2 py-6 text-center text-xs text-muted-foreground data-empty:block">
             No matching commands.
           </CommandEmpty>
-          <CommandList class="max-h-[min(26rem,60svh)] overflow-y-auto overscroll-none p-1">
+          <CommandList class="max-h-[min(26rem,60svh)] scroll-py-1 overflow-y-auto overscroll-none p-1">
             <For each={groups}>
               {(group) => (
                 <CommandGroup>

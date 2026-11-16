@@ -114,6 +114,18 @@ export const openRepo = (path: string, after?: string) => {
   setActive(path)
 }
 
+export const openRepos = (next: ReadonlyArray<string>, after?: string) => {
+  for (const path of next) remember(path)
+  const current = paths()
+  const fresh = next.filter((path) => !current.includes(path))
+  const index = after === undefined ? -1 : current.indexOf(after)
+  setOpen(
+    index === -1 ? [...current, ...fresh] : [...current.slice(0, index + 1), ...fresh, ...current.slice(index + 1)],
+  )
+  const last = next.at(-1)
+  if (last !== undefined) setActive(last)
+}
+
 export const closeRepo = (path: string) => {
   const current = paths()
   const index = current.indexOf(path)

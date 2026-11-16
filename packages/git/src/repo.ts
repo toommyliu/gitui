@@ -666,8 +666,10 @@ export class Repo extends Context.Service<
         const bytes =
           target._tag === "Untracked"
             ? Buffer.concat(
-                yield* Effect.forEach(paths.slice(0, MAX_UNTRACKED_DIFFS), (path) =>
-                  git.run(repo, patchArgs(target, [path], ignoreWhitespace), { okExitCodes: [1] }),
+                yield* Effect.forEach(
+                  paths.slice(0, MAX_UNTRACKED_DIFFS),
+                  (path) => git.run(repo, patchArgs(target, [path], ignoreWhitespace), { okExitCodes: [1] }),
+                  { concurrency: 8 },
                 ),
               )
             : target._tag === "Commit"

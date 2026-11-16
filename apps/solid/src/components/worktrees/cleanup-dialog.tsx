@@ -91,6 +91,13 @@ function CleanupForm(props: { preset: ReadonlySet<string> | null; onClose: () =>
       : 0
   const dirty = () => picked().filter((candidate) => uncommittedChanges(candidate.staleness) > 0)
   const discarded = () => dirty().reduce((total, candidate) => total + uncommittedChanges(candidate.staleness), 0)
+  const risk = () => {
+    const parts = [
+      ...(discarded() > 0 ? [plural(discarded(), "uncommitted change")] : []),
+      ...(lostCommits() > 0 ? [`${plural(lostCommits(), "commit")} not on the base branch`] : []),
+    ]
+    return parts.length === 0 ? null : `Loses ${parts.join(" and ")}`
+  }
 
   const remove = async () => {
     const chosen = picked()
@@ -237,16 +244,6 @@ function CleanupForm(props: { preset: ReadonlySet<string> | null; onClose: () =>
           </Alert>
         )}
       </Show>
-      <Show when={discarded() > 0}>
-        <Alert tone="warning" title={`Discards ${plural(discarded(), "uncommitted change")}`}>
-          In {plural(dirty().length, "worktree")}. They can't be recovered.
-        </Alert>
-      </Show>
-      <Show when={lostCommits() > 0}>
-        <Alert tone="warning" title={`Deletes ${plural(lostCommits(), "commit")} not on the base branch`}>
-          Squash-merged branches usually show up this way.
-        </Alert>
-      </Show>
       <Show when={failures().length > 0}>
         <Alert tone="error" title="Some worktrees weren't removed">
           <ul class="flex flex-col gap-0.5">
@@ -274,6 +271,9 @@ function CleanupForm(props: { preset: ReadonlySet<string> | null; onClose: () =>
             <Spinner />
             Checking worktrees…
           </span>
+        </Show>
+        <Show when={progress() === null && risk() !== null}>
+          <span class="me-auto min-w-0 truncate text-xs text-change-modified">{risk()}</span>
         </Show>
         <Button disabled={progress() !== null} onClick={() => props.onClose()}>
           {failures().length > 0 ? "Close" : "Cancel"}

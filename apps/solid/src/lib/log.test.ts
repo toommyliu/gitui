@@ -58,7 +58,9 @@ const answerPages = async (logId: string, rows: ReadonlyArray<unknown>) => {
 
 describe("createLog", () => {
   it("keeps showing the current rows until the new log's visible rows load", async () => {
-    const log = createRoot(() => createLog(createRepo(Schema.decodeSync(RepoId)("repo")), () => ""))
+    const log = createRoot(() =>
+      createLog(createRepo({ id: Schema.decodeSync(RepoId)("repo"), commonDir: "/repo/.git" }), () => ""),
+    )
     flush()
 
     send("OpenLog", { logId: "old", loaded: 3, done: true })

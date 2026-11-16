@@ -1,4 +1,4 @@
-import { Oid, type Refs } from "@gitui/contracts"
+import { allRefsVisible, Oid, type Refs } from "@gitui/contracts"
 import { describe, expect, it } from "vite-plus/test"
 import { refLabels } from "./ref-labels"
 
@@ -25,6 +25,7 @@ describe("refLabels", () => {
         ],
       }),
       { _tag: "Branch", name: "main", oid: a },
+      allRefsVisible,
     )
     expect(labels.get(a)).toEqual([
       { kind: "branch", name: "main", current: true },
@@ -43,6 +44,7 @@ describe("refLabels", () => {
         tags: [{ name: "v1.0.0", oid: b }],
       }),
       { _tag: "Branch", name: "main", oid: a },
+      allRefsVisible,
     )
     expect(labels.get(a)).toEqual([{ kind: "branch", name: "main", current: true }])
     expect(labels.get(b)).toEqual([
@@ -52,6 +54,31 @@ describe("refLabels", () => {
   })
 
   it("labels a detached HEAD", () => {
-    expect(refLabels(refs({}), { _tag: "Detached", oid: b }).get(b)).toEqual([{ kind: "head", name: "HEAD" }])
+    expect(refLabels(refs({}), { _tag: "Detached", oid: b }, allRefsVisible).get(b)).toEqual([
+      { kind: "head", name: "HEAD" },
+    ])
+  })
+
+  it("leaves out hidden refs but keeps the checked-out branch", () => {
+    const labels = refLabels(
+      refs({
+        branches: [
+          { name: "main", oid: a, upstream: null },
+          { name: "feature", oid: a, upstream: null },
+        ],
+        remoteBranches: [
+          { remote: "origin", name: "origin/feature", oid: a },
+          { remote: "upstream", name: "upstream/main", oid: b },
+        ],
+        tags: [{ name: "v1.0.0", oid: b }],
+      }),
+      { _tag: "Branch", name: "main", oid: a },
+      { ...allRefsVisible, tags: false, hiddenBranches: ["main", "feature"], hiddenRemotes: ["upstream"] },
+    )
+    expect(labels.get(a)).toEqual([
+      { kind: "branch", name: "main", current: true },
+      { kind: "remote", name: "origin/feature" },
+    ])
+    expect(labels.get(b)).toBeUndefined()
   })
 })

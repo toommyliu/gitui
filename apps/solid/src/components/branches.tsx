@@ -15,13 +15,25 @@ import { compareModes, openCompare, showComparison, shownComparison } from "@/li
 import { runCommand, useCommand } from "@/lib/hotkeys"
 import { type RefSelection, selectRef, single } from "@/lib/ref-selection"
 import { useRepo } from "@/lib/repo"
+import { type Location, toggleLocation } from "@/lib/visibility"
 import { active } from "@/lib/workspaces"
 import { ComparisonPane } from "./compare/comparison-pane"
 import { SwapIcon } from "./compare/compare-launcher"
-import { Check, ChevronDown, More } from "./icons"
+import { Check, ChevronDown, Eye, EyeOff, More } from "./icons"
 import { AheadBehind } from "./refs/ahead-behind"
 import { type SelectHow, howOf } from "./file-tree"
-import { bulkOf, compareTarget, groupsOf, matches, nodesOf, type RefNode, treeOf, worktreeHead } from "./refs/model"
+import {
+  bulkOf,
+  compareTarget,
+  groupsOf,
+  matches,
+  nodesOf,
+  type RefNode,
+  type RowVisibility,
+  rowVisibility,
+  treeOf,
+  worktreeHead,
+} from "./refs/model"
 import {
   createRefActions,
   hasSectionMenu,
@@ -57,11 +69,45 @@ function RefRow(props: { node: RefNode; label: string; current: boolean }) {
   )
 }
 
+const visibilityAction = (hidden: boolean) => (hidden ? "Show in History" : "Hide in History")
+
+function VisibilityToggle(props: { hidden: boolean; onToggle: () => void }) {
+  const label = () => visibilityAction(props.hidden)
+  return (
+    <Tip label={label()}>
+      {(trigger) => (
+        <button
+          {...trigger}
+          type="button"
+          tabindex={-1}
+          data-visibility
+          aria-label={label()}
+          class={[
+            "-me-1 size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
+            props.hidden ? "flex" : "hidden group-hover/ref:flex",
+          ]}
+          onPointerDown={(event) => event.stopPropagation()}
+          onDblClick={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            props.onToggle()
+          }}
+        >
+          {props.hidden ? <EyeOff /> : <Eye />}
+        </button>
+      )}
+    </Tip>
+  )
+}
+
 function RefItems(props: {
   items: ReadonlyArray<TreeItemData>
   nodeOf: (key: string) => RefNode | undefined
   isCurrent: (node: RefNode) => boolean
   isMarked: (key: string) => boolean
+  visibilityOf: (key: string) => RowVisibility
+  onToggleVisibility: (location: Location) => void
   menuKey: string | null
   onOpen: (node: RefNode) => void
 }) {
@@ -73,7 +119,8 @@ function RefItems(props: {
             data-ref={item().value}
             data-context={props.menuKey === item().value ? "" : undefined}
             data-marked={props.isMarked(item().value) ? "" : undefined}
-            class="data-context:outline-1 data-context:-outline-offset-1 data-context:outline-ring"
+            data-dimmed={props.visibilityOf(item().value).dimmed ? "" : undefined}
+            class="group/ref data-context:outline-1 data-context:-outline-offset-1 data-context:outline-ring data-dimmed:[&>:not([data-visibility])]:opacity-50"
             onDblClick={() => {
               const node = props.nodeOf(item().value)
               if (node !== undefined) props.onOpen(node)
@@ -95,6 +142,14 @@ function RefItems(props: {
             >
               {(found) => <RefRow node={found()} label={item().label} current={props.isCurrent(found())} />}
             </Show>
+            <Show when={props.visibilityOf(item().value).toggle}>
+              {(toggle) => (
+                <VisibilityToggle
+                  hidden={toggle().hidden}
+                  onToggle={() => props.onToggleVisibility(toggle().location)}
+                />
+              )}
+            </Show>
           </TreeItemLabel>
           <Show when={item().children}>
             {(children) => (
@@ -104,6 +159,8 @@ function RefItems(props: {
                   nodeOf={props.nodeOf}
                   isCurrent={props.isCurrent}
                   isMarked={props.isMarked}
+                  visibilityOf={props.visibilityOf}
+                  onToggleVisibility={props.onToggleVisibility}
                   menuKey={props.menuKey}
                   onOpen={props.onOpen}
                 />
@@ -236,6 +293,8 @@ export function BranchesView(props: { focused: boolean }) {
   const bulk = createMemo(() => bulkOf(picked()))
   const isMarked = (key: string) => bulk() !== null && selection()?.marked.has(key) === true
   const isCurrent = actions.isCurrent
+  const visibilityOf = (key: string) => rowVisibility(key, repo.visibility(), head())
+  const toggleVisibility = (location: Location) => repo.setVisibility(toggleLocation(repo.visibility(), location))
   const openNode = (candidate: RefNode) => {
     if (candidate.kind === "tag" || isCurrent(candidate)) return
     void actions.checkout(candidate)
@@ -344,6 +403,8 @@ export function BranchesView(props: { focused: boolean }) {
                     nodeOf={(key) => byKey().get(key)}
                     isCurrent={isCurrent}
                     isMarked={isMarked}
+                    visibilityOf={visibilityOf}
+                    onToggleVisibility={toggleVisibility}
                     menuKey={menuKey()}
                     onOpen={openNode}
                   />
@@ -357,13 +418,25 @@ export function BranchesView(props: { focused: boolean }) {
                     when={isMarked(key) ? bulk() : null}
                     keyed
                     fallback={
-                      <Show
-                        when={byKey().get(key)}
-                        keyed
-                        fallback={<SectionMenuItems actions={actions} section={key} />}
-                      >
-                        {(found) => <RefMenuItems actions={actions} node={found} />}
-                      </Show>
+                      <>
+                        <Show
+                          when={byKey().get(key)}
+                          keyed
+                          fallback={<SectionMenuItems actions={actions} section={key} />}
+                        >
+                          {(found) => <RefMenuItems actions={actions} node={found} />}
+                        </Show>
+                        <Show when={visibilityOf(key).toggle}>
+                          {(toggle) => (
+                            <>
+                              <MenuSeparator />
+                              <MenuItem onSelect={() => toggleVisibility(toggle().location)}>
+                                {visibilityAction(toggle().hidden)}
+                              </MenuItem>
+                            </>
+                          )}
+                        </Show>
+                      </>
                     }
                   >
                     {(found) => <BulkMenuItems actions={actions} bulk={found} />}

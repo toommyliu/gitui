@@ -1,6 +1,7 @@
-import type { Branch, Refs, RemoteBranch, Tag, Worktree } from "@gitui/contracts"
+import type { Branch, Refs, RefVisibility, RemoteBranch, Tag, Worktree } from "@gitui/contracts"
 import type { TreeItemData } from "@ui-sdk/solid/tree"
 import { basename } from "@/lib/format"
+import { type Location, locationState } from "@/lib/visibility"
 
 export type RefNode =
   | { readonly kind: "local"; readonly key: string; readonly name: string; readonly branch: Branch }
@@ -125,5 +126,38 @@ export const bulkOf = (nodes: ReadonlyArray<RefNode>): Bulk | null => {
       return { kind: "tag", tags: nodes.flatMap((node) => (node.kind === "tag" ? [node.tag] : [])) }
     case "worktree":
       return { kind: "worktree", worktrees: nodes.flatMap((node) => (node.kind === "worktree" ? [node.worktree] : [])) }
+  }
+}
+
+export interface RowVisibility {
+  readonly dimmed: boolean
+  readonly toggle: { readonly hidden: boolean; readonly location: Location } | null
+}
+
+export const rowVisibility = (key: string, visibility: RefVisibility, head: string | null): RowVisibility => {
+  const at = (location: Location): RowVisibility => {
+    const state = locationState(visibility, location)
+    return {
+      dimmed: state !== "shown",
+      toggle: state === "inherited" ? null : { hidden: state === "hidden", location },
+    }
+  }
+  const fixed = (shown: boolean): RowVisibility => ({ dimmed: !shown, toggle: null })
+  const split = key.indexOf(":")
+  const name = key.slice(split + 1)
+  switch (key.slice(0, split)) {
+    case "section":
+      if (name === "local") return at({ section: "branches" })
+      if (name === "remotes" || name === "tags") return at({ section: name })
+      return fixed(true)
+    case "local":
+      return name === head ? fixed(true) : at({ section: "branches", name })
+    case "remote-group":
+    case "remote":
+      return at({ section: "remotes", name })
+    case "tag":
+      return fixed(visibility.tags)
+    default:
+      return fixed(true)
   }
 }

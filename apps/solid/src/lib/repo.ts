@@ -1,4 +1,4 @@
-import type { ChangeScope, RepoId } from "@gitui/contracts"
+import type { ChangeScope, RepoInfo, RefVisibility } from "@gitui/contracts"
 import type * as Effect from "effect/Effect"
 import type * as Stream from "effect/Stream"
 import {
@@ -12,6 +12,7 @@ import {
   useContext,
 } from "solid-js"
 import { call, type Client, collect, connection, describeError, subscribe } from "./rpc"
+import { refVisibility, setRefVisibility } from "./visibility"
 
 type Ticks = Record<ChangeScope, number>
 
@@ -19,7 +20,7 @@ export type Network = "fetch" | "pull" | "push"
 
 export type Outcome = { readonly ok: true } | { readonly ok: false; readonly message: string }
 
-export const createRepo = (id: RepoId) => {
+export const createRepo = ({ id, commonDir }: Pick<RepoInfo, "id" | "commonDir">) => {
   const [ticks, setTicks] = createStore<Ticks>({ worktree: 0, index: 0, refs: 0, draft: 0 })
 
   const invalidate = (scopes: ReadonlyArray<ChangeScope>) =>
@@ -97,7 +98,10 @@ export const createRepo = (id: RepoId) => {
     }
   }
 
-  return { id, track, invalidate, status, refs, mutate, network, stream }
+  const visibility = () => refVisibility(commonDir)
+  const setVisibility = (next: RefVisibility) => setRefVisibility(commonDir, next)
+
+  return { id, track, invalidate, status, refs, visibility, setVisibility, mutate, network, stream }
 }
 
 export type Repo = ReturnType<typeof createRepo>

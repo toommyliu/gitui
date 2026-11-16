@@ -217,6 +217,7 @@ export function Alert(props: {
 export interface Failure {
   readonly title: string
   readonly message: string
+  readonly action?: { readonly label: string; readonly run: () => void } | undefined
 }
 
 export function Failures(props: { failure: Failure | null; onDismiss: () => void; edge?: "top" | "bottom" }) {
@@ -227,6 +228,15 @@ export function Failures(props: { failure: Failure | null; onDismiss: () => void
           <Alert tone="error" title={failure().title} onDismiss={props.onDismiss} class="pe-7">
             {failure().message}
           </Alert>
+          <Show when={failure().action}>
+            {(action) => (
+              <div class="flex justify-end pt-1.5">
+                <Button variant="primary" onClick={() => action().run()}>
+                  {action().label}
+                </Button>
+              </div>
+            )}
+          </Show>
         </div>
       )}
     </Show>

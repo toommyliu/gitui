@@ -12,6 +12,8 @@ import type { JSX } from "@solidjs/web"
 import { createVirtualizer } from "@ui-sdk/core"
 import { Menu, MenuContent, MenuContextTrigger } from "@ui-sdk/solid/menu"
 import { createEffect, createMemo, createSignal, For, onSettled, Show, untrack } from "solid-js"
+import { fileIcons, iconColors, statusSide } from "@/lib/settings"
+import { FileIcon } from "./file-icon"
 import { ChevronDown } from "./icons"
 import { ROW } from "./ui"
 
@@ -105,6 +107,10 @@ export function FileTree(props: {
   const rows = createMemo(() => visibleTreeRows(items(), expanded()))
   const checkable = () => props.onCheckedChange !== undefined
   const [menuPath, setMenuPath] = createSignal<string | null>(null)
+  const iconSet = () => {
+    const set = fileIcons()
+    return set === "off" ? undefined : set
+  }
 
   const indexOf = (path: string | null) => untrack(rows).find((row) => row.item.value === path)?.index
   const virtual = createVirtualizer({
@@ -146,6 +152,7 @@ export function FileTree(props: {
       <MenuContextTrigger
         ref={(element: HTMLDivElement) => (scroller = element)}
         class="min-h-0 flex-1 overflow-y-auto overscroll-none p-1"
+        data-icon-colors={iconColors() === "on" ? "" : undefined}
         disabled={props.menu === undefined}
         onContextMenu={(event: MouseEvent) => {
           if (props.menu === undefined) return
@@ -212,8 +219,8 @@ export function FileTree(props: {
                             <span class="min-w-0 flex-1 truncate text-muted-foreground">{row().item.label}</span>
                           }
                         >
-                          {(entry) => (
-                            <>
+                          {(entry) => {
+                            const status = () => (
                               <span
                                 class={[
                                   "w-3 shrink-0 text-center font-mono text-2xs font-semibold",
@@ -222,19 +229,26 @@ export function FileTree(props: {
                               >
                                 {entry().letter}
                               </span>
-                              <span class="min-w-0 flex-1 truncate">{row().item.label}</span>
-                              <Show when={entry().additions}>
-                                <span class="font-mono text-2xs text-change-added tabular-nums">
-                                  +{entry().additions}
-                                </span>
-                              </Show>
-                              <Show when={entry().deletions}>
-                                <span class="font-mono text-2xs text-change-deleted tabular-nums">
-                                  −{entry().deletions}
-                                </span>
-                              </Show>
-                            </>
-                          )}
+                            )
+                            return (
+                              <>
+                                <Show when={statusSide() === "left"}>{status()}</Show>
+                                <Show when={iconSet()}>{(set) => <FileIcon path={value()} set={set()} />}</Show>
+                                <span class="min-w-0 flex-1 truncate">{row().item.label}</span>
+                                <Show when={entry().additions}>
+                                  <span class="font-mono text-2xs text-change-added tabular-nums">
+                                    +{entry().additions}
+                                  </span>
+                                </Show>
+                                <Show when={entry().deletions}>
+                                  <span class="font-mono text-2xs text-change-deleted tabular-nums">
+                                    −{entry().deletions}
+                                  </span>
+                                </Show>
+                                <Show when={statusSide() === "right"}>{status()}</Show>
+                              </>
+                            )
+                          }}
                         </Show>
                       </TreeItemLabel>
                     </TreeItem>

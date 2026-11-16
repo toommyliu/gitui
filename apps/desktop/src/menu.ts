@@ -1,5 +1,6 @@
 import type { MenuCommand, MenuShortcuts, Theme } from "@gitui/contracts"
 import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from "electron"
+import { installShellCommand } from "./shell-command.ts"
 
 const themes: ReadonlyArray<readonly [Theme, string]> = [
   ["system", "System"],
@@ -63,6 +64,7 @@ export const buildMenu = ({ theme, shortcuts }: { theme: Theme; shortcuts: MenuS
             { role: "about" },
             separator,
             settings,
+            { label: "Install Shell Command…", click: () => void installShellCommand() },
             separator,
             { role: "services" },
             separator,

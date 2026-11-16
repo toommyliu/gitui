@@ -26,7 +26,7 @@ import { useRepo } from "@/lib/repo"
 import { call, collect, describeError } from "@/lib/rpc"
 import { DiffControls, DiffStack, type DiffHandle, type DiffItem, patchItems, sectionOf } from "./diff"
 import { discardSubject, type Recovery, RecoveryDialog } from "./discard-recovery"
-import { type FileEntry, FileTree, fileOrder, type Letter, letterOf, type SelectHow } from "./file-tree"
+import { type FileEntry, FileTree, fileOrder, type Letter, letterOf, samePaths, type SelectHow } from "./file-tree"
 import { Confirm } from "./refs/confirm"
 import { Split } from "./split"
 import { Boundary } from "./state"
@@ -329,13 +329,15 @@ function Diffs(props: {
       0,
     )
 
+  const rowPaths = createMemo(() => props.rows.map((row) => row.path), { equals: samePaths })
+  const rowOrder = createMemo(() => new Map(fileOrder(rowPaths()).map((path, index) => [path, index])))
   const items = createMemo(() => {
     const all = [
       ...patchItems("unstaged", patchOf(unstaged())),
       ...patchItems("untracked", patchOf(untracked())),
       ...patchItems("staged", patchOf(staged())),
     ]
-    const order = new Map(fileOrder(props.rows.map((row) => row.path)).map((path, index) => [path, index]))
+    const order = rowOrder()
     const rank = { unstaged: 0, untracked: 0, staged: 1 } as Record<string, number>
     return all.sort(
       (a, b) =>
@@ -425,10 +427,12 @@ export function ChangesView(props: { focused: boolean }) {
     return call((git) => git.GetDraft({ repo: repo.id }))
   })
   const rows = createMemo(() => repo.status().entries.map(toRow))
-  const fullyStaged = createMemo(() =>
-    rows()
-      .filter((row) => row.staged === "full")
-      .map((row) => row.path as string),
+  const fullyStaged = createMemo(
+    () =>
+      rows()
+        .filter((row) => row.staged === "full")
+        .map((row) => row.path as string),
+    { equals: samePaths },
   )
   const [checked, setChecked] = createOptimistic(() => fullyStaged())
   const [selected, setSelected] = createSignal<string | null>(null)
@@ -580,7 +584,8 @@ export function ChangesView(props: { focused: boolean }) {
 
   const [marked, setMarked] = createSignal<ReadonlySet<string>>(new Set())
   let anchor: string | null = null
-  const order = createMemo(() => fileOrder(visibleRows().map((row) => row.path)))
+  const visiblePaths = createMemo(() => visibleRows().map((row) => row.path), { equals: samePaths })
+  const order = createMemo(() => fileOrder(visiblePaths()))
 
   const reveal = (path: string) => {
     const row = rowOf(path)
@@ -766,7 +771,7 @@ export function ChangesView(props: { focused: boolean }) {
               <Show when={discarded()}>
                 <div class="shrink-0 border-b p-2">{discardedAlert()}</div>
               </Show>
-              <div class="min-h-0 flex-1 overflow-y-auto">
+              <div class="flex min-h-0 flex-1 flex-col">
                 <FileTree
                   label="Changed files"
                   files={files()}

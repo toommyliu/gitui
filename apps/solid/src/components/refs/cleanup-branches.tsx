@@ -17,6 +17,7 @@ import { Spinner } from "../state"
 import { Alert, Button, ROW } from "../ui"
 import { loadMerged, type Merged } from "./merged"
 import { KeptList } from "./kept"
+import { rangeKeys } from "@/lib/range-pick"
 
 const branches = (count: number) => `${count} ${count === 1 ? "branch" : "branches"}`
 
@@ -71,6 +72,8 @@ function CleanupForm(props: { onClose: () => void }) {
     candidates().filter((candidate) => candidate.staleness._tag === kind)
   const kinds = () =>
     (["Merged", "Gone"] as const).filter((kind) => candidates().some((candidate) => candidate.staleness._tag === kind))
+  let anchor: string | null = null
+  let extend = false
   const pick = (names: ReadonlyArray<string>, next: boolean) =>
     setOverrides((current) => {
       const updated = new Map(current)
@@ -171,15 +174,29 @@ function CleanupForm(props: { onClose: () => void }) {
                       <li>
                         <label
                           class={[
-                            "flex items-center gap-2 px-2.5",
+                            "flex items-center gap-2 px-2.5 select-none",
                             progress() === null ? "hover:bg-muted/60" : "text-muted-foreground",
                           ]}
+                          onPointerDown={(event: PointerEvent) => (extend = event.shiftKey)}
                           style={{ height: `${ROW}px` }}
                         >
                           <Checkbox
                             disabled={progress() !== null}
                             checked={checked(candidate())}
-                            onCheckedChange={(next) => pick([candidate().branch.name], next === true)}
+                            onCheckedChange={(next) => {
+                              const key = candidate().branch.name
+                              pick(
+                                rangeKeys(
+                                  found().candidates.map((entry) => entry.branch.name),
+                                  anchor,
+                                  key,
+                                  extend,
+                                ),
+                                next === true,
+                              )
+                              anchor = key
+                              extend = false
+                            }}
                           >
                             <CheckboxIndicator />
                           </Checkbox>

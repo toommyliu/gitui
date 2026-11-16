@@ -18,6 +18,7 @@ import {
 } from "@/lib/worktree-cleanup"
 import { Spinner } from "../state"
 import { Alert, Button, ROW } from "../ui"
+import { rangeKeys } from "@/lib/range-pick"
 
 const plural = (count: number, word: string) => `${count} ${count === 1 ? word : `${word}s`}`
 
@@ -75,6 +76,8 @@ function CleanupForm(props: { preset: ReadonlySet<string> | null; onClose: () =>
   const bulk = () => candidates().filter((candidate) => bulkSelectable(candidate.staleness))
   const allPicked = () => bulk().length > 0 && bulk().every(checked)
   const somePicked = () => bulk().some(checked)
+  let anchor: string | null = null
+  let extend = false
   const pick = (paths: ReadonlyArray<string>, next: boolean) =>
     setOverrides((current) => {
       const updated = new Map(current)
@@ -187,15 +190,29 @@ function CleanupForm(props: { preset: ReadonlySet<string> | null; onClose: () =>
                   <li>
                     <label
                       class={[
-                        "flex items-center gap-2 px-2.5",
+                        "flex items-center gap-2 px-2.5 select-none",
                         enabled() ? "hover:bg-muted/60" : "text-muted-foreground",
                       ]}
+                      onPointerDown={(event: PointerEvent) => (extend = event.shiftKey)}
                       style={{ height: `${ROW}px` }}
                     >
                       <Checkbox
                         disabled={!enabled()}
                         checked={checked(candidate())}
-                        onCheckedChange={(next) => pick([candidate().worktree.path], next === true)}
+                        onCheckedChange={(next) => {
+                          const key = candidate().worktree.path
+                          pick(
+                            rangeKeys(
+                              candidates().map((entry) => entry.worktree.path),
+                              anchor,
+                              key,
+                              extend,
+                            ),
+                            next === true,
+                          )
+                          anchor = key
+                          extend = false
+                        }}
                       >
                         <CheckboxIndicator />
                       </Checkbox>

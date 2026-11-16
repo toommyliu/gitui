@@ -160,7 +160,9 @@ export const makePublishing = (git: Git["Service"]) => {
           const head = (yield* git.text(repo, ["symbolic-ref", "--quiet", "HEAD"], { okExitCodes: [1] })).trim()
           const upstream = (yield* git.text(repo, ["for-each-ref", "--format=%(upstream)", branch])).trim()
           if (head !== branch || upstream !== target.upstream)
-            return yield* invalid("The checked-out branch or its upstream changed. Close this dialog and pull again.")
+            return yield* invalid(
+              "The checked-out branch or its upstream changed since you started the pull. Pull again.",
+            )
           return git.progress(repo, ["pull", "--progress", ...pullFlags[strategy]])
         }),
       ),

@@ -20,4 +20,6 @@ contextBridge.exposeInMainWorld("gitui", {
   onCommand: subscribe("gitui:command"),
   isFullScreen: () => ipcRenderer.sendSync("gitui:is-full-screen") === true,
   onFullScreen: subscribe("gitui:full-screen"),
+  isSystemDark: () => ipcRenderer.sendSync("gitui:is-system-dark") === true,
+  onSystemDark: subscribe("gitui:system-dark"),
 } satisfies DesktopBridge)

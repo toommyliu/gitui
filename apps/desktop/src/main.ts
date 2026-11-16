@@ -143,6 +143,13 @@ if (!app.requestSingleInstanceLock()) {
       ipcMain.on("gitui:rpc-url", (event) => {
         event.returnValue = fromApp(event) ? rpcUrl : null
       })
+      ipcMain.on("gitui:is-system-dark", (event) => {
+        event.returnValue = fromApp(event) && nativeTheme.shouldUseDarkColors
+      })
+      nativeTheme.on("updated", () => {
+        for (const window of BrowserWindow.getAllWindows())
+          window.webContents.send("gitui:system-dark", nativeTheme.shouldUseDarkColors)
+      })
       ipcMain.on("gitui:is-full-screen", (event) => {
         event.returnValue = fromApp(event) && BrowserWindow.fromWebContents(event.sender)?.isFullScreen() === true
       })

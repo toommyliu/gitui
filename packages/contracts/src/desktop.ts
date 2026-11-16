@@ -44,6 +44,8 @@ export interface DesktopBridge {
   readonly onCommand: (listener: (command: unknown) => void) => () => void
   readonly isFullScreen: () => boolean
   readonly onFullScreen: (listener: (fullScreen: unknown) => void) => () => void
+  readonly isSystemDark: () => boolean
+  readonly onSystemDark: (listener: (dark: unknown) => void) => () => void
 }
 
 export const menuCommands = [

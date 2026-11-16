@@ -39,8 +39,8 @@ importers:
   apps/desktop:
     dependencies:
       '@effect/platform-node':
-        specifier: 4.0.4
-        version: 4.0.4(effect@4.0.4)(redis@6.3.0)
+        specifier: 4.1.4
+        version: 4.1.4(effect@4.1.4)(redis@6.3.0)
       '@gitui/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -51,8 +51,8 @@ importers:
         specifier: workspace:*
         version: link:../solid
       effect:
-        specifier: 4.0.4
-        version: 4.0.4
+        specifier: 4.1.4
+        version: 4.1.4
     devDependencies:
       '@types/node':
         specifier: ^24
@@ -70,8 +70,8 @@ importers:
   apps/server:
     dependencies:
       '@effect/platform-node':
-        specifier: 4.0.4
-        version: 4.0.4(effect@4.0.4)(redis@6.3.0)
+        specifier: 4.1.4
+        version: 4.1.4(effect@4.1.4)(redis@6.3.0)
       '@gitui/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -79,12 +79,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/git
       effect:
-        specifier: 4.0.4
-        version: 4.0.4
+        specifier: 4.1.4
+        version: 4.1.4
     devDependencies:
       '@effect/vitest':
-        specifier: 4.0.4
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.3)
+        specifier: 4.1.4
+        version: 4.1.4(effect@4.1.4)(vitest@5.0.3)
       '@types/node':
         specifier: ^24
         version: 24.19.2
@@ -101,8 +101,8 @@ importers:
   apps/solid:
     dependencies:
       '@effect/platform-browser':
-        specifier: 4.0.4
-        version: 4.0.4(effect@4.0.4)
+        specifier: 4.1.4
+        version: 4.1.4(effect@4.1.4)
       '@fontsource-variable/inter':
         specifier: ^5.3.0
         version: 5.3.0
@@ -128,8 +128,8 @@ importers:
         specifier: 0.1.0-beta.5
         version: 0.1.0-beta.5(@solidjs/web@2.0.0-rc.14(patch_hash=bb9d9f68caa99f2240d2b84402b5628498c3eb86af575d34fda2838c0a1ebef8)(solid-js@2.0.0-rc.14))(@ui-sdk/core@0.1.0-beta.5(patch_hash=9cecd0e1b731a669f4a2541d2991e1b1571375c84d3a94c68e81c1b7790ecee2))(solid-js@2.0.0-rc.14)
       effect:
-        specifier: 4.0.4
-        version: 4.0.4
+        specifier: 4.1.4
+        version: 4.1.4
       solid-js:
         specifier: 2.0.0-rc.14
         version: 2.0.0-rc.14
@@ -156,24 +156,24 @@ importers:
   packages/contracts:
     dependencies:
       effect:
-        specifier: 4.0.4
-        version: 4.0.4
+        specifier: 4.1.4
+        version: 4.1.4
 
   packages/git:
     dependencies:
       '@effect/platform-node':
-        specifier: 4.0.4
-        version: 4.0.4(effect@4.0.4)(redis@6.3.0)
+        specifier: 4.1.4
+        version: 4.1.4(effect@4.1.4)(redis@6.3.0)
       '@gitui/contracts':
         specifier: workspace:*
         version: link:../contracts
       effect:
-        specifier: 4.0.4
-        version: 4.0.4
+        specifier: 4.1.4
+        version: 4.1.4
     devDependencies:
       '@effect/vitest':
-        specifier: 4.0.4
-        version: 4.0.4(effect@4.0.4)(vitest@5.0.3)
+        specifier: 4.1.4
+        version: 4.1.4(effect@4.1.4)(vitest@5.0.3)
       '@types/node':
         specifier: ^24
         version: 24.19.2
@@ -281,23 +281,23 @@ packages:
   '@blazediff/core@1.10.0':
     resolution: {integrity: sha512-AOQff0zgR7cGsZL+4E7hVkmujoPUpm0J9xzWGWZj5wCjd3gmxESXAPfKyuzs93VdpQNFhHlBhfOjrcZ+XTERtQ==}
 
-  '@effect/platform-browser@4.0.4':
-    resolution: {integrity: sha512-2D+0/Vd+6gMpgR608OPYON4+QMvtbXyl2+HKIlayuXLmlVokI2KoIt37gm01CN+fyRFotBr3hSz4gzLd7xb3Hw==}
+  '@effect/platform-browser@4.1.4':
+    resolution: {integrity: sha512-oh6SxR62VaU8xzpVloHRJwK4ADBXCzlnjgcvV6zHc9h4PwmdhQvlfrXFu38tvqJTgK31Z1VnzbkLtymWHbEUSA==}
     peerDependencies:
-      effect: ^4.0.4
+      effect: ^4.1.4
 
-  '@effect/platform-node-shared@4.0.4':
-    resolution: {integrity: sha512-gh2KRmqGWrJ0FVL8GqnI1GpB+fCfCUI7sGiUZkxxBHyHj1t94rm6VDJffCfuVZWe6GpvYXtizifVczUrgOce8A==}
-    engines: {node: '>=18.0.0'}
+  '@effect/platform-node-shared@4.1.4':
+    resolution: {integrity: sha512-DWdfphHGOFJNj/mYadgpT3jIm8aRXDcPrQiGXFBH4p2H4XmA7iYMrPsI8NxVgZ7kNX0q1+FGJZJama0tINHRAg==}
+    engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: ^4.0.4
+      effect: ^4.1.4
 
-  '@effect/platform-node@4.0.4':
-    resolution: {integrity: sha512-SdoyQMrO5zmqBebb2fxDk0sHYyJjBiw4QmLdV2ZcWf3ATpQPge3B5sTLijZg49PadekOwNeO83o5TfdtiiFEig==}
-    engines: {node: '>=18.0.0'}
+  '@effect/platform-node@4.1.4':
+    resolution: {integrity: sha512-h7QExTPq/RfYtHP/8tMlgfBvqYsuJKhxfkU6w0+NaF/ihqQ8Y3GH9t28ltupQjoqMM7P6W5gy8rOji7F0qVrmg==}
+    engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: ^4.0.4
-      redis: '>=5.0.0 <7.0.0'
+      effect: ^4.1.4
+      redis: '>=5.1.0 <7.0.0'
 
   '@effect/tsgo-darwin-arm64@0.51.1':
     resolution: {integrity: sha512-Jx+1RB3pz1B2zYs1EmxybwDOq9KRpfdu/rn1XTULNMZmqUJZuvTQU9CRqB0g/ZgIa6MeNBZEYvmAu4Dq2/QVWA==}
@@ -338,10 +338,10 @@ packages:
     resolution: {integrity: sha512-i6mA6cNah+0mkPdu8qZILCO3Pnd9kWo03/s82Ju+1DFhdL28HFagi+1PRGxqgq1uMaHziWQ+ciKvOmIoks2RdA==}
     hasBin: true
 
-  '@effect/vitest@4.0.4':
-    resolution: {integrity: sha512-l5KN46RbDVpqZxWzwXZtX6FVQiyzd+/hTYqL543uSDRo7hC0m19IeICh6O9U/nqCtfersqsNZnBjgHFfkuHsBw==}
+  '@effect/vitest@4.1.4':
+    resolution: {integrity: sha512-AKpZ6zKihCRhY7hDbiQ2yp/krw+afIkxDRjFMwwzMiyhd0iYk0WaHa9J6GGC7TUF/C7HP2dZyMVq5xC0Qm/2/g==}
     peerDependencies:
-      effect: ^4.0.4
+      effect: ^4.1.4
       vitest: 5.0.3
 
   '@electron-internal/extract-zip@1.0.5':
@@ -2023,8 +2023,8 @@ packages:
   duplexer2@0.1.4:
     resolution: {integrity: sha512-asLFVfWWtJ90ZyOUHMqk7/S2w2guQKxUI2itj3d92ADHhxUSbCMGi1f1cBcJ7xM1To+pE/Khbwo1yuNbMEPKeA==}
 
-  effect@4.0.4:
-    resolution: {integrity: sha512-Sr50OeVSC3M5UkoUYUhFf3EULryhGaZZUf6OzDHTvaznOw7HRlxOKdF3/4nvQXHL22StOyMG3Cvo8Bt7xUp+Ng==}
+  effect@4.1.4:
+    resolution: {integrity: sha512-Tgrv/9FN+TZYyOn8XSli+fVqAfwDrDAkiX5Uu9vztINb675VTQdhD0gWI5Kzvhlh9QqzjZvw72iugqw5pwoghQ==}
 
   ejs@3.1.10:
     resolution: {integrity: sha512-UeJmFfOrAQS8OJWPZ4qtgHyWExa088/MtK5UEyoJGFH67cDEXkZSviOiKRCZ4Xij0zxI3JECgYs3oKx+AizQBA==}
@@ -3073,8 +3073,8 @@ packages:
     resolution: {integrity: sha512-dkrQXeHSaoamnItlYbmzG0wFYrM0ZwDxCIg0A7aKjTyyhh9svRzCNFEzV+Vm05/yehjCzjDZ31KXfGEjYSztDQ==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.11.2:
-    resolution: {integrity: sha512-u4UB2/IrKdU6lFxumHmmo1a3fCQO5tzQllRorfoRS63txhrB7xTpSn1PftwC4qEHkOaqP95fCWW4lJzwErwzhQ==}
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
     engines: {node: '>=22.19.0'}
 
   unist-util-is@6.0.1:
@@ -3218,6 +3218,18 @@ packages:
 
   ws@8.22.0:
     resolution: {integrity: sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
+  ws@8.22.2:
+    resolution: {integrity: sha512-/rEZ2ejown2N5gxVTHUu9bVVC7ttu0/Tgzf5hbTOixR3Fs7mbbXgn2DbdbcKgJOmpQMtrIUWivtYuVMnp/W/yA==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -3392,25 +3404,25 @@ snapshots:
 
   '@blazediff/core@1.10.0': {}
 
-  '@effect/platform-browser@4.0.4(effect@4.0.4)':
+  '@effect/platform-browser@4.1.4(effect@4.1.4)':
     dependencies:
-      effect: 4.0.4
+      effect: 4.1.4
 
-  '@effect/platform-node-shared@4.0.4(effect@4.0.4)':
+  '@effect/platform-node-shared@4.1.4(effect@4.1.4)':
     dependencies:
       '@types/ws': 8.18.2
-      effect: 4.0.4
-      ws: 8.22.0
+      effect: 4.1.4
+      ws: 8.22.2
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.0.4(effect@4.0.4)(redis@6.3.0)':
+  '@effect/platform-node@4.1.4(effect@4.1.4)(redis@6.3.0)':
     dependencies:
-      '@effect/platform-node-shared': 4.0.4(effect@4.0.4)
-      effect: 4.0.4
+      '@effect/platform-node-shared': 4.1.4(effect@4.1.4)
+      effect: 4.1.4
       redis: 6.3.0
-      undici: 8.11.2
+      undici: 8.12.4
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -3446,9 +3458,9 @@ snapshots:
       '@effect/tsgo-win32-arm64': 0.51.1
       '@effect/tsgo-win32-x64': 0.51.1
 
-  '@effect/vitest@4.0.4(effect@4.0.4)(vitest@5.0.3)':
+  '@effect/vitest@4.1.4(effect@4.1.4)(vitest@5.0.3)':
     dependencies:
-      effect: 4.0.4
+      effect: 4.1.4
       vitest: 5.0.3(@types/node@24.19.2)(@vitest/browser-preview@5.0.3)(@vitest/ui@5.0.3)(@voidzero-dev/vite-plus-core@1.1.0(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))
 
   '@electron-internal/extract-zip@1.0.5': {}
@@ -4772,7 +4784,7 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
-  effect@4.0.4: {}
+  effect@4.1.4: {}
 
   ejs@3.1.10:
     dependencies:
@@ -5875,7 +5887,7 @@ snapshots:
   undici@7.30.0:
     optional: true
 
-  undici@8.11.2: {}
+  undici@8.12.4: {}
 
   unist-util-is@6.0.1:
     dependencies:
@@ -6049,6 +6061,8 @@ snapshots:
   wrappy@1.0.2: {}
 
   ws@8.22.0: {}
+
+  ws@8.22.2: {}
 
   xmlbuilder@15.1.1: {}
 

@@ -23,6 +23,7 @@ export default defineConfig({
   },
   optimizeDeps: { exclude: ["@ui-sdk/core"] },
   test: { environment: "node" },
+  ssr: { resolve: { conditions: ["browser"] } },
   worker: { format: "es" },
   server: {
     host: process.env.HOST ?? "127.0.0.1",

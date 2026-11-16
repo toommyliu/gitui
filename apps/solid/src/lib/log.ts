@@ -18,16 +18,28 @@ interface Cache {
   readonly pages: Map<number, ReadonlyArray<CommitRow>>
 }
 
+const emptyCache = (logId: string): Cache => ({ logId, requests: new Map(), pages: new Map() })
+
+const pagesIn = (start: number, end: number) => {
+  const pages: number[] = []
+  for (let page = Math.floor(start / PAGE_SIZE); page * PAGE_SIZE < end; page++) pages.push(page)
+  return pages
+}
+
 export const createLog = (repo: Repo, query: () => string) => {
   const [handle, setHandle] = createSignal<LogHandle | null>(null)
   const [error, setError] = createSignal<unknown>(null)
   const [opened, setOpened] = createSignal(0)
   const [version, setVersion] = createSignal(0)
-  let cache: Cache = { logId: "", requests: new Map(), pages: new Map() }
+  let cache = emptyCache("")
+  let next: { readonly cache: Cache; handle: LogHandle } | null = null
+  let visible = { start: 0, end: 0 }
 
-  const reset = (logId: string) => {
-    cache = { logId, requests: new Map(), pages: new Map() }
+  const show = (target: Cache, log: LogHandle | null) => {
+    cache = target
+    next = null
     setVersion((count) => count + 1)
+    setHandle(log)
   }
 
   const fail = (failure: unknown) => {
@@ -35,27 +47,7 @@ export const createLog = (repo: Repo, query: () => string) => {
     else setError(failure)
   }
 
-  createEffect(
-    () => ({ query: query(), refs: repo.track("refs"), opened: opened() }),
-    (next, previous) => {
-      if (previous !== undefined && next.query !== previous.query) {
-        reset("")
-        setHandle(null)
-      }
-      return subscribe(
-        (git) => git.OpenLog({ repo: repo.id, query: next.query, refs: allRefsVisible }),
-        (log) => {
-          if (log.logId !== cache.logId) reset(log.logId)
-          setError(null)
-          setHandle(log)
-        },
-        fail,
-      )
-    },
-  )
-
-  const load = (page: number) => {
-    const owner = cache
+  const load = (page: number, owner = cache) => {
     const existing = owner.requests.get(page)
     if (existing !== undefined) return existing
     const request = call((git) =>
@@ -64,17 +56,50 @@ export const createLog = (repo: Repo, query: () => string) => {
       (rows) => {
         owner.pages.set(page, rows)
         if (owner === cache) setVersion((count) => count + 1)
+        if (owner === next?.cache) promote()
         return rows
       },
       (failure: unknown) => {
         owner.requests.delete(page)
-        if (owner === cache) fail(failure)
+        if (owner === cache || owner === next?.cache) fail(failure)
         return undefined
       },
     )
     owner.requests.set(page, request)
     return request
   }
+
+  const promote = () => {
+    if (next === null) return
+    const staged = next
+    const needed = new Set([0, ...pagesIn(visible.start, visible.end)])
+    for (const page of needed) void load(page, staged.cache)
+    const reached = staged.handle.done || staged.handle.loaded >= visible.end
+    if (reached && [...needed].every((page) => staged.cache.pages.has(page))) show(staged.cache, staged.handle)
+  }
+
+  createEffect(
+    () => ({ query: query(), refs: repo.track("refs"), opened: opened() }),
+    (current, previous) => {
+      if (previous !== undefined && current.query !== previous.query) show(emptyCache(""), null)
+      return subscribe(
+        (git) => git.OpenLog({ repo: repo.id, query: current.query, refs: allRefsVisible }),
+        (log) => {
+          setError(null)
+          if (log.logId === cache.logId) {
+            next = null
+            setHandle(log)
+          } else if (handle() === null) show(emptyCache(log.logId), log)
+          else {
+            if (next?.cache.logId === log.logId) next.handle = log
+            else next = { cache: emptyCache(log.logId), handle: log }
+            promote()
+          }
+        },
+        fail,
+      )
+    },
+  )
 
   const row = (index: number): CommitRow | undefined => {
     version()
@@ -96,8 +121,10 @@ export const createLog = (repo: Repo, query: () => string) => {
     row,
     indexOf,
     ensure: (start: number, end: number) => {
+      visible = { start, end }
       if (cache.logId === "") return
-      for (let page = Math.floor(start / PAGE_SIZE); page * PAGE_SIZE < end; page++) void load(page)
+      for (const page of pagesIn(start, end)) void load(page)
+      promote()
     },
     rowAt: async (index: number) =>
       cache.logId === "" ? undefined : (await load(Math.floor(index / PAGE_SIZE)))?.[index % PAGE_SIZE],

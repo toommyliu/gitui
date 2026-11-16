@@ -212,7 +212,7 @@ function BulkDelete<T>(props: {
   noteOf?: (item: T) => string | null
   kept: ReadonlyArray<Kept>
   keptWhy?: string
-  warning: { readonly title: string; readonly body: string } | null
+  warning: string | null
   confirmLabel: string
   remove: (item: T) => Promise<string | null>
   onClose: () => void
@@ -256,13 +256,6 @@ function BulkDelete<T>(props: {
           </ul>
         </Show>
         <KeptList entries={props.kept} why={props.keptWhy ?? ""} />
-        <Show when={failures() === null ? props.warning : null}>
-          {(warning) => (
-            <Alert tone="warning" title={warning().title}>
-              {warning().body}
-            </Alert>
-          )}
-        </Show>
         <Show when={failures()}>
           {(failed) => (
             <Alert tone="error" title={`${counted(failed().length, "wasn't", "weren't")} deleted`}>
@@ -286,6 +279,9 @@ function BulkDelete<T>(props: {
                 {text()}
               </span>
             )}
+          </Show>
+          <Show when={progress() === null && failures() === null ? props.warning : null}>
+            {(note) => <span class="me-auto min-w-0 truncate text-xs text-change-modified">{note()}</span>}
           </Show>
           <Button disabled={progress() !== null} onClick={() => props.onClose()}>
             {failures() === null ? "Cancel" : "Close"}
@@ -343,21 +339,14 @@ export function DeleteBranchesConfirm(props: { branches: ReadonlyArray<Branch>; 
   }
   const unmergedCount = () => split().free.filter(unmerged).length
   const warning = () => {
-    const error = checkError()
-    if (error !== null) return { title: "Couldn't check which are merged", body: error }
+    if (checkError() !== null) return "Couldn't check which are merged"
     const name = base()?.name
     if (merged() === undefined) return null
-    if (name === undefined)
-      return {
-        title: "No main branch to check against",
-        body: "Commits that only these branches have are lost from history.",
-      }
+    if (name === undefined) return "No main branch to check them against"
     if (unmergedCount() === 0) return null
-    return {
-      title: `${counted(unmergedCount(), "isn't", "aren't")} merged into ${name}`,
-      body: `Deleting ${unmergedCount() === 1 ? "it leaves its" : "them leaves their"} commits reachable only from the reflog.`,
-    }
+    return `${unmergedCount()} not merged into ${name}`
   }
+
   return (
     <BulkDelete
       title={`Delete ${counted(split().free.length, "branch", "branches")}?`}

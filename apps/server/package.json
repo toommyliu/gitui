@@ -17,12 +17,12 @@
   "dependencies": {
     "@gitui/contracts": "workspace:*",
     "@gitui/git": "workspace:*",
-    "@effect/platform-node": "4.0.4",
-    "effect": "4.0.4"
+    "@effect/platform-node": "4.1.4",
+    "effect": "4.1.4"
   },
   "devDependencies": {
     "@types/node": "^24",
-    "@effect/vitest": "4.0.4",
+    "@effect/vitest": "4.1.4",
     "vite": "catalog:",
     "vitest": "catalog:",
     "vite-plus": "catalog:"

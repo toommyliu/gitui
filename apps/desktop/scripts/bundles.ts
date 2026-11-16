@@ -23,6 +23,8 @@ export const bundles: ReadonlyArray<BuildOptions> = [
     outfile: "dist/backend.mjs",
     format: "esm",
     external: ["bufferutil", "utf-8-validate"],
-    banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' },
+    banner: {
+      js: 'import { createRequire as createBannerRequire } from "node:module"; const require = createBannerRequire(import.meta.url);',
+    },
   },
 ]

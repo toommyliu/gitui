@@ -345,22 +345,31 @@ export const useCommand = (id: CommandId, run: () => void, enabled: () => boolea
 const createHold = (matches: (event: KeyboardEvent) => boolean) => {
   const [held, setHeld] = createSignal(false)
   let timer: ReturnType<typeof setTimeout> | undefined
-  const release = () => {
+  let down = false
+  let spent = false
+  const reset = () => {
     clearTimeout(timer)
+    down = false
+    spent = false
+    setHeld(false)
+  }
+  const spend = () => {
+    if (!down) return
+    clearTimeout(timer)
+    spent = true
     setHeld(false)
   }
   window.addEventListener("keydown", (event) => {
-    if (matches(event)) {
-      if (!event.repeat) {
-        clearTimeout(timer)
-        timer = setTimeout(() => setHeld(true), 400)
-      }
-    } else if (!(event.altKey && /^Digit\d$/.test(event.code))) release()
+    if (!matches(event)) return spend()
+    if (event.repeat || down) return
+    down = true
+    timer = setTimeout(() => spent || setHeld(true), 400)
   })
   window.addEventListener("keyup", (event) => {
-    if (matches(event)) release()
+    if (matches(event)) reset()
   })
-  window.addEventListener("blur", release)
+  window.addEventListener("pointerdown", spend, true)
+  window.addEventListener("blur", reset)
   return held
 }
 

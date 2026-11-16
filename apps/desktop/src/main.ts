@@ -27,7 +27,6 @@ const appOrigin = devUrl ?? APP_ORIGIN
 const icon = resolve(__dirname, "../resources", devUrl === undefined ? "icon.png" : "icon-dev.png")
 
 app.setName("gitui")
-app.commandLine.appendSwitch("force-color-profile", "srgb")
 if (process.env.GITUI_USER_DATA_DIR !== undefined) app.setPath("userData", process.env.GITUI_USER_DATA_DIR)
 
 protocol.registerSchemesAsPrivileged([

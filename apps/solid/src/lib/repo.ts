@@ -54,8 +54,10 @@ export const createRepo = (id: RepoId) => {
 
   const [network, setNetwork] = createSignal<Network | null>(null)
 
+  let streaming = false
   const stream = async <E>(kind: Network, request: (git: Client) => Stream.Stream<unknown, E>): Promise<Outcome> => {
-    if (network() !== null) return { ok: false, message: "Wait for the current fetch, pull or push to finish." }
+    if (streaming) return { ok: false, message: "Wait for the current fetch, pull or push to finish." }
+    streaming = true
     setNetwork(kind)
     try {
       await collect(request)
@@ -63,6 +65,7 @@ export const createRepo = (id: RepoId) => {
     } catch (error) {
       return { ok: false, message: describeError(error) }
     } finally {
+      streaming = false
       setNetwork(null)
       invalidate(["refs"])
     }

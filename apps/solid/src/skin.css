@@ -71,6 +71,10 @@
   rotate: none;
 }
 
+:has(> [data-slot="checkbox-input"]) {
+  position: relative;
+}
+
 :is([data-slot="checkbox"], [data-slot="tree-checkbox"]) {
   display: inline-flex;
   flex-shrink: 0;

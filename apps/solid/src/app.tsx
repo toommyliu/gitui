@@ -7,7 +7,7 @@ import { menuCommandIds, menuShortcutTable, runCommand, shortcut, useCommand } f
 import { toggleTheme } from "@/lib/theme"
 import { collect, connection } from "@/lib/rpc"
 import { backgroundFetch, changeColors, toggleDiffStyle, toggleFilesOpen, toggleWrapLines } from "@/lib/settings"
-import { active, closeRepo, cycleRepo, paths, reopenRepo, setActive, workspaceFor } from "@/lib/workspaces"
+import { active, closeRepo, cycleRepo, openFolders, paths, reopenRepo, setActive, workspaceFor } from "@/lib/workspaces"
 import { PanelLeft } from "./components/icons"
 import { CommandLog } from "./components/command-log"
 import { CommitPreviewCard } from "./components/commit-mention"
@@ -21,6 +21,7 @@ import { Tip } from "./components/ui"
 import { WorkspaceView } from "./components/workspace"
 
 const isMenuCommand = Schema.is(MenuCommand)
+const isFolders = Schema.is(Schema.Array(Schema.String))
 
 const fetchQuietly = (path: string) => {
   try {
@@ -79,6 +80,11 @@ export function App() {
     onCleanup(
       desktop.onCommand((value) => {
         if (isMenuCommand(value)) runCommand(menuCommandIds[value])
+      }),
+    )
+    onCleanup(
+      desktop.onOpenFolders((value) => {
+        if (isFolders(value)) void openFolders(value)
       }),
     )
   }

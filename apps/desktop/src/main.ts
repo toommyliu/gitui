@@ -108,15 +108,39 @@ const createWindow = () => {
 let backend: ChildProcess | undefined
 let quitting = false
 
+const foldersIn = (argv: ReadonlyArray<string>, workingDirectory: string) =>
+  argv
+    .slice(process.defaultApp ? 2 : 1)
+    .filter((arg) => !arg.startsWith("-"))
+    .map((arg) => resolve(workingDirectory, arg))
+
+const queuedFolders = foldersIn(process.argv, process.cwd())
+
+const openFolders = (folders: ReadonlyArray<string>) => {
+  queuedFolders.push(...folders)
+  for (const window of BrowserWindow.getAllWindows()) window.webContents.send("gitui:open-folders")
+}
+
+const showWindow = () => {
+  if (backend === undefined) return
+  const [window] = BrowserWindow.getAllWindows()
+  if (window === undefined) return createWindow()
+  if (window.isMinimized()) window.restore()
+  window.focus()
+}
+
 if (!app.requestSingleInstanceLock()) {
   console.error(`gitui is already running with ${app.getPath("userData")}, so this copy quit and focused that one.`)
   app.quit()
 } else {
-  app.on("second-instance", () => {
-    const [window] = BrowserWindow.getAllWindows()
-    if (window === undefined) return createWindow()
-    if (window.isMinimized()) window.restore()
-    window.focus()
+  app.on("second-instance", (_event, argv, workingDirectory) => {
+    openFolders(foldersIn(argv, workingDirectory))
+    showWindow()
+  })
+  app.on("open-file", (event, path) => {
+    event.preventDefault()
+    openFolders([path])
+    showWindow()
   })
 
   app.on("before-quit", () => {
@@ -146,6 +170,9 @@ if (!app.requestSingleInstanceLock()) {
       const rpcUrl = `ws://127.0.0.1:${started.port}/rpc`
       ipcMain.on("gitui:rpc-url", (event) => {
         event.returnValue = fromApp(event) ? rpcUrl : null
+      })
+      ipcMain.on("gitui:take-folders", (event) => {
+        event.returnValue = fromApp(event) ? queuedFolders.splice(0) : []
       })
       ipcMain.on("gitui:is-system-dark", (event) => {
         event.returnValue = fromApp(event) && nativeTheme.shouldUseDarkColors
@@ -185,10 +212,8 @@ if (!app.requestSingleInstanceLock()) {
         if (fromApp(event) && Schema.is(MenuShortcuts)(value)) updateMenu({ shortcuts: value })
       })
       updateMenu({})
-      createWindow()
-      app.on("activate", () => {
-        if (BrowserWindow.getAllWindows().length === 0) createWindow()
-      })
+      showWindow()
+      app.on("activate", showWindow)
     })
     .catch((error: unknown) => {
       dialog.showErrorBox("gitui couldn't start", error instanceof Error ? error.message : String(error))

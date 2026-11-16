@@ -8,7 +8,7 @@ import { basename, dirname } from "@/lib/format"
 import { chordOf, formatChord, shortcut } from "@/lib/hotkeys"
 import { forget, pinned, recent, togglePin } from "@/lib/places"
 import { call } from "@/lib/rpc"
-import { openRepo, paths } from "@/lib/workspaces"
+import { openFolders, openRepo, paths } from "@/lib/workspaces"
 import { ChevronRight, Folder, FolderGit, FolderOpen, Search, X } from "./icons"
 import { Button, Count, Kbd } from "./ui"
 
@@ -260,7 +260,7 @@ export function Picker() {
                 onClick={() =>
                   void bridge()
                     .pickFolder()
-                    .then((folder) => folder !== null && openRepo(folder))
+                    .then((folder) => openFolders(folder === null ? [] : [folder]))
                 }
               >
                 Choose a folder…

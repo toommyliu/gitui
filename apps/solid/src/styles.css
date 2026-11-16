@@ -164,6 +164,12 @@
   body {
     @apply bg-background text-[13px] text-foreground select-none;
     overflow: hidden;
+    /* Chromium fills tiles with nothing painted in them as solid color, which can come out one shade off from
+       painted tiles and shows as a band. A gradient this faint looks flat but keeps every tile painted. */
+    background-image: linear-gradient(
+      var(--background),
+      color-mix(in srgb, var(--background) 99.6%, var(--foreground))
+    );
   }
   input,
   textarea {

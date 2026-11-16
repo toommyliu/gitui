@@ -65,7 +65,7 @@ const createWorkspace = (path: string): Workspace =>
       })
       const opened = createMemo((): Opened => {
         const current = result()
-        return current.ok ? { ...current, repo: createRepo(current.info.id) } : current
+        return current.ok ? { ...current, repo: createRepo(current.info) } : current
       })
       const settled = () => {
         const current = opened()

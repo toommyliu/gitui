@@ -1,4 +1,4 @@
-import { allRefsVisible, type CommitRow, type GraphRow, LogExpired, type LogHandle, type Oid } from "@gitui/contracts"
+import { type CommitRow, type GraphRow, LogExpired, type LogHandle, type Oid } from "@gitui/contracts"
 import { createEffect, createSignal } from "solid-js"
 import type { Repo } from "./repo"
 import { call, subscribe } from "./rpc"
@@ -79,11 +79,11 @@ export const createLog = (repo: Repo, query: () => string) => {
   }
 
   createEffect(
-    () => ({ query: query(), refs: repo.track("refs"), opened: opened() }),
+    () => ({ query: query(), refs: repo.track("refs"), visibility: repo.visibility(), opened: opened() }),
     (current, previous) => {
       if (previous !== undefined && current.query !== previous.query) show(emptyCache(""), null)
       return subscribe(
-        (git) => git.OpenLog({ repo: repo.id, query: current.query, refs: allRefsVisible }),
+        (git) => git.OpenLog({ repo: repo.id, query: current.query, refs: current.visibility }),
         (log) => {
           setError(null)
           if (log.logId === cache.logId) {

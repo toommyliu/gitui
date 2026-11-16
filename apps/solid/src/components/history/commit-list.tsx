@@ -58,7 +58,7 @@ export function CommitList(props: {
   menu: (row: CommitRow) => JSX.Element
 }) {
   const repo = useRepo()
-  const labels = createMemo(() => refLabels(repo.refs(), repo.status().head))
+  const labels = createMemo(() => refLabels(repo.refs(), repo.status().head, repo.visibility()))
   const [menuRow, setMenuRow] = createSignal<CommitRow | null>(null)
   const inRange = (index: number) =>
     props.range !== null && index >= props.range.top && index <= props.range.bottom && index !== props.selected

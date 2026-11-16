@@ -1,6 +1,6 @@
 # @gitui/solid
 
-The Solid 2 client. It replaces `apps/web` view by view. It talks to the same server over the same RPC contracts.
+The Solid 2 client. It talks to the server over the RPC contracts in `packages/contracts`.
 
 - Solid is pinned to `2.0.0-rc.14` with UI SDK's patch for `@solidjs/web` (`patches/`). Raise it only together with `@ui-sdk/solid`'s tested range.
 - Before using ui-sdk, read `node_modules/@ui-sdk/solid/docs/llms.txt`, then only the component pages you need under `docs/components/`. To build a component ui-sdk doesn't ship, search `docs/core.md` by heading.

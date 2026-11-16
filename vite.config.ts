@@ -9,14 +9,13 @@ export default defineConfig({
     trailingComma: "all",
     sortPackageJson: false,
     sortTailwindcss: {
-      stylesheet: "apps/web/src/globals.css",
-      functions: ["cn", "cva"],
+      stylesheet: "apps/solid/src/styles.css",
     },
     ignorePatterns: ["pnpm-lock.yaml", "**/dist/**", "prompt.txt"],
   },
   lint: {
     extends: [recommended],
-    plugins: ["typescript", "react", "import", "unicorn", "oxc"],
+    plugins: ["typescript", "import", "unicorn", "oxc"],
     categories: {
       correctness: "error",
     },
@@ -25,9 +24,6 @@ export default defineConfig({
     },
     ignorePatterns: ["**/dist/**", "**/node_modules/**"],
     rules: {
-      "react/react-in-jsx-scope": "off",
-      "react/rules-of-hooks": "error",
-      "react/exhaustive-deps": "warn",
       "no-restricted-imports": [
         "error",
         {
@@ -41,20 +37,12 @@ export default defineConfig({
       ],
       "effecttsgo/unstable-api-usage": "off",
       "import/default": "off",
-      "react/incompatible-library": "off",
       "vite-plus/prefer-vite-plus-imports": "error",
     },
     overrides: [
       {
         files: ["apps/solid/**"],
         rules: {
-          "react/rules-of-hooks": "off",
-          "react/exhaustive-deps": "off",
-          "react/immutability": "off",
-          "react/refs": "off",
-          "react/static-components": "off",
-          "react/purity": "off",
-          "react/jsx-key": "off",
           "no-unassigned-vars": "off",
         },
       },

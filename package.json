@@ -17,8 +17,7 @@
     "bench": "pnpm -F @gitui/server bench",
     "check": "vp fmt --check && vp lint --deny-warnings && vp run -r typecheck && vp run -r test",
     "serve": "pnpm -F @gitui/solid build && pnpm -F @gitui/server start",
-    "serve:desktop": "pnpm -F @gitui/solid build && pnpm -F @gitui/desktop build && pnpm -F @gitui/desktop start",
-    "dev:react": "node scripts/dev.ts --filter=@gitui/web --filter=@gitui/server"
+    "serve:desktop": "pnpm -F @gitui/solid build && pnpm -F @gitui/desktop build && pnpm -F @gitui/desktop start"
   },
   "devDependencies": {
     "@effect/tsgo": "0.51.1",

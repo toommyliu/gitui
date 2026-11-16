@@ -5,8 +5,6 @@ packages:
 minimumReleaseAgeExclude:
   - "@ui-sdk/core"
   - "@ui-sdk/solid"
-  - "@tanstack/react-hotkeys"
-  - "@tanstack/hotkeys"
 
 allowBuilds:
   electron: true

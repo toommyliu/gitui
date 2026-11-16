@@ -27,15 +27,13 @@ vp run dev:desktop
 
 ## Layout
 
-| Path                         | What it holds                                                                      |
-| ---------------------------- | ---------------------------------------------------------------------------------- |
-| `packages/contracts`         | Effect Schema domain types and the RPC group shared by server and client           |
-| `packages/git`               | git runner, NUL-delimited output parsers, commit graph layout, repo service        |
-| `apps/server`                | RPC handlers, file watcher, static file serving                                    |
-| `apps/solid`                 | Solid client: changes, history, branches and stashes views, diffs, commit graph    |
-| `apps/web`                   | Previous React client, kept until it is removed                                    |
-| `apps/desktop`               | Electron shell: main process, preload bridge, and the server's child-process entry |
-| `apps/web/src/components/ui` | shadcn components (base-ui, mira preset)                                           |
+| Path                 | What it holds                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| `packages/contracts` | Effect Schema domain types and the RPC group shared by server and client           |
+| `packages/git`       | git runner, NUL-delimited output parsers, commit graph layout, repo service        |
+| `apps/server`        | RPC handlers, file watcher, static file serving                                    |
+| `apps/solid`         | Solid client: changes, history, branches and stashes views, diffs, commit graph    |
+| `apps/desktop`       | Electron shell: main process, preload bridge, and the server's child-process entry |
 
 ## Performance
 

@@ -15,7 +15,7 @@ import * as RpcClient from "effect/rpc/RpcClient"
 import * as RpcSerialization from "effect/rpc/RpcSerialization"
 import { makeRepo } from "../../../packages/git/src/testRepo.ts"
 import { serverLayer } from "./server.ts"
-import { filterFiles } from "../../web/src/lib/change-search.ts"
+import { filterFiles } from "../../solid/src/lib/change-search.ts"
 
 const clientEffect = Effect.gen(function* () {
   const { address } = yield* HttpServer.HttpServer

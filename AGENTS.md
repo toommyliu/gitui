@@ -3,7 +3,6 @@
 A git GUI in the spirit of Sublime Merge. A Node server runs git and serves a Solid client over a WebSocket. An Electron app wraps the same client and starts the server as a child process.
 
 - `apps/solid`: the client, built with Solid 2 and ui-sdk. Read `apps/solid/AGENTS.md` before changing it.
-- `apps/web`: the previous React client. `vp run dev:react` still runs it until it is removed.
 - `apps/server`: Node server that exposes git over RPC.
 - `apps/desktop`: Electron shell.
 - `packages/git`: runs git and parses its output.

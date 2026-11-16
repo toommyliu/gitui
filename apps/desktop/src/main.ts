@@ -77,6 +77,8 @@ const createWindow = () => {
     },
   })
   window.once("ready-to-show", () => window.show())
+  window.on("enter-full-screen", () => window.webContents.send("gitui:full-screen", true))
+  window.on("leave-full-screen", () => window.webContents.send("gitui:full-screen", false))
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
     return { action: "deny" }
@@ -140,6 +142,9 @@ if (!app.requestSingleInstanceLock()) {
       const rpcUrl = `ws://127.0.0.1:${started.port}/rpc`
       ipcMain.on("gitui:rpc-url", (event) => {
         event.returnValue = fromApp(event) ? rpcUrl : null
+      })
+      ipcMain.on("gitui:is-full-screen", (event) => {
+        event.returnValue = fromApp(event) && BrowserWindow.fromWebContents(event.sender)?.isFullScreen() === true
       })
       ipcMain.handle("gitui:pick-folder", async (event) => {
         const window = BrowserWindow.fromWebContents(event.sender)

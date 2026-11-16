@@ -18,4 +18,6 @@ contextBridge.exposeInMainWorld("gitui", {
   setMenuShortcuts: (shortcuts: unknown) => ipcRenderer.send("gitui:menu-shortcuts", shortcuts),
   onTheme: subscribe("gitui:theme"),
   onCommand: subscribe("gitui:command"),
+  isFullScreen: () => ipcRenderer.sendSync("gitui:is-full-screen") === true,
+  onFullScreen: subscribe("gitui:full-screen"),
 } satisfies DesktopBridge)

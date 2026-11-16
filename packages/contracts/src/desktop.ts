@@ -42,6 +42,8 @@ export interface DesktopBridge {
   readonly setMenuShortcuts: (shortcuts: MenuShortcuts) => void
   readonly onTheme: (listener: (theme: unknown) => void) => () => void
   readonly onCommand: (listener: (command: unknown) => void) => () => void
+  readonly isFullScreen: () => boolean
+  readonly onFullScreen: (listener: (fullScreen: unknown) => void) => () => void
 }
 
 export const menuCommands = [

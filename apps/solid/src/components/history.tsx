@@ -264,7 +264,7 @@ export function HistoryView(props: { focused: boolean; revealed: { readonly oid:
       <div ref={detailPane} class="flex h-full min-h-0 flex-col">
         <OutcomeStrip outcome={actions.outcome()} onDismiss={() => actions.setOutcome(null)} />
         <Show when={selected() !== null} fallback={empty() ? <Empty title="No commit selected" /> : pending()}>
-          <Boundary on={rangeKey() ?? selected()} title="Couldn't load this commit">
+          <Boundary on={rangeKey() ?? picked()} title="Couldn't load this commit">
             <Show
               when={span()}
               fallback={

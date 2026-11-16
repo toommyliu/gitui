@@ -41,6 +41,7 @@ export function FilesPane(props: {
   diff: FileDiff
   empty: string
   onShowLarge: () => void
+  root?: string
 }) {
   const [file, setFile] = createSignal<string | null>(null)
   const [handle, setHandle] = createSignal<DiffHandle>()
@@ -131,7 +132,7 @@ export function FilesPane(props: {
                     Copy path
                   </MenuItem>
                   <OpenInItems
-                    repo={repo.id}
+                    repo={props.root ?? repo.id}
                     path={path}
                     disabled={props.files.find((change) => change.path === path)?.change === "deleted"}
                     onFailure={setFailure}

@@ -380,6 +380,7 @@ export function WorktreePreview(props: { path: string }) {
               diff={loaded().diff}
               empty="No uncommitted changes"
               onShowLarge={() => setAllowLarge(true)}
+              root={props.path}
             />
           )}
         </Show>

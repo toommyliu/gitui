@@ -1,3 +1,22 @@
+diff --git a/dist/components/resizable/resizable-handles.js b/dist/components/resizable/resizable-handles.js
+index f344e73..a7fc5c6 100644
+--- a/dist/components/resizable/resizable-handles.js
++++ b/dist/components/resizable/resizable-handles.js
+@@ -25,7 +25,13 @@ function releaseHandle(target) {
+   updateCursor(target.el.ownerDocument);
+ }
+ var refreshCursor = (doc) => updateCursor(doc);
+-var owns = (target, top) => target.el.contains(top) || target.root()?.contains(top);
++var owns = (target, top) => {
++  const layer = top.closest?.(":popover-open");
++  if (layer && !layer.contains(target.el)) {
++    return false;
++  }
++  return target.el.contains(top) || target.root()?.contains(top);
++};
+ function hitTest(x, y, coarse, top) {
+   if (top && !someOwns(top)) {
+     return [];
 diff --git a/dist/components/tree/tree-api.js b/dist/components/tree/tree-api.js
 index d0e31c971478f74c403478e01ff0ca22c5b2e2d7..c8c4d541780f65f323346a00663856145bbaab53 100644
 --- a/dist/components/tree/tree-api.js

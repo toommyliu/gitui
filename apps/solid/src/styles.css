@@ -1,0 +1,204 @@
+@layer ui-sdk;
+
+@import "tailwindcss";
+@import "./skin.css" layer(components);
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --font-mono--font-feature-settings: "calt" 0, "liga" 0;
+}
+
+@theme inline {
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-selection: var(--selection);
+  --color-selection-foreground: var(--selection-foreground);
+  --color-change-added: var(--change-added);
+  --color-change-deleted: var(--change-deleted);
+  --color-change-modified: var(--change-modified);
+  --color-change-renamed: var(--change-renamed);
+  --font-sans: "Inter Variable", sans-serif;
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+}
+
+:root {
+  --background: oklch(0.99 0.002 260);
+  --foreground: oklch(0.21 0.006 260);
+  --card: oklch(0.99 0.002 260);
+  --card-foreground: oklch(0.21 0.006 260);
+  --popover: oklch(0.97 0.003 260);
+  --popover-foreground: oklch(0.21 0.006 260);
+  --primary: oklch(0.52 0.11 250);
+  --link: oklch(0.52 0.11 250);
+  --primary-foreground: oklch(0.99 0.002 260);
+  --secondary: oklch(0.915 0.005 260);
+  --secondary-foreground: oklch(0.21 0.006 260);
+  --muted: oklch(0.915 0.005 260);
+  --muted-foreground: oklch(0.49 0.012 260);
+  --accent: oklch(0.915 0.005 260);
+  --accent-foreground: oklch(0.21 0.006 260);
+  --destructive: oklch(0.55 0.2 25);
+  --border: oklch(0.91 0.005 260);
+  --input: oklch(0.86 0.007 260);
+  --ring: oklch(0.62 0.08 250);
+  --selection: oklch(0.93 0.018 250);
+  --selection-inactive: oklch(0.93 0.005 260);
+  --selection-foreground: oklch(0.21 0.006 260);
+  --scrollbar: oklch(0.83 0.006 260);
+  --scrollbar-hover: oklch(0.7 0.008 260);
+  --change-added: oklch(0.54 0.14 150);
+  --change-deleted: oklch(0.55 0.2 25);
+  --change-modified: oklch(0.52 0.11 65);
+  --change-renamed: oklch(0.54 0.19 320);
+  --conflict-ours: oklch(0.42 0.09 164);
+  --conflict-theirs: oklch(0.43 0.14 295);
+  --diff-addition: oklch(0.62 0.14 150);
+  --diff-deletion: oklch(0.62 0.18 25);
+  --diff-addition-emphasis: oklch(0.88 0.06 150);
+  --diff-deletion-emphasis: oklch(0.89 0.05 25);
+
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: oklch(0.2 0.006 260);
+  --foreground: oklch(0.94 0.004 260);
+  --card: oklch(0.2 0.006 260);
+  --card-foreground: oklch(0.94 0.004 260);
+  --popover: oklch(0.18 0.006 260);
+  --popover-foreground: oklch(0.94 0.004 260);
+  --primary: oklch(0.54 0.1 250);
+  --link: oklch(0.72 0.1 250);
+  --primary-foreground: oklch(0.99 0.002 260);
+  --secondary: oklch(0.36 0.008 260);
+  --secondary-foreground: oklch(0.94 0.004 260);
+  --muted: oklch(0.27 0.008 260);
+  --muted-foreground: oklch(0.76 0.01 260);
+  --accent: oklch(0.27 0.008 260);
+  --accent-foreground: oklch(0.94 0.004 260);
+  --destructive: oklch(0.66 0.2 22);
+  --border: oklch(0.29 0.008 260);
+  --input: oklch(0.31 0.008 260);
+  --ring: oklch(0.58 0.08 250);
+  --selection: oklch(0.3 0.028 250);
+  --selection-inactive: oklch(0.3 0.008 260);
+  --selection-foreground: oklch(0.94 0.004 260);
+  --scrollbar: oklch(0.4 0.008 260);
+  --scrollbar-hover: oklch(0.52 0.01 260);
+  --change-added: oklch(0.75 0.15 150);
+  --change-deleted: oklch(0.7 0.18 22);
+  --change-modified: oklch(0.8 0.14 75);
+  --change-renamed: oklch(0.72 0.16 320);
+  --conflict-ours: oklch(0.79 0.095 164);
+  --conflict-theirs: oklch(0.81 0.1 295);
+  --diff-addition: oklch(0.65 0.15 150);
+  --diff-deletion: oklch(0.65 0.18 22);
+  --diff-addition-emphasis: oklch(0.36 0.07 150);
+  --diff-deletion-emphasis: oklch(0.34 0.09 22);
+}
+
+:root {
+  --lane-0: oklch(0.55 0.12 250);
+  --lane-1: oklch(0.56 0.14 150);
+  --lane-2: oklch(0.62 0.13 65);
+  --lane-3: oklch(0.58 0.2 345);
+  --lane-4: oklch(0.58 0.09 205);
+  --lane-5: oklch(0.56 0.2 25);
+  --lane-6: oklch(0.55 0.2 295);
+  --lane-7: oklch(0.6 0.13 115);
+}
+
+.dark {
+  --lane-0: oklch(0.7 0.11 250);
+  --lane-1: oklch(0.74 0.16 150);
+  --lane-2: oklch(0.8 0.15 75);
+  --lane-3: oklch(0.72 0.17 345);
+  --lane-4: oklch(0.76 0.12 205);
+  --lane-5: oklch(0.7 0.18 25);
+  --lane-6: oklch(0.7 0.16 295);
+  --lane-7: oklch(0.8 0.15 115);
+}
+
+@utility section-label {
+  @apply text-2xs font-medium text-muted-foreground;
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+    outline-color: var(--ring);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar) transparent;
+  }
+  *:hover {
+    scrollbar-color: var(--scrollbar-hover) transparent;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+    overscroll-behavior: none;
+  }
+  body {
+    @apply bg-background text-[13px] text-foreground select-none;
+    overflow: hidden;
+  }
+  input,
+  textarea {
+    @apply select-text;
+  }
+}
+
+:root[data-change-colors="blue-orange"] {
+  --change-added: oklch(0.52 0.15 255);
+  --change-deleted: oklch(0.6 0.17 48);
+  --diff-addition: oklch(0.6 0.15 255);
+  --diff-deletion: oklch(0.66 0.17 48);
+  --diff-addition-emphasis: oklch(0.88 0.06 255);
+  --diff-deletion-emphasis: oklch(0.9 0.06 52);
+}
+
+.dark[data-change-colors="blue-orange"] {
+  --change-added: oklch(0.72 0.14 255);
+  --change-deleted: oklch(0.76 0.15 52);
+  --diff-addition: oklch(0.65 0.15 255);
+  --diff-deletion: oklch(0.7 0.16 50);
+  --diff-addition-emphasis: oklch(0.36 0.08 255);
+  --diff-deletion-emphasis: oklch(0.38 0.08 50);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--primary) 35%, transparent);
+}
+
+[data-titlebar] {
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+[data-titlebar] :is(button, a, input, [role="tab"], [role="button"], [data-slot]) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}

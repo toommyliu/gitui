@@ -76,16 +76,13 @@ function VisibilityToggle(props: { hidden: boolean; onToggle: () => void }) {
   return (
     <Tip label={label()}>
       {(trigger) => (
-        <button
+        <Button
           {...trigger}
-          type="button"
+          variant="ghost"
           tabindex={-1}
           data-visibility
           aria-label={label()}
-          class={[
-            "-me-1 size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
-            props.hidden ? "flex" : "hidden group-hover/ref:flex",
-          ]}
+          class={`-me-1 w-6 justify-center px-0 ${props.hidden ? "" : "not-group-hover/ref:hidden"}`}
           onPointerDown={(event) => event.stopPropagation()}
           onDblClick={(event) => event.stopPropagation()}
           onClick={(event) => {
@@ -95,7 +92,7 @@ function VisibilityToggle(props: { hidden: boolean; onToggle: () => void }) {
           }}
         >
           {props.hidden ? <EyeOff /> : <Eye />}
-        </button>
+        </Button>
       )}
     </Tip>
   )

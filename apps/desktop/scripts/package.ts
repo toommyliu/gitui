@@ -12,7 +12,7 @@ await Promise.all([
   cp(join(desktop, "dist/main.cjs"), join(app, "dist/main.cjs")),
   cp(join(desktop, "dist/preload.cjs"), join(app, "dist/preload.cjs")),
   cp(join(desktop, "resources/icon.png"), join(app, "resources/icon.png")),
-  cp(resolve(desktop, "../web/dist"), join(app, "web"), { recursive: true }),
+  cp(resolve(desktop, "../solid/dist"), join(app, "web"), { recursive: true }),
   writeFile(
     join(app, "package.json"),
     JSON.stringify(

@@ -9,7 +9,7 @@
   "scripts": {
     "build": "node scripts/build.ts",
     "dev": "node scripts/dev.ts",
-    "package": "vp run @gitui/web#build && vp run build && node scripts/package.ts && electron-builder --publish never",
+    "package": "vp run @gitui/solid#build && vp run build && node scripts/package.ts && electron-builder --publish never",
     "start": "node scripts/start.ts",
     "typecheck": "tsc --noEmit",
     "test": "vp test run"
@@ -18,7 +18,7 @@
     "@effect/platform-node": "4.0.4",
     "@gitui/contracts": "workspace:*",
     "@gitui/server": "workspace:*",
-    "@gitui/web": "workspace:*",
+    "@gitui/solid": "workspace:*",
     "effect": "4.0.4"
   },
   "devDependencies": {

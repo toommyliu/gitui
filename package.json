@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "build": "vp run -r build",
-    "dev": "node scripts/dev.ts --filter=@gitui/web --filter=@gitui/server",
-    "dev:desktop": "node scripts/dev.ts --filter=@gitui/web --filter=@gitui/desktop",
+    "dev": "node scripts/dev.ts --filter=@gitui/solid --filter=@gitui/server",
+    "dev:desktop": "node scripts/dev.ts --filter=@gitui/solid --filter=@gitui/desktop",
     "package:desktop": "vp run @gitui/desktop#package",
     "typecheck": "vp run -r typecheck",
     "lint": "vp lint",
@@ -16,8 +16,9 @@
     "test": "vp run -r test",
     "bench": "pnpm -F @gitui/server bench",
     "check": "vp fmt --check && vp lint --deny-warnings && vp run -r typecheck && vp run -r test",
-    "serve": "pnpm -F @gitui/web build && pnpm -F @gitui/server start",
-    "serve:desktop": "pnpm -F @gitui/web build && pnpm -F @gitui/desktop build && pnpm -F @gitui/desktop start"
+    "serve": "pnpm -F @gitui/solid build && pnpm -F @gitui/server start",
+    "serve:desktop": "pnpm -F @gitui/solid build && pnpm -F @gitui/desktop build && pnpm -F @gitui/desktop start",
+    "dev:react": "node scripts/dev.ts --filter=@gitui/web --filter=@gitui/server"
   },
   "devDependencies": {
     "@effect/tsgo": "0.51.1",

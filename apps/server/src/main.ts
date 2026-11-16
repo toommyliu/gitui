@@ -6,6 +6,6 @@ import { serverLayer } from "./server.ts"
 serverLayer({
   host: process.env.HOST ?? "127.0.0.1",
   port: Number(process.env.PORT ?? 4600),
-  webDist: resolve(import.meta.dirname, "../../web/dist"),
+  webDist: resolve(import.meta.dirname, "../../solid/dist"),
   trustedOrigins: [],
 }).pipe(Layer.launch, NodeRuntime.runMain)

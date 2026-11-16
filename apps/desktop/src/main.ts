@@ -21,7 +21,7 @@ import { buildMenu } from "./menu.ts"
 import { getOpenApps, openIn } from "./open-in.ts"
 import { APP_ORIGIN, BackendReady, SCHEME } from "./protocol.ts"
 
-const webDist = app.isPackaged ? resolve(__dirname, "../web") : resolve(__dirname, "../../web/dist")
+const webDist = app.isPackaged ? resolve(__dirname, "../web") : resolve(__dirname, "../../solid/dist")
 const devUrl = app.isPackaged ? undefined : process.env.GITUI_DEV_URL
 const appOrigin = devUrl ?? APP_ORIGIN
 const icon = resolve(__dirname, "../resources", devUrl === undefined ? "icon.png" : "icon-dev.png")
@@ -70,6 +70,9 @@ const createWindow = () => {
     show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#141619" : "#fbfcfd",
     icon,
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 14, y: 11 } }
+      : {}),
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,

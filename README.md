@@ -9,7 +9,7 @@ pnpm install
 pnpm serve
 ```
 
-`pnpm serve` builds the web app and starts the server. The Open tab lists the repositories you've opened, most recent first, and skips any that no longer exist. Type a name to filter them, or a path starting with `~/` or `/` to browse folders. Before you've opened anything, it browses your home folder. The sidebar lists Home, folders you pin with `Mod+P`, and the folders your recent repositories live in. The footer shows the keys for the highlighted row.
+`pnpm serve` builds the client and starts the server. The Open tab lists the repositories you've opened, most recent first, and skips any that no longer exist. Type a name to filter them, or a path starting with `~/` or `/` to browse folders. Before you've opened anything, it browses your home folder. The sidebar lists Home, folders you pin with `Mod+P`, and the folders your recent repositories live in. The footer shows the keys for the highlighted row.
 
 | Variable | Default     | Meaning         |
 | -------- | ----------- | --------------- |
@@ -32,7 +32,8 @@ vp run dev:desktop
 | `packages/contracts`         | Effect Schema domain types and the RPC group shared by server and client           |
 | `packages/git`               | git runner, NUL-delimited output parsers, commit graph layout, repo service        |
 | `apps/server`                | RPC handlers, file watcher, static file serving                                    |
-| `apps/web`                   | React client: tabs, locations sidebar, commit graph, commit and working-copy views |
+| `apps/solid`                 | Solid client: changes, history, branches and stashes views, diffs, commit graph    |
+| `apps/web`                   | Previous React client, kept until it is removed                                    |
 | `apps/desktop`               | Electron shell: main process, preload bridge, and the server's child-process entry |
 | `apps/web/src/components/ui` | shadcn components (base-ui, mira preset)                                           |
 

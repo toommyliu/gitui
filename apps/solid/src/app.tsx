@@ -11,6 +11,7 @@ import { active, closeRepo, cycleRepo, openFolders, paths, reopenRepo, setActive
 import { PanelLeft } from "./components/icons"
 import { CommandLog } from "./components/command-log"
 import { CommitPreviewCard } from "./components/commit-mention"
+import { FileIconSprite } from "./components/file-icon"
 import { CredentialPrompts } from "./components/credentials"
 import { Palette } from "./components/palette"
 import { Picker } from "./components/picker"
@@ -159,6 +160,7 @@ export function App() {
       <CredentialPrompts />
       <Palette />
       <Settings />
+      <FileIconSprite />
     </div>
   )
 }

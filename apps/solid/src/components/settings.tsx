@@ -16,6 +16,8 @@ import {
   diffStyle,
   diffTextSize,
   diffTheme,
+  fileIcons,
+  iconColors,
   hideTests,
   ignoreWhitespace,
   lineNumbers,
@@ -25,10 +27,14 @@ import {
   setDateStyle,
   setDiffTextSize,
   setDiffTheme,
+  setFileIcons,
+  setIconColors,
   setIgnoreWhitespace,
   setLineNumbers,
+  setStatusSide,
   setSubjectGuide,
   setWordDiff,
+  statusSide,
   subjectGuide,
   toggleDiffStyle,
   toggleHideTests,
@@ -111,6 +117,7 @@ function CodeTheme() {
 
 const tabs = [
   ["general", "General"],
+  ["appearance", "Appearance"],
   ["diffs", "Diffs"],
   ["commits", "Commits"],
   ["shortcuts", "Keyboard shortcuts"],
@@ -122,6 +129,7 @@ const isTab = (value: string | null): value is Tab => tabs.some(([id]) => id ===
 
 interface Entry {
   readonly tab: Exclude<Tab, "shortcuts">
+  readonly group?: string
   readonly label: string
   readonly description?: string
   readonly keywords: string
@@ -130,7 +138,7 @@ interface Entry {
 
 const entries: ReadonlyArray<Entry> = [
   {
-    tab: "general",
+    tab: "appearance",
     label: "Theme",
     keywords: "appearance system light dark mode",
     control: () => (
@@ -141,6 +149,77 @@ const entries: ReadonlyArray<Entry> = [
           ["system", "System"],
           ["light", "Light"],
           ["dark", "Dark"],
+        ]}
+      />
+    ),
+  },
+  {
+    tab: "appearance",
+    group: "Colors",
+    label: "Code theme",
+    description: "Syntax colors for code in diffs.",
+    keywords: "syntax highlighting colors",
+    control: () => <CodeTheme />,
+  },
+  {
+    tab: "appearance",
+    group: "Colors",
+    label: "Change colors",
+    description: "For added and removed lines, counts and file letters.",
+    keywords: "red green blue orange color blind colorblind accessibility",
+    control: () => (
+      <Choice
+        value={changeColors()}
+        onChange={setChangeColors}
+        options={[
+          ["red-green", "Red/green"],
+          ["blue-orange", "Blue/orange"],
+        ]}
+      />
+    ),
+  },
+  {
+    tab: "appearance",
+    group: "File tree",
+    label: "File icons",
+    description: "Minimal shows one icon for every file. Complete adds icons for tools like Vite, ESLint and Docker.",
+    keywords: "file tree type extension language",
+    control: () => (
+      <Choice
+        value={fileIcons()}
+        onChange={setFileIcons}
+        options={[
+          ["off", "Off"],
+          ["minimal", "Minimal"],
+          ["standard", "Standard"],
+          ["complete", "Complete"],
+        ]}
+      />
+    ),
+  },
+  {
+    tab: "appearance",
+    group: "File tree",
+    label: "Color file icons",
+    description: "Tints each icon by language.",
+    keywords: "file tree icon colors",
+    control: () => (
+      <Toggle checked={iconColors() === "on"} onChange={(checked) => setIconColors(checked ? "on" : "off")} />
+    ),
+  },
+  {
+    tab: "appearance",
+    group: "File tree",
+    label: "Status letters",
+    description: "Which side of the file name M, A, D and the other change letters sit on.",
+    keywords: "file tree git status letter modified added deleted left right",
+    control: () => (
+      <Choice
+        value={statusSide()}
+        onChange={setStatusSide}
+        options={[
+          ["left", "Left"],
+          ["right", "Right"],
         ]}
       />
     ),
@@ -181,13 +260,23 @@ const entries: ReadonlyArray<Entry> = [
   },
   {
     tab: "diffs",
-    label: "Code theme",
-    description: "Syntax colors for code in diffs.",
-    keywords: "syntax highlighting colors",
-    control: () => <CodeTheme />,
+    group: "Display",
+    label: "Layout",
+    keywords: "unified split side by side",
+    control: () => (
+      <Choice
+        value={diffStyle()}
+        onChange={toggleDiffStyle}
+        options={[
+          ["unified", "Unified"],
+          ["split", "Split"],
+        ]}
+      />
+    ),
   },
   {
     tab: "diffs",
+    group: "Display",
     label: "Text size",
     keywords: "font zoom small medium large",
     control: () => (
@@ -204,21 +293,24 @@ const entries: ReadonlyArray<Entry> = [
   },
   {
     tab: "diffs",
-    label: "Layout",
-    keywords: "unified split side by side",
+    group: "Display",
+    label: "Line numbers",
+    keywords: "gutter",
     control: () => (
-      <Choice
-        value={diffStyle()}
-        onChange={toggleDiffStyle}
-        options={[
-          ["unified", "Unified"],
-          ["split", "Split"],
-        ]}
-      />
+      <Toggle checked={lineNumbers() === "on"} onChange={(checked) => setLineNumbers(checked ? "on" : "off")} />
     ),
   },
   {
     tab: "diffs",
+    group: "Display",
+    label: "Wrap lines",
+    description: "Fit long lines to the pane.",
+    keywords: "word wrap overflow scroll",
+    control: () => <Toggle checked={wrapLines()} onChange={toggleWrapLines} />,
+  },
+  {
+    tab: "diffs",
+    group: "Marking changes",
     label: "Show changes with",
     description: "How added and removed lines are marked.",
     keywords: "signs plus minus markers indicators color",
@@ -236,22 +328,7 @@ const entries: ReadonlyArray<Entry> = [
   },
   {
     tab: "diffs",
-    label: "Change colors",
-    description: "For added and removed lines, counts and file letters.",
-    keywords: "red green blue orange color blind colorblind accessibility",
-    control: () => (
-      <Choice
-        value={changeColors()}
-        onChange={setChangeColors}
-        options={[
-          ["red-green", "Red/green"],
-          ["blue-orange", "Blue/orange"],
-        ]}
-      />
-    ),
-  },
-  {
-    tab: "diffs",
+    group: "Marking changes",
     label: "Highlight changed words",
     description: "Marks the exact part of a line that changed.",
     keywords: "word character inline intraline",
@@ -269,21 +346,7 @@ const entries: ReadonlyArray<Entry> = [
   },
   {
     tab: "diffs",
-    label: "Line numbers",
-    keywords: "gutter",
-    control: () => (
-      <Toggle checked={lineNumbers() === "on"} onChange={(checked) => setLineNumbers(checked ? "on" : "off")} />
-    ),
-  },
-  {
-    tab: "diffs",
-    label: "Wrap lines",
-    description: "Fit long lines to the pane.",
-    keywords: "word wrap overflow scroll",
-    control: () => <Toggle checked={wrapLines()} onChange={toggleWrapLines} />,
-  },
-  {
-    tab: "diffs",
+    group: "Filtering",
     label: "Ignore whitespace",
     description: "Applies to commits, stashes and comparisons, not uncommitted changes.",
     keywords: "spaces tabs indentation",
@@ -291,6 +354,7 @@ const entries: ReadonlyArray<Entry> = [
   },
   {
     tab: "diffs",
+    group: "Filtering",
     label: "Hide tests",
     description: "Covers fixtures, mocks and snapshots too. Changes still lists them so you can stage them.",
     keywords: "test files fixtures mocks snapshots",
@@ -314,6 +378,26 @@ const entries: ReadonlyArray<Entry> = [
     ),
   },
 ]
+
+function SettingGroup(props: { entries: ReadonlyArray<Entry> }) {
+  const sections = () =>
+    props.entries.reduce<Array<{ group: string | undefined; entries: Array<Entry> }>>((all, entry) => {
+      const last = all.at(-1)
+      if (last !== undefined && last.group === entry.group) last.entries.push(entry)
+      else all.push({ group: entry.group, entries: [entry] })
+      return all
+    }, [])
+  return (
+    <For each={sections()}>
+      {(section) => (
+        <section class="flex flex-col">
+          <Show when={section.group}>{(group) => <h3 class="pt-4 pb-1 section-label">{group()}</h3>}</Show>
+          <Rows entries={section.entries} />
+        </section>
+      )}
+    </For>
+  )
+}
 
 const matches = (entry: Entry, needle: string) =>
   `${entry.label} ${entry.description ?? ""} ${entry.keywords}`.toLowerCase().includes(needle)
@@ -393,7 +477,7 @@ export function Settings() {
   return (
     <Dialog open={open()} onOpenChange={(next) => setOpen(next)}>
       <DialogBackdrop />
-      <DialogContent class="h-[min(560px,calc(100dvh-2rem))] w-[min(720px,calc(100%-2rem))] gap-0 overflow-hidden p-0">
+      <DialogContent class="h-[min(680px,calc(100dvh-2rem))] w-[min(860px,calc(100%-2rem))] gap-0 overflow-hidden p-0">
         <div class="flex h-9 shrink-0 items-center border-b ps-4 pe-1.5">
           <DialogTitle class="flex-1 text-xs">Settings</DialogTitle>
           <DialogClose
@@ -447,7 +531,7 @@ export function Settings() {
                   </TabsPanel>
                 ) : (
                   <TabsPanel value={id} class={[panel, "px-4"]}>
-                    <Rows entries={entries.filter((entry) => entry.tab === id)} />
+                    <SettingGroup entries={entries.filter((entry) => entry.tab === id)} />
                   </TabsPanel>
                 )
               }

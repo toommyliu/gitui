@@ -208,3 +208,114 @@
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+
+:root {
+  --icon-gray: #84848a;
+  --icon-red: #d52c36;
+  --icon-vermilion: #ff8c5b;
+  --icon-orange: #d47628;
+  --icon-yellow: #d5a910;
+  --icon-green: #199f43;
+  --icon-teal: #17a5af;
+  --icon-cyan: #1ca1c7;
+  --icon-blue: #1a85d4;
+  --icon-indigo: #693acf;
+  --icon-purple: #a631be;
+  --icon-pink: #d32a61;
+  --icon-mauve: #594c5b;
+}
+.dark {
+  --icon-gray: #adadb1;
+  --icon-red: #ff6762;
+  --icon-vermilion: #d5512f;
+  --icon-orange: #ffa359;
+  --icon-yellow: #ffd452;
+  --icon-green: #5ecc71;
+  --icon-teal: #64d1db;
+  --icon-cyan: #68cdf2;
+  --icon-blue: #69b1ff;
+  --icon-indigo: #9d6afb;
+  --icon-purple: #d568ea;
+  --icon-pink: #ff678d;
+  --icon-mauve: #79697b;
+}
+
+[data-file-icon] {
+  color: var(--muted-foreground);
+}
+[data-icon-colors] {
+  & [data-file-icon="default"],
+  & [data-file-icon="text"] {
+    color: var(--icon-gray);
+  }
+  &
+    :is(
+      [data-file-icon="npm"],
+      [data-file-icon="postcss"],
+      [data-file-icon="ruby"],
+      [data-file-icon="svelte"],
+      [data-file-icon="yml"]
+    ) {
+    color: var(--icon-red);
+  }
+  & [data-file-icon="git"] {
+    color: var(--icon-vermilion);
+  }
+  &
+    :is(
+      [data-file-icon="claude"],
+      [data-file-icon="html"],
+      [data-file-icon="json"],
+      [data-file-icon="rust"],
+      [data-file-icon="svg"],
+      [data-file-icon="swift"],
+      [data-file-icon="zig"],
+      [data-file-icon="zip"]
+    ) {
+    color: var(--icon-orange);
+  }
+  & :is([data-file-icon="babel"], [data-file-icon="browserslist"], [data-file-icon="javascript"]) {
+    color: var(--icon-yellow);
+  }
+  & :is([data-file-icon="bash"], [data-file-icon="markdown"], [data-file-icon="svgo"], [data-file-icon="vue"]) {
+    color: var(--icon-green);
+  }
+  & :is([data-file-icon="mcp"], [data-file-icon="prettier"], [data-file-icon="table"]) {
+    color: var(--icon-teal);
+  }
+  & :is([data-file-icon="go"], [data-file-icon="oxc"], [data-file-icon="react"], [data-file-icon="tailwind"]) {
+    color: var(--icon-cyan);
+  }
+  &
+    :is(
+      [data-file-icon="biome"],
+      [data-file-icon="c"],
+      [data-file-icon="cpp"],
+      [data-file-icon="docker"],
+      [data-file-icon="python"],
+      [data-file-icon="typescript"],
+      [data-file-icon="vscode"],
+      [data-file-icon="webpack"]
+    ) {
+    color: var(--icon-blue);
+  }
+  &
+    :is(
+      [data-file-icon="bootstrap"],
+      [data-file-icon="css"],
+      [data-file-icon="eslint"],
+      [data-file-icon="terraform"],
+      [data-file-icon="wasm"]
+    ) {
+    color: var(--icon-indigo);
+  }
+  & :is([data-file-icon="astro"], [data-file-icon="database"], [data-file-icon="vite"]) {
+    color: var(--icon-purple);
+  }
+  & :is([data-file-icon="graphql"], [data-file-icon="image"], [data-file-icon="sass"]) {
+    color: var(--icon-pink);
+  }
+  & [data-file-icon="bun"] {
+    color: var(--icon-mauve);
+  }
+}

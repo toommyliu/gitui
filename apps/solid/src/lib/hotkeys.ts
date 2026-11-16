@@ -93,6 +93,7 @@ export const commands = {
   "repo.identity": { name: "Commit identity and signing…", keys: [] },
   "repo.addWorktree": { name: "Add a worktree…", keys: [] },
   "repo.cleanupWorktrees": { name: "Clean up worktrees…", keys: [] },
+  "repo.cleanupBranches": { name: "Clean up branches…", keys: [] },
   "repo.switch1": { name: "Switch to repository 1", keys: ["Alt+1"] },
   "repo.switch2": { name: "Switch to repository 2", keys: ["Alt+2"] },
   "repo.switch3": { name: "Switch to repository 3", keys: ["Alt+3"] },

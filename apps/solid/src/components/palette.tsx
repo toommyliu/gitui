@@ -42,6 +42,7 @@ const groupOf = {
   "repo.identity": "Repositories",
   "repo.addWorktree": "Repositories",
   "repo.cleanupWorktrees": "Repositories",
+  "repo.cleanupBranches": "Repositories",
   "repo.switch1": null,
   "repo.switch2": null,
   "repo.switch3": null,

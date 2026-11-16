@@ -109,7 +109,7 @@ export function FilesPane(props: {
         fallback={<Empty title={hideTests() && props.files.length > 0 ? "Only test files changed" : props.empty} />}
       >
         <div class="flex min-h-0 flex-1">
-          <div class={["w-64 shrink-0 overflow-y-auto border-e", { hidden: !filesOpen() }]}>
+          <div class={["w-64 shrink-0 flex-col border-e", filesOpen() ? "flex" : "hidden"]}>
             <FileTree
               label="Changed files"
               files={entries()}

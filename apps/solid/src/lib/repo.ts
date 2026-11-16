@@ -1,7 +1,16 @@
 import type { ChangeScope, RepoId } from "@gitui/contracts"
 import type * as Effect from "effect/Effect"
 import type * as Stream from "effect/Stream"
-import { createContext, createEffect, createMemo, createSignal, createStore, onCleanup, useContext } from "solid-js"
+import {
+  createContext,
+  createEffect,
+  createMemo,
+  createSignal,
+  createStore,
+  onCleanup,
+  onSettled,
+  useContext,
+} from "solid-js"
 import { call, type Client, collect, connection, describeError, subscribe } from "./rpc"
 
 type Ticks = Record<ChangeScope, number>
@@ -20,10 +29,27 @@ export const createRepo = (id: RepoId) => {
 
   const track = (...scopes: ReadonlyArray<ChangeScope>) => scopes.reduce((sum, scope) => sum + ticks[scope], 0)
 
+  // A change that lands while the last refresh is in flight joins its transition, so changes arriving
+  // faster than a refresh takes would hold it forever. Apply them once the refresh settles.
+  let held: Set<ChangeScope> | null = null
+  const refresh = (scopes: ReadonlyArray<ChangeScope>) => {
+    if (held !== null) {
+      for (const scope of scopes) held.add(scope)
+      return
+    }
+    held = new Set()
+    invalidate(scopes)
+    onSettled(() => {
+      const next = held ?? new Set()
+      held = null
+      if (next.size > 0) refresh([...next])
+    })
+  }
+
   onCleanup(
     subscribe(
       (git) => git.WatchRepo({ repo: id }),
-      (event) => invalidate(event.scopes),
+      (event) => refresh(event.scopes),
     ),
   )
 

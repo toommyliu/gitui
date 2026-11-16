@@ -17,6 +17,7 @@ overrides:
 
 patchedDependencies:
   '@solidjs/web@2.0.0-rc.14': bb9d9f68caa99f2240d2b84402b5628498c3eb86af575d34fda2838c0a1ebef8
+  '@ui-sdk/core@0.1.0-beta.5': ec27b83d31797d54cda9628b44777777684da5500dd7fcce97931f0428d7f6f2
 
 importers:
 
@@ -119,10 +120,10 @@ importers:
         version: 2.0.0-rc.14(patch_hash=bb9d9f68caa99f2240d2b84402b5628498c3eb86af575d34fda2838c0a1ebef8)(solid-js@2.0.0-rc.14)
       '@ui-sdk/core':
         specifier: 0.1.0-beta.5
-        version: 0.1.0-beta.5
+        version: 0.1.0-beta.5(patch_hash=ec27b83d31797d54cda9628b44777777684da5500dd7fcce97931f0428d7f6f2)
       '@ui-sdk/solid':
         specifier: 0.1.0-beta.5
-        version: 0.1.0-beta.5(@solidjs/web@2.0.0-rc.14(patch_hash=bb9d9f68caa99f2240d2b84402b5628498c3eb86af575d34fda2838c0a1ebef8)(solid-js@2.0.0-rc.14))(@ui-sdk/core@0.1.0-beta.5)(solid-js@2.0.0-rc.14)
+        version: 0.1.0-beta.5(@solidjs/web@2.0.0-rc.14(patch_hash=bb9d9f68caa99f2240d2b84402b5628498c3eb86af575d34fda2838c0a1ebef8)(solid-js@2.0.0-rc.14))(@ui-sdk/core@0.1.0-beta.5(patch_hash=ec27b83d31797d54cda9628b44777777684da5500dd7fcce97931f0428d7f6f2))(solid-js@2.0.0-rc.14)
       effect:
         specifier: 4.0.4
         version: 4.0.4
@@ -4192,12 +4193,12 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@ui-sdk/core@0.1.0-beta.5': {}
+  '@ui-sdk/core@0.1.0-beta.5(patch_hash=ec27b83d31797d54cda9628b44777777684da5500dd7fcce97931f0428d7f6f2)': {}
 
-  '@ui-sdk/solid@0.1.0-beta.5(@solidjs/web@2.0.0-rc.14(patch_hash=bb9d9f68caa99f2240d2b84402b5628498c3eb86af575d34fda2838c0a1ebef8)(solid-js@2.0.0-rc.14))(@ui-sdk/core@0.1.0-beta.5)(solid-js@2.0.0-rc.14)':
+  '@ui-sdk/solid@0.1.0-beta.5(@solidjs/web@2.0.0-rc.14(patch_hash=bb9d9f68caa99f2240d2b84402b5628498c3eb86af575d34fda2838c0a1ebef8)(solid-js@2.0.0-rc.14))(@ui-sdk/core@0.1.0-beta.5(patch_hash=ec27b83d31797d54cda9628b44777777684da5500dd7fcce97931f0428d7f6f2))(solid-js@2.0.0-rc.14)':
     dependencies:
       '@solidjs/web': 2.0.0-rc.14(patch_hash=bb9d9f68caa99f2240d2b84402b5628498c3eb86af575d34fda2838c0a1ebef8)(solid-js@2.0.0-rc.14)
-      '@ui-sdk/core': 0.1.0-beta.5
+      '@ui-sdk/core': 0.1.0-beta.5(patch_hash=ec27b83d31797d54cda9628b44777777684da5500dd7fcce97931f0428d7f6f2)
       solid-js: 2.0.0-rc.14
 
   '@ungap/structured-clone@1.4.0': {}

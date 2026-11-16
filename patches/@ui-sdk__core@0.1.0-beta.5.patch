@@ -1,0 +1,80 @@
+diff --git a/dist/components/tree/tree-api.js b/dist/components/tree/tree-api.js
+index d0e31c971478f74c403478e01ff0ca22c5b2e2d7..c8c4d541780f65f323346a00663856145bbaab53 100644
+--- a/dist/components/tree/tree-api.js
++++ b/dist/components/tree/tree-api.js
+@@ -39,20 +39,23 @@ function treeApiBody(context) {
+   const typeahead = createTypeahead();
+   const itemProps = (key) => context.props("item", key);
+   const itemElement = (key) => key == null ? void 0 : context.element("item", key);
+-  let source;
+-  let data;
++  const built = /* @__PURE__ */ new WeakMap();
+   function fromData() {
+     const { items, paths } = store.get();
+     const next = items ?? paths;
+-    if (next !== source) {
+-      source = next;
+-      const list = items ?? (paths ? treeFromPaths(paths) : void 0);
+-      const nodes = list ? treeDataNodes(list) : [];
+-      data = list && {
++    if (!next) {
++      return void 0;
++    }
++    let data = built.get(next);
++    if (!data) {
++      const list = items ?? treeFromPaths(paths);
++      const nodes = treeDataNodes(list);
++      data = {
+         items: list,
+         tree: createTreeCollection(nodes),
+         byKey: new Map(nodes.map((node) => [node.key, node.item]))
+       };
++      built.set(next, data);
+     }
+     return data;
+   }
+@@ -183,12 +186,22 @@ function treeApiBody(context) {
+       return itemElement(collapsed ?? path.at(-1)) ?? roving.items().find((item) => item.key !== key)?.el;
+     }
+   });
++  const checksByTree = /* @__PURE__ */ new WeakMap();
+   function checksFor(state) {
+     if (!state.checkable) {
+       return {};
+     }
+     const known = fromData();
+     const tree = known?.tree ?? fromParts(state.version);
++    const last = checksByTree.get(tree);
++    if (last && last.checked === state.checked && last.strategy === state.checkStrategy) {
++      return last.checks;
++    }
++    const checks = computeChecks(tree, state);
++    checksByTree.set(tree, { checked: state.checked, strategy: state.checkStrategy, checks });
++    return checks;
++  }
++  function computeChecks(tree, state) {
+     const read = treeCheckedStates(tree, state.checked, state.checkStrategy);
+     const checks = {};
+     for (const key of tree.keys()) {
+diff --git a/dist/foundation/lists/tree-collection.js b/dist/foundation/lists/tree-collection.js
+index b0baa917aa136b5b5f955fbac93f88ad6e087e5d..a9768b8c8e98a91acd0bdbfcbfe78283f9cabb08 100644
+--- a/dist/foundation/lists/tree-collection.js
++++ b/dist/foundation/lists/tree-collection.js
+@@ -110,6 +110,7 @@ function treeDataNodes(items) {
+ function treeFromPaths(paths) {
+   const top = [];
+   const folders = /* @__PURE__ */ new Map();
++  const files = /* @__PURE__ */ new Set();
+   const folder = (path, label, into) => {
+     let children = folders.get(path);
+     if (!children) {
+@@ -130,7 +131,8 @@ function treeFromPaths(paths) {
+       prefix = prefix ? `${prefix}/${segment}` : segment;
+       if (index < segments.length - 1 || isFolder) {
+         into = folder(prefix, segment, into);
+-      } else if (!into.some((item) => item.value === prefix)) {
++      } else if (!folders.has(prefix) && !files.has(prefix)) {
++        files.add(prefix);
+         into.push({ value: prefix, label: segment });
+       }
+     });

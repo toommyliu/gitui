@@ -109,6 +109,7 @@ let backend: ChildProcess | undefined
 let quitting = false
 
 if (!app.requestSingleInstanceLock()) {
+  console.error(`gitui is already running with ${app.getPath("userData")}, so this copy quit and focused that one.`)
   app.quit()
 } else {
   app.on("second-instance", () => {

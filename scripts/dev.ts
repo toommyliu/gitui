@@ -38,8 +38,8 @@ const env: NodeJS.ProcessEnv = {
   WEB_PORT: String(ports.web),
   SERVER_PORT: String(ports.server),
   PORT: String(ports.server),
+  GITUI_USER_DATA_DIR: join(root, ".dev", "electron"),
 }
-if (linkedWorktree) env["GITUI_USER_DATA_DIR"] = join(root, ".dev", "electron")
 
 const vp = join(root, "node_modules", "vite-plus", "bin", "vp")
 // `vp run` SIGKILLs its other tasks once one exits non-zero, and Vite exits 130 on Ctrl+C, so each package gets its own `vp run`.

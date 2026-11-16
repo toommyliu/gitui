@@ -248,7 +248,7 @@ function CleanupForm(props: { onClose: () => void }) {
         </Show>
         <Show when={progress() === null && unmerged() > 0}>
           <span role="status" class="me-auto min-w-0 truncate text-xs text-change-modified">
-            Includes {branches(unmerged())} not merged into {baseName()}, recoverable only from the reflog
+            {unmerged()} not merged into {baseName()}
           </span>
         </Show>
         <Show when={loaded() === undefined && loadError() === null}>

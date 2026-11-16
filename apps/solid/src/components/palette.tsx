@@ -146,8 +146,8 @@ export function Palette() {
           <CommandList class="max-h-[min(26rem,60svh)] overflow-y-auto overscroll-none p-1">
             <For each={groups}>
               {(group) => (
-                <CommandGroup class="not-first:pt-1">
-                  <CommandGroupLabel class="px-2 pt-1 pb-0.5 section-label">{group}</CommandGroupLabel>
+                <CommandGroup>
+                  <CommandGroupLabel class="px-2 pt-2 pb-1 section-label leading-4">{group}</CommandGroupLabel>
                   <For each={runnable(group)}>
                     {(id) => (
                       <CommandItem value={id} label={commands[id].name} class={itemClass}>

@@ -44,6 +44,21 @@ export default defineConfig({
       "react/incompatible-library": "off",
       "vite-plus/prefer-vite-plus-imports": "error",
     },
+    overrides: [
+      {
+        files: ["apps/solid/**"],
+        rules: {
+          "react/rules-of-hooks": "off",
+          "react/exhaustive-deps": "off",
+          "react/immutability": "off",
+          "react/refs": "off",
+          "react/static-components": "off",
+          "react/purity": "off",
+          "react/jsx-key": "off",
+          "no-unassigned-vars": "off",
+        },
+      },
+    ],
     jsPlugins: [
       {
         name: "vite-plus",

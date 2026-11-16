@@ -1,0 +1,34 @@
+{
+  "name": "@gitui/solid",
+  "version": "0.0.1",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vp dev",
+    "build": "tsc -b && vp build",
+    "typecheck": "tsc -b",
+    "test": "vp test run --passWithNoTests",
+    "preview": "vp preview"
+  },
+  "dependencies": {
+    "@effect/platform-browser": "4.0.4",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@gitui/contracts": "workspace:*",
+    "@pierre/diffs": "1.5.2",
+    "@solidjs/web": "2.0.0-rc.14",
+    "@ui-sdk/core": "0.1.0-beta.5",
+    "@ui-sdk/solid": "0.1.0-beta.5",
+    "effect": "4.0.4",
+    "solid-js": "2.0.0-rc.14"
+  },
+  "devDependencies": {
+    "@solidjs/vite-plugin": "3.0.0-next.35",
+    "@tailwindcss/vite": "^4",
+    "@types/node": "^24",
+    "tailwindcss": "^4",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

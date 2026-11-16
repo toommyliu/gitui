@@ -1,0 +1,99 @@
+diff --git a/dist/web.dev.js b/dist/web.dev.js
+index e131acbd500215a0be20c55f21be477265fa4f5b..a6faf1a4f07be495685cefec580b4b33e1025216 100644
+--- a/dist/web.dev.js
++++ b/dist/web.dev.js
+@@ -1850,6 +1850,13 @@ function assignProp(node, prop, value, prev, skipRef, nodeName) {
+   }
+   return value;
+ }
++const $$CURRENT_TARGET = Symbol("currentTarget");
++const currentTargetDescriptor = {
++  configurable: true,
++  get() {
++    return this[$$CURRENT_TARGET]();
++  }
++};
+ function eventHandler(e, container, state) {
+   if (hydrationRt !== null && hydrationRt.dedupEvent(e)) return;
+   const prev = e[$$EVENT_OWNER];
+@@ -1886,12 +1893,8 @@ function eventHandler(e, container, state) {
+       node = node._$host || node.parentNode || node.host;
+     }
+   };
+-  Object.defineProperty(e, "currentTarget", {
+-    configurable: true,
+-    get() {
+-      return node || boundary || document;
+-    }
+-  });
++  e[$$CURRENT_TARGET] = () => node || boundary || document;
++  Object.defineProperty(e, "currentTarget", currentTargetDescriptor);
+   if (resumeNode) {
+     if (resumeNode === e.target) node = resumeNode._$host || resumeNode.parentNode || resumeNode.host;
+     if (node && node !== boundary) walkUpTree();
+diff --git a/dist/web.js b/dist/web.js
+index 3088bc2716b869e88e2ed9a541073ab28051bac7..4e37f376feff5a07dc7ead3527acc7a43448ace4 100644
+--- a/dist/web.js
++++ b/dist/web.js
+@@ -1602,6 +1602,13 @@ function assignProp(node, prop, value, prev, skipRef, nodeName) {
+   }
+   return value;
+ }
++const $$CURRENT_TARGET = Symbol("currentTarget");
++const currentTargetDescriptor = {
++  configurable: true,
++  get() {
++    return this[$$CURRENT_TARGET]();
++  }
++};
+ function eventHandler(e, container, state) {
+   if (hydrationRt !== null && hydrationRt.dedupEvent(e)) return;
+   const prev = e[$$EVENT_OWNER];
+@@ -1638,12 +1645,8 @@ function eventHandler(e, container, state) {
+       node = node._$host || node.parentNode || node.host;
+     }
+   };
+-  Object.defineProperty(e, "currentTarget", {
+-    configurable: true,
+-    get() {
+-      return node || boundary || document;
+-    }
+-  });
++  e[$$CURRENT_TARGET] = () => node || boundary || document;
++  Object.defineProperty(e, "currentTarget", currentTargetDescriptor);
+   if (resumeNode) {
+     if (resumeNode === e.target) node = resumeNode._$host || resumeNode.parentNode || resumeNode.host;
+     if (node && node !== boundary) walkUpTree();
+diff --git a/dist/web.observe.js b/dist/web.observe.js
+index 779c574810387ead1191ed7508b1ad1879cd06c6..541ef61789479e9d9d4a68f6bd2e09ada2eb22a4 100644
+--- a/dist/web.observe.js
++++ b/dist/web.observe.js
+@@ -1648,6 +1648,13 @@ function assignProp(node, prop, value, prev, skipRef, nodeName) {
+   }
+   return value;
+ }
++const $$CURRENT_TARGET = Symbol("currentTarget");
++const currentTargetDescriptor = {
++  configurable: true,
++  get() {
++    return this[$$CURRENT_TARGET]();
++  }
++};
+ function eventHandler(e, container, state) {
+   if (hydrationRt !== null && hydrationRt.dedupEvent(e)) return;
+   const prev = e[$$EVENT_OWNER];
+@@ -1684,12 +1691,8 @@ function eventHandler(e, container, state) {
+       node = node._$host || node.parentNode || node.host;
+     }
+   };
+-  Object.defineProperty(e, "currentTarget", {
+-    configurable: true,
+-    get() {
+-      return node || boundary || document;
+-    }
+-  });
++  e[$$CURRENT_TARGET] = () => node || boundary || document;
++  Object.defineProperty(e, "currentTarget", currentTargetDescriptor);
+   if (resumeNode) {
+     if (resumeNode === e.target) node = resumeNode._$host || resumeNode.parentNode || resumeNode.host;
+     if (node && node !== boundary) walkUpTree();

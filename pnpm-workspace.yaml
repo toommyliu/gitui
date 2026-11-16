@@ -36,3 +36,7 @@ patchedDependencies:
   # per-event value, instead of a new getter defined on the event for every handler.
   # Remove it together with the rc.14 pin once ui-sdk supports an unpatched @solidjs/web.
   "@solidjs/web@2.0.0-rc.14": patches/@solidjs__web@2.0.0-rc.14.patch
+  # Two fixes for trees with thousands of files: treeFromPaths scanned every sibling before adding
+  # a file, and a checkable tree recomputed every item's checked state on each part's read.
+  # Drop this once ui-sdk ships both.
+  "@ui-sdk/core@0.1.0-beta.5": patches/@ui-sdk__core@0.1.0-beta.5.patch

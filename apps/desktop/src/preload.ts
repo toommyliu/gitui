@@ -18,6 +18,14 @@ contextBridge.exposeInMainWorld("gitui", {
   setMenuShortcuts: (shortcuts: unknown) => ipcRenderer.send("gitui:menu-shortcuts", shortcuts),
   onTheme: subscribe("gitui:theme"),
   onCommand: subscribe("gitui:command"),
+  onOpenFolders: (listener) => {
+    const take = () => listener(ipcRenderer.sendSync("gitui:take-folders"))
+    ipcRenderer.on("gitui:open-folders", take)
+    take()
+    return () => {
+      ipcRenderer.removeListener("gitui:open-folders", take)
+    }
+  },
   isFullScreen: () => ipcRenderer.sendSync("gitui:is-full-screen") === true,
   onFullScreen: subscribe("gitui:full-screen"),
   isSystemDark: () => ipcRenderer.sendSync("gitui:is-system-dark") === true,

@@ -114,6 +114,16 @@ export const openRepo = (path: string, after?: string) => {
   setActive(path)
 }
 
+export const openFolders = async (folders: ReadonlyArray<string>) => {
+  for (const folder of folders)
+    openRepo(
+      await call((git) => git.OpenRepo({ path: folder })).then(
+        (info) => info.id,
+        () => folder,
+      ),
+    )
+}
+
 export const openRepos = (next: ReadonlyArray<string>, after?: string) => {
   for (const path of next) remember(path)
   const current = paths()

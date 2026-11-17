@@ -1,4 +1,4 @@
-import type { CommitDetail as CommitDetailData, FileDiff, Oid } from "@gitui/contracts"
+import type { CommitDetail as CommitDetailData, CommitRow, FileDiff, Oid } from "@gitui/contracts"
 import { createEffect, createMemo, createSignal, onCleanup, Show, useContext } from "solid-js"
 import { CommandScope, useCommand } from "@/lib/hotkeys"
 import { createLog } from "@/lib/log"
@@ -177,6 +177,8 @@ export function HistoryView(props: { focused: boolean; revealed: { readonly oid:
     else pill.click()
   }
   const rewriteFrom = () => oldest() ?? selected()
+  const selection = () => (span() === null ? [log.row(index())].filter((row) => row !== undefined) : rangeCommits())
+  const menuSelection = (row: CommitRow) => (selection().some((commit) => commit.oid === row.oid) ? selection() : [row])
 
   useCommand("list.next", () => step(1, false))
   useCommand("list.previous", () => step(-1, false))
@@ -205,6 +207,11 @@ export function HistoryView(props: { focused: boolean; revealed: { readonly oid:
       if (first !== null) actions.rewrite(first)
     },
     () => rewriteFrom() !== null && actions.canRewrite(),
+  )
+  useCommand(
+    "commit.drop",
+    () => actions.drop(selection()),
+    () => actions.canDrop(selection()),
   )
 
   const empty = () => log.handle()?.done === true && log.handle()?.loaded === 0
@@ -254,7 +261,7 @@ export function HistoryView(props: { focused: boolean; revealed: { readonly oid:
                 selected={index()}
                 range={span()}
                 onSelect={(target, extend) => void select(target, extend)}
-                menu={(row) => <CommitMenuItems actions={actions} commit={row} selected={row.oid === selected()} />}
+                menu={(row) => <CommitMenuItems actions={actions} commit={row} selection={menuSelection(row)} />}
               />
             </Show>
           </Show>
@@ -280,7 +287,7 @@ export function HistoryView(props: { focused: boolean; revealed: { readonly oid:
                             setAnchor(null)
                             setPicked(oid)
                           }}
-                          menu={() => <CommitMenuItems actions={actions} commit={loaded} selected />}
+                          menu={() => <CommitMenuItems actions={actions} commit={loaded} selection={[loaded]} />}
                         />
                       )}
                     </Show>

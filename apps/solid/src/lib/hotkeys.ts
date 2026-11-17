@@ -109,6 +109,7 @@ export const commands = {
   "history.extendPrevious": { name: "Extend the commit range up", keys: ["Shift+K", "Shift+ArrowUp"] },
   "history.copySha": { name: "Copy the commit hash", keys: ["Mod+C"] },
   "commit.rewrite": { name: "Rewrite commits…", keys: [] },
+  "commit.drop": { name: "Drop the selected commits…", keys: [] },
   "view.changes": { name: "Show changes", keys: ["Mod+1"], inInputs: true, configurable: true },
   "view.history": { name: "Show history", keys: ["Mod+2"], inInputs: true, configurable: true },
   "view.branches": { name: "Show branches", keys: ["Mod+3"], inInputs: true, configurable: true },

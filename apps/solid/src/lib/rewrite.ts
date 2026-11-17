@@ -9,8 +9,12 @@ export const rewriteActions: Record<RewriteAction, { readonly label: string; rea
   drop: { label: "Drop", hint: "Remove the commit and its changes" },
 }
 
-export const initialSteps = (plan: RewritePlan): Array<RewriteStep> =>
-  plan.commits.map((commit) => ({ oid: commit.oid, action: "pick", message: commit.message }))
+export const initialSteps = (plan: RewritePlan, drop: ReadonlySet<Oid>): Array<RewriteStep> =>
+  plan.commits.map((commit) => ({
+    oid: commit.oid,
+    action: drop.has(commit.oid) ? "drop" : "pick",
+    message: commit.message,
+  }))
 
 export const moveStep = (steps: ReadonlyArray<RewriteStep>, from: number, to: number): ReadonlyArray<RewriteStep> => {
   const step = steps[from]
@@ -35,3 +39,10 @@ export const stepProblems = (steps: ReadonlyArray<RewriteStep>): ReadonlyMap<Oid
 
 export const isUnchanged = (plan: RewritePlan, steps: ReadonlyArray<RewriteStep>) =>
   steps.every((step, index) => step.action === "pick" && plan.commits[index]?.oid === step.oid)
+
+export const droppedOnly = (plan: RewritePlan, steps: ReadonlyArray<RewriteStep>) =>
+  steps.every(
+    (step, index) => (step.action === "pick" || step.action === "drop") && plan.commits[index]?.oid === step.oid,
+  )
+    ? steps.filter((step) => step.action === "drop").length
+    : 0

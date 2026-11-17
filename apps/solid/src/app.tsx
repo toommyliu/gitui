@@ -18,6 +18,7 @@ import { Picker } from "./components/picker"
 import { Settings } from "./components/settings"
 import { RepoSwitcher } from "./components/repo-switcher"
 import { TopBarSlot } from "./components/top-bar"
+import { Toasts } from "./components/toasts"
 import { Tip } from "./components/ui"
 import { WorkspaceView } from "./components/workspace"
 
@@ -161,6 +162,7 @@ export function App() {
       <Palette />
       <Settings />
       <FileIconSprite />
+      <Toasts />
     </div>
   )
 }

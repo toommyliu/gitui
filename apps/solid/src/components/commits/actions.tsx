@@ -6,11 +6,13 @@ import { Input } from "@ui-sdk/solid/input"
 import { MenuItem, MenuSeparator, MenuShortcut, MenuSub, MenuSubContent, MenuSubTrigger } from "@ui-sdk/solid/menu"
 import { Textarea } from "@ui-sdk/solid/textarea"
 import type * as Effect from "effect/Effect"
-import { createSignal, onSettled, Show } from "solid-js"
+import { createSignal, flush, onCleanup, onSettled, Show, useContext } from "solid-js"
 import { shortOid } from "@/lib/format"
 import { matchesCommand, runCommand, shortcut } from "@/lib/hotkeys"
 import { useRepo } from "@/lib/repo"
 import { type Client, describeError } from "@/lib/rpc"
+import { toast } from "@/lib/toast"
+import { active, setActive, WorkspaceContext } from "@/lib/workspaces"
 import { ChevronRight } from "../icons"
 import { Confirm } from "../refs/confirm"
 import { Alert, Button, type Tone } from "../ui"
@@ -25,7 +27,7 @@ type Dialogs =
   | { readonly kind: "branch"; readonly oid: Oid }
   | { readonly kind: "tag"; readonly oid: Oid }
   | { readonly kind: "hard-reset"; readonly oid: Oid }
-  | { readonly kind: "rewrite"; readonly first: Oid }
+  | { readonly kind: "rewrite"; readonly first: Oid; readonly drop: ReadonlySet<Oid> }
 
 export interface Outcome {
   readonly tone: Extract<Tone, "success" | "error">
@@ -51,6 +53,8 @@ export const createCommitActions = () => {
     return current._tag === "Unborn" ? null : current.oid
   }
   const canRewrite = () => branch() !== null && repo.status().operation === null
+  const canDrop = (commits: ReadonlyArray<CommitRef>) =>
+    canRewrite() && commits.length > 0 && commits.every((commit) => commit.parents.length < 2)
 
   const attempt = async <E,>(
     scopes: ReadonlyArray<ChangeScope>,
@@ -91,7 +95,13 @@ export const createCommitActions = () => {
     attempt,
     run,
     reset,
-    rewrite: (first: Oid) => setDialog({ kind: "rewrite", first }),
+    canDrop,
+    rewrite: (first: Oid) => setDialog({ kind: "rewrite", first, drop: new Set() }),
+    drop: (commits: ReadonlyArray<CommitRef>) => {
+      const oldest = commits.at(-1)
+      if (oldest !== undefined)
+        setDialog({ kind: "rewrite", first: oldest.oid, drop: new Set(commits.map((commit) => commit.oid)) })
+    },
   }
 }
 
@@ -108,7 +118,11 @@ const subTrigger =
 
 const item = "data-disabled:opacity-50"
 
-export function CommitMenuItems(props: { actions: CommitActions; commit: CommitRef; selected: boolean }) {
+export function CommitMenuItems(props: {
+  actions: CommitActions
+  commit: CommitRef
+  selection: ReadonlyArray<CommitRef>
+}) {
   const actions = props.actions
   const oid = () => props.commit.oid
   let copyItem: HTMLElement | undefined
@@ -181,6 +195,13 @@ export function CommitMenuItems(props: { actions: CommitActions; commit: CommitR
       </MenuSub>
       <MenuItem class={item} disabled={merge() || !actions.canRewrite()} onSelect={() => actions.rewrite(oid())}>
         Rewrite from here…
+      </MenuItem>
+      <MenuItem
+        class={item}
+        disabled={!actions.canDrop(props.selection)}
+        onSelect={() => actions.drop(props.selection)}
+      >
+        {props.selection.length === 1 ? "Drop commit…" : `Drop ${props.selection.length} commits…`}
       </MenuItem>
       <MenuSeparator />
       <MenuItem
@@ -337,6 +358,9 @@ function HardReset(props: { actions: CommitActions; oid: Oid | null }) {
 
 export function CommitDialogs(props: { actions: CommitActions }) {
   const actions = props.actions
+  const path = useContext(WorkspaceContext)?.path ?? null
+  const rewroteToast = `rewrote:${path ?? ""}`
+  onCleanup(() => toast.dismiss(rewroteToast))
   const refDialog = () => {
     const current = actions.dialog()
     return current?.kind === "branch" || current?.kind === "tag" ? current : null
@@ -356,10 +380,20 @@ export function CommitDialogs(props: { actions: CommitActions }) {
       runCommand("view.changes")
       return
     }
-    actions.setOutcome({
-      tone: "success",
-      title: `Rewrote ${actions.branch() ?? "the branch"}`,
-      message: `The original history is saved at ${result.backupRef}. Recover commits can restore it.`,
+    actions.setOutcome(null)
+    toast.success(`Rewrote ${actions.branch() ?? "the branch"}`, {
+      id: rewroteToast,
+      description: "The original history is saved as a backup.",
+      action: {
+        label: "Recover",
+        onAction: () => {
+          if (path !== null && active() !== path) {
+            setActive(path)
+            flush()
+          }
+          runCommand("repo.recovery")
+        },
+      },
     })
   }
   return (

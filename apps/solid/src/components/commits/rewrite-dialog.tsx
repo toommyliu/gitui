@@ -7,7 +7,7 @@ import { createMemo, createSignal, For, Loading, Show } from "solid-js"
 import { shortOid } from "@/lib/format"
 import { useRepo } from "@/lib/repo"
 import { call, describeError } from "@/lib/rpc"
-import { initialSteps, isUnchanged, moveStep, rewriteActions, stepProblems } from "@/lib/rewrite"
+import { droppedOnly, initialSteps, isUnchanged, moveStep, rewriteActions, stepProblems } from "@/lib/rewrite"
 import { ChevronDown } from "../icons"
 import { Centered, Spinner } from "../state"
 import { Alert, Button, Kbd } from "../ui"
@@ -49,13 +49,14 @@ function ActionSelect(props: { step: RewriteStep; disabled: boolean; onChange: (
 function PlanEditor(props: {
   plan: RewritePlan
   first: Oid
+  drop: ReadonlySet<Oid>
   running: boolean
   onRunningChange: (running: boolean) => void
   onClose: () => void
   onDone: (result: RewriteResult) => void
 }) {
   const repo = useRepo()
-  const [steps, setSteps] = createSignal<ReadonlyArray<RewriteStep>>(initialSteps(props.plan))
+  const [steps, setSteps] = createSignal<ReadonlyArray<RewriteStep>>(initialSteps(props.plan, props.drop))
   const [allowPublished, setAllowPublished] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   const [announcement, setAnnouncement] = createSignal("")
@@ -64,6 +65,8 @@ function PlanEditor(props: {
   const problems = createMemo(() => stepProblems(steps()))
   const subjects = new Map(props.plan.commits.map((commit) => [commit.oid, commit.message.split("\n")[0] ?? ""]))
   const published = new Set(props.plan.commits.filter((commit) => commit.published).map((commit) => commit.oid))
+  const offBranch = [...props.drop].filter((oid) => !subjects.has(oid)).length
+  const dropping = createMemo(() => droppedOnly(props.plan, steps()))
   let list: HTMLOListElement | undefined
 
   const update = (oid: Oid, change: Partial<Pick<RewriteStep, "action" | "message">>) => {
@@ -117,6 +120,7 @@ function PlanEditor(props: {
 
   const blocked = () =>
     props.running ||
+    offBranch > 0 ||
     problems().size > 0 ||
     isUnchanged(props.plan, steps()) ||
     (published.size > 0 && !allowPublished())
@@ -237,6 +241,14 @@ function PlanEditor(props: {
           )}
         </For>
       </ol>
+      <Show when={offBranch > 0}>
+        <Alert
+          tone="error"
+          title={`${offBranch === 1 ? "1 selected commit isn't" : `${offBranch} selected commits aren't`} on ${props.plan.branch}`}
+        >
+          Only commits on the checked-out branch can be dropped. Select commits from {props.plan.branch} and try again.
+        </Alert>
+      </Show>
       <Show when={published.size > 0}>
         <Alert
           tone="warning"
@@ -270,17 +282,25 @@ function PlanEditor(props: {
           Cancel
         </Button>
         <Button variant="primary" disabled={blocked()} onClick={() => void start()}>
-          {props.running ? "Rewriting…" : "Start rewrite"}
+          {props.running
+            ? "Rewriting…"
+            : dropping() === 0
+              ? "Start rewrite"
+              : dropping() === 1
+                ? "Drop 1 commit"
+                : `Drop ${dropping()} commits`}
         </Button>
       </div>
     </>
   )
 }
 
-type Loaded = { readonly ok: true; readonly plan: RewritePlan } | { readonly ok: false; readonly message: string }
+type Loaded =
+  | { readonly ok: true; readonly plan: RewritePlan; readonly first: Oid; readonly drop: ReadonlySet<Oid> }
+  | { readonly ok: false; readonly message: string }
 
 export function RewriteDialog(props: {
-  entry: { readonly first: Oid } | null
+  entry: { readonly first: Oid; readonly drop: ReadonlySet<Oid> } | null
   onClose: () => void
   onDone: (result: RewriteResult) => void
 }) {
@@ -290,7 +310,7 @@ export function RewriteDialog(props: {
     const entry = props.entry
     if (entry === null) return null
     return call((git) => git.GetRewritePlan({ repo: repo.id, first: entry.first })).then(
-      (plan): Loaded => ({ ok: true, plan }),
+      (plan): Loaded => ({ ok: true, plan, first: entry.first, drop: entry.drop }),
       (error: unknown): Loaded => ({ ok: false, message: describeError(error) }),
     )
   })
@@ -311,7 +331,8 @@ export function RewriteDialog(props: {
               result.ok ? (
                 <PlanEditor
                   plan={result.plan}
-                  first={props.entry?.first ?? result.plan.head}
+                  first={result.first}
+                  drop={result.drop}
                   running={running()}
                   onRunningChange={setRunning}
                   onClose={props.onClose}

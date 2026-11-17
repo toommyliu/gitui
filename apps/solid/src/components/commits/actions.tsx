@@ -25,7 +25,7 @@ type Dialogs =
   | { readonly kind: "branch"; readonly oid: Oid }
   | { readonly kind: "tag"; readonly oid: Oid }
   | { readonly kind: "hard-reset"; readonly oid: Oid }
-  | { readonly kind: "rewrite"; readonly first: Oid }
+  | { readonly kind: "rewrite"; readonly first: Oid; readonly drop: ReadonlySet<Oid> }
 
 export interface Outcome {
   readonly tone: Extract<Tone, "success" | "error">
@@ -51,6 +51,8 @@ export const createCommitActions = () => {
     return current._tag === "Unborn" ? null : current.oid
   }
   const canRewrite = () => branch() !== null && repo.status().operation === null
+  const canDrop = (commits: ReadonlyArray<CommitRef>) =>
+    canRewrite() && commits.length > 0 && commits.every((commit) => commit.parents.length < 2)
 
   const attempt = async <E,>(
     scopes: ReadonlyArray<ChangeScope>,
@@ -91,7 +93,13 @@ export const createCommitActions = () => {
     attempt,
     run,
     reset,
-    rewrite: (first: Oid) => setDialog({ kind: "rewrite", first }),
+    canDrop,
+    rewrite: (first: Oid) => setDialog({ kind: "rewrite", first, drop: new Set() }),
+    drop: (commits: ReadonlyArray<CommitRef>) => {
+      const oldest = commits.at(-1)
+      if (oldest !== undefined)
+        setDialog({ kind: "rewrite", first: oldest.oid, drop: new Set(commits.map((commit) => commit.oid)) })
+    },
   }
 }
 
@@ -108,7 +116,11 @@ const subTrigger =
 
 const item = "data-disabled:opacity-50"
 
-export function CommitMenuItems(props: { actions: CommitActions; commit: CommitRef; selected: boolean }) {
+export function CommitMenuItems(props: {
+  actions: CommitActions
+  commit: CommitRef
+  selection: ReadonlyArray<CommitRef>
+}) {
   const actions = props.actions
   const oid = () => props.commit.oid
   let copyItem: HTMLElement | undefined
@@ -181,6 +193,13 @@ export function CommitMenuItems(props: { actions: CommitActions; commit: CommitR
       </MenuSub>
       <MenuItem class={item} disabled={merge() || !actions.canRewrite()} onSelect={() => actions.rewrite(oid())}>
         Rewrite from here…
+      </MenuItem>
+      <MenuItem
+        class={item}
+        disabled={!actions.canDrop(props.selection)}
+        onSelect={() => actions.drop(props.selection)}
+      >
+        {props.selection.length === 1 ? "Drop commit…" : `Drop ${props.selection.length} commits…`}
       </MenuItem>
       <MenuSeparator />
       <MenuItem

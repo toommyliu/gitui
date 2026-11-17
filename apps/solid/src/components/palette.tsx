@@ -79,6 +79,7 @@ const groupOf = {
   "history.extendPrevious": null,
   "history.copySha": "History",
   "commit.rewrite": "History",
+  "commit.drop": "History",
   "diff.nextHunk": null,
   "diff.nextFile": null,
   "diff.previousFile": null,

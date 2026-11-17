@@ -6,7 +6,7 @@ import { Input } from "@ui-sdk/solid/input"
 import { MenuItem, MenuSeparator, MenuShortcut, MenuSub, MenuSubContent, MenuSubTrigger } from "@ui-sdk/solid/menu"
 import { Textarea } from "@ui-sdk/solid/textarea"
 import type * as Effect from "effect/Effect"
-import { createSignal, flush, onSettled, Show, useContext } from "solid-js"
+import { createSignal, flush, onCleanup, onSettled, Show, useContext } from "solid-js"
 import { shortOid } from "@/lib/format"
 import { matchesCommand, runCommand, shortcut } from "@/lib/hotkeys"
 import { useRepo } from "@/lib/repo"
@@ -359,6 +359,8 @@ function HardReset(props: { actions: CommitActions; oid: Oid | null }) {
 export function CommitDialogs(props: { actions: CommitActions }) {
   const actions = props.actions
   const path = useContext(WorkspaceContext)?.path ?? null
+  const rewroteToast = `rewrote:${path ?? ""}`
+  onCleanup(() => toast.dismiss(rewroteToast))
   const refDialog = () => {
     const current = actions.dialog()
     return current?.kind === "branch" || current?.kind === "tag" ? current : null
@@ -380,6 +382,7 @@ export function CommitDialogs(props: { actions: CommitActions }) {
     }
     actions.setOutcome(null)
     toast.success(`Rewrote ${actions.branch() ?? "the branch"}`, {
+      id: rewroteToast,
       description: "The original history is saved as a backup.",
       action: {
         label: "Recover",

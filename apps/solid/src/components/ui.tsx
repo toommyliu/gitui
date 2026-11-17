@@ -22,18 +22,12 @@ type ButtonProps = Omit<ComponentProps<typeof BaseButton>, "class"> & {
   class?: string | undefined
 }
 
+export const buttonClass = (variant: ButtonVariant = "outline") =>
+  `inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium whitespace-nowrap disabled:pointer-events-none disabled:opacity-50 aria-disabled:opacity-50 aria-disabled:hover:bg-transparent ${variants[variant]}`
+
 export function Button(props: ButtonProps) {
   const rest = omit(props, "variant", "class")
-  return (
-    <BaseButton
-      {...rest}
-      class={[
-        "inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-medium whitespace-nowrap disabled:pointer-events-none disabled:opacity-50 aria-disabled:opacity-50 aria-disabled:hover:bg-transparent",
-        variants[props.variant ?? "outline"],
-        props.class,
-      ]}
-    />
-  )
+  return <BaseButton {...rest} class={[buttonClass(props.variant), props.class]} />
 }
 
 export function Kbd(props: { children: JSX.Element }) {

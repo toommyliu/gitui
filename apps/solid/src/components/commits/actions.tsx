@@ -6,11 +6,13 @@ import { Input } from "@ui-sdk/solid/input"
 import { MenuItem, MenuSeparator, MenuShortcut, MenuSub, MenuSubContent, MenuSubTrigger } from "@ui-sdk/solid/menu"
 import { Textarea } from "@ui-sdk/solid/textarea"
 import type * as Effect from "effect/Effect"
-import { createSignal, onSettled, Show } from "solid-js"
+import { createSignal, flush, onSettled, Show, useContext } from "solid-js"
 import { shortOid } from "@/lib/format"
 import { matchesCommand, runCommand, shortcut } from "@/lib/hotkeys"
 import { useRepo } from "@/lib/repo"
 import { type Client, describeError } from "@/lib/rpc"
+import { toast } from "@/lib/toast"
+import { active, setActive, WorkspaceContext } from "@/lib/workspaces"
 import { ChevronRight } from "../icons"
 import { Confirm } from "../refs/confirm"
 import { Alert, Button, type Tone } from "../ui"
@@ -356,6 +358,7 @@ function HardReset(props: { actions: CommitActions; oid: Oid | null }) {
 
 export function CommitDialogs(props: { actions: CommitActions }) {
   const actions = props.actions
+  const path = useContext(WorkspaceContext)?.path ?? null
   const refDialog = () => {
     const current = actions.dialog()
     return current?.kind === "branch" || current?.kind === "tag" ? current : null
@@ -375,10 +378,19 @@ export function CommitDialogs(props: { actions: CommitActions }) {
       runCommand("view.changes")
       return
     }
-    actions.setOutcome({
-      tone: "success",
-      title: `Rewrote ${actions.branch() ?? "the branch"}`,
-      message: `The original history is saved at ${result.backupRef}. Recover commits can restore it.`,
+    actions.setOutcome(null)
+    toast.success(`Rewrote ${actions.branch() ?? "the branch"}`, {
+      description: "The original history is saved as a backup.",
+      action: {
+        label: "Recover",
+        onAction: () => {
+          if (path !== null && active() !== path) {
+            setActive(path)
+            flush()
+          }
+          runCommand("repo.recovery")
+        },
+      },
     })
   }
   return (

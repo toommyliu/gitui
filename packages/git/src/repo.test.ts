@@ -349,25 +349,71 @@ layer(Repo.layer.pipe(Layer.provideMerge(CommandLog.layer), Layer.provide(NodeSe
     }),
   )
 
-  it.effect("keeps a worktree with a checked-out submodule unless the removal is forced", () =>
+  const worktreeWithSubmodule = (repo: ReturnType<typeof makeRepo>) => {
+    const library = makeRepo()
+    library.commit("library")
+    repo.commit("base")
+    repo.git("-c", "protocol.file.allow=always", "submodule", "add", "-q", library.root, "lib")
+    repo.git("commit", "-q", "-m", "add lib")
+    repo.git("worktree", "add", "-q", "-b", "sub", `${repo.root}-sub`)
+    const path = listedWorktree(repo.git("worktree", "list", "--porcelain"), "-sub")
+    execFileSync("git", ["-c", "protocol.file.allow=always", "submodule", "update", "-q", "--init"], {
+      cwd: path,
+      env: fixtureEnv(),
+    })
+    return path
+  }
+
+  it.effect("removes a clean worktree whose submodule has nothing unpushed", () =>
     Effect.gen(function* () {
-      const library = makeRepo()
-      library.commit("library")
       const repo = makeRepo()
-      repo.commit("base")
-      repo.git("-c", "protocol.file.allow=always", "submodule", "add", "-q", library.root, "lib")
-      repo.git("commit", "-q", "-m", "add lib")
-      repo.git("worktree", "add", "-q", "-b", "sub", `${repo.root}-sub`)
-      const path = listedWorktree(repo.git("worktree", "list", "--porcelain"), "-sub")
-      execFileSync("git", ["-c", "protocol.file.allow=always", "submodule", "update", "-q", "--init"], {
-        cwd: path,
-        env: fixtureEnv(),
-      })
+      const path = worktreeWithSubmodule(repo)
+
+      yield* (yield* Repo).removeWorktree(id(repo.root), path, false, false)
+      expect(existsSync(path)).toBe(false)
+      expect(repo.git("worktree", "list", "--porcelain")).not.toContain(path)
+    }),
+  )
+
+  it.effect("removes a clean worktree whose submodule was deleted in a commit", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      const path = worktreeWithSubmodule(repo)
+      execFileSync("git", ["rm", "-q", "lib"], { cwd: path, env: fixtureEnv() })
+      execFileSync("git", ["commit", "-q", "-m", "drop lib"], { cwd: path, env: fixtureEnv() })
+
+      yield* (yield* Repo).removeWorktree(id(repo.root), path, false, false)
+      expect(existsSync(path)).toBe(false)
+    }),
+  )
+
+  it.effect("keeps a worktree whose submodule has unpushed commits unless the removal is forced", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      const path = worktreeWithSubmodule(repo)
+      const lib = join(path, "lib")
+      execFileSync("git", ["commit", "-q", "--allow-empty", "-m", "local only"], { cwd: lib, env: fixtureEnv() })
+      execFileSync("git", ["commit", "-q", "-am", "bump lib"], { cwd: path, env: fixtureEnv() })
       const r = yield* Repo
 
       const error = yield* Effect.flip(r.removeWorktree(id(repo.root), path, false, false))
-      expect(error.summary).toBe("Working trees containing submodules cannot be moved or removed")
-      expect(existsSync(join(path, "lib", ".git"))).toBe(true)
+      expect(error.summary).toBe("Submodule lib has commits that aren't on a remote. Nothing was removed.")
+      expect(existsSync(join(lib, ".git"))).toBe(true)
+      yield* r.removeWorktree(id(repo.root), path, true, false)
+      expect(existsSync(path)).toBe(false)
+    }),
+  )
+
+  it.effect("keeps a worktree with untracked files in a submodule unless the removal is forced", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo()
+      const path = worktreeWithSubmodule(repo)
+      execFileSync("git", ["config", "status.showUntrackedFiles", "no"], { cwd: join(path, "lib"), env: fixtureEnv() })
+      writeFileSync(join(path, "lib", "notes.txt"), "keep me\n")
+      const r = yield* Repo
+
+      yield* Effect.flip(r.removeWorktree(id(repo.root), path, false, false))
+      expect(readFileSync(join(path, "lib", "notes.txt"), "utf8")).toBe("keep me\n")
       yield* r.removeWorktree(id(repo.root), path, true, false)
       expect(existsSync(path)).toBe(false)
     }),

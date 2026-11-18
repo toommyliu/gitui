@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
-import { existsSync, lstatSync, statSync } from "node:fs"
+import { existsSync, lstatSync, readdirSync, statSync } from "node:fs"
 import { unlink } from "node:fs/promises"
-import { basename, dirname, join, resolve } from "node:path"
+import { basename, dirname, join, relative, resolve } from "node:path"
 import {
   type CommitDetail,
   type DiscardBackup,
@@ -104,6 +104,18 @@ const deleteInBackground = (path: string) =>
   )
     .on("error", () => {})
     .unref()
+
+const submoduleGitDirs = (root: string): Array<string> =>
+  existsSync(root)
+    ? readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+        if (!entry.isDirectory()) return []
+        const path = join(root, entry.name)
+        const head = join(path, "HEAD")
+        return existsSync(head) && statSync(head).isFile()
+          ? [path, ...submoduleGitDirs(join(path, "modules"))]
+          : submoduleGitDirs(path)
+      })
+    : []
 
 const MAX_UNTRACKED_DIFFS = 50
 const MAX_PATCH_BYTES = 4 * 1024 * 1024
@@ -817,25 +829,63 @@ export class Repo extends Context.Service<
         path,
       ]
 
-      // `git worktree remove` skips its clean and submodule checks when the directory is already gone,
-      // so they run here, before the directory moves.
+      // `git worktree remove` refuses any worktree with submodules, and skips its clean check when the
+      // directory is already gone, so these checks decide what is safe to delete.
       const cleanForRemoval = Effect.fn("Repo.cleanForRemoval")(function* (worktree: Worktree) {
         const [status, index, gitDir] = yield* Effect.all(
           [
-            git.text(worktree.path, ["status", "--porcelain", "--ignore-submodules=none"]),
+            git.text(worktree.path, [
+              "-c",
+              "status.showUntrackedFiles=all",
+              "status",
+              "--porcelain",
+              "--ignore-submodules=none",
+            ]),
             git.text(worktree.path, ["ls-files", "--stage", "-z"]),
             git.text(worktree.path, ["rev-parse", "--absolute-git-dir"]),
           ],
           { concurrency: 3 },
         )
-        const populatedSubmodule = index
-          .split("\0")
-          .some(
-            (entry) =>
-              entry.startsWith("160000 ") &&
-              existsSync(join(worktree.path, entry.slice(entry.indexOf("\t") + 1), ".git")),
-          )
-        return status === "" && !populatedSubmodule && !existsSync(join(gitDir.trim(), "modules"))
+        if (status !== "") return false
+        const embedded = index.split("\0").flatMap((entry) => {
+          if (!entry.startsWith("160000 ")) return []
+          const path = entry.slice(entry.indexOf("\t") + 1)
+          const dir = join(worktree.path, path, ".git")
+          return existsSync(dir) && statSync(dir).isDirectory()
+            ? [
+                { name: path, dir },
+                ...submoduleGitDirs(join(dir, "modules")).map((nested) => ({ name: path, dir: nested })),
+              ]
+            : []
+        })
+        const modules = join(gitDir.trim(), "modules")
+        const absorbed = submoduleGitDirs(modules).map((dir) => ({ name: relative(modules, dir), dir }))
+        const unpushed = yield* Effect.forEach(
+          [...embedded, ...absorbed],
+          ({ name, dir }) =>
+            Effect.map(
+              git.text(dir, [
+                "--git-dir=.",
+                "--work-tree=.",
+                "rev-list",
+                "--max-count=1",
+                "--all",
+                "--not",
+                "--remotes",
+              ]),
+              (out) => (out.trim() === "" ? [] : [name]),
+            ),
+          { concurrency: 4 },
+        )
+        const names = unpushed.flat()
+        if (names.length > 0) {
+          return yield* new GitError({
+            args: ["worktree", "remove", worktree.path],
+            exitCode: 1,
+            stderr: `${names.length === 1 ? "Submodule" : "Submodules"} ${names.join(", ")} ${names.length === 1 ? "has" : "have"} commits that aren't on a remote. Nothing was removed.`,
+          })
+        }
+        return true
       })
 
       const removeListedWorktree = Effect.fn("Repo.removeListedWorktree")(function* (
@@ -843,12 +893,12 @@ export class Repo extends Context.Service<
         worktree: Worktree,
         force: boolean,
       ) {
-        const remove = run(repo, removeWorktreeArgs(worktree.path, force))
         const movable =
           !worktree.isMain &&
           worktree.prunable === null &&
           (force || (worktree.locked === null && (yield* cleanForRemoval(worktree))))
-        if (!movable) return yield* remove
+        if (!movable) return yield* run(repo, removeWorktreeArgs(worktree.path, force))
+        const remove = run(repo, ["worktree", "remove", "--force", ...(force ? ["--force"] : []), worktree.path])
         const trash = join(
           dirname(worktree.path),
           `.${basename(worktree.path)}.removing-${randomBytes(4).toString("hex")}`,
